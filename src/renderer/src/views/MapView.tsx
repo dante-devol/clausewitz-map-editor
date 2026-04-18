@@ -47,7 +47,7 @@ function getHoverTooltip(displayMode: DisplayMode, province: Province): { label:
   if (displayMode === 'type') {
     return { label: 'Type', value: province.type }
   }
-  if (displayMode === 'terrain') {
+  if (displayMode === 'terrain' || displayMode === 'terrainGenerated') {
     return { label: 'Terrain', value: province.terrain }
   }
   if (displayMode === 'coastal') {
@@ -87,6 +87,10 @@ export function MapView() {
     } else if (displayMode === 'terrain') {
       for (const p of provinces.values()) {
         map.set(p.color, terrains.get(p.terrain)?.color ?? 0x606060)
+      }
+    } else if (displayMode === 'terrainGenerated') {
+      for (const p of provinces.values()) {
+        map.set(p.color, terrains.get(p.terrain)?.generatedColor ?? 0x606060)
       }
     } else if (displayMode === 'coastal') {
       for (const p of provinces.values()) {

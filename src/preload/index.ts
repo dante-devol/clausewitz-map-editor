@@ -51,7 +51,7 @@ contextBridge.exposeInMainWorld('api', api)
 // Types are inline here so the contextBridge closure captures them at preload compile time.
 interface ContinentData { codeName: string; position: number; color: number }
 interface ProvinceData { id: number; color: number; type: string; isCoastal: boolean; terrain: string; continent: string }
-interface TerrainData { codeName: string; color: number }
+interface TerrainData { codeName: string; color: number; generatedColor: number }
 
 interface GameVerificationResult { valid: boolean; missingPaths: string[] }
 interface ModVerificationResult { hasAny: boolean; foundPaths: string[]; missingPaths: string[] }

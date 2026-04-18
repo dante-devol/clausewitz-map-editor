@@ -32,6 +32,7 @@ export interface Province {
 export interface TerrainCategory {
   codeName: string
   color: Color
+  generatedColor: Color
 }
 
 export interface Continent {
@@ -63,5 +64,14 @@ function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: n
 export function continentColorFromPosition(position: number): Color {
   const hue = (position * 137.508) % 360
   const { r, g, b } = hslToRgb(hue, 0.62, 0.52)
+  return packColor(r, g, b)
+}
+
+// Deterministic per-terrain fallback color. Uses a golden-angle hue step to
+// keep adjacent terrain categories visually separated without depending on the
+// source terrain colors, which are sometimes too similar to compare quickly.
+export function terrainGeneratedColorFromIndex(index: number): Color {
+  const hue = (index * 137.508) % 360
+  const { r, g, b } = hslToRgb(hue, 0.68, 0.5)
   return packColor(r, g, b)
 }

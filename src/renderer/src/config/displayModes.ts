@@ -1,9 +1,10 @@
-export type DisplayMode = 'provinces' | 'type' | 'terrain' | 'coastal' | 'continent'
+export type DisplayMode = 'provinces' | 'type' | 'terrain' | 'terrainGenerated' | 'coastal' | 'continent'
 
 export const DISPLAY_MODE_LABELS: Record<DisplayMode, string> = {
   provinces: 'Provinces',
   type:      'Type',
   terrain:   'Terrain',
+  terrainGenerated: 'Terrain (False Color)',
   coastal:   'Coastal',
   continent: 'Continent',
 }

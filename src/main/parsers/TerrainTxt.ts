@@ -1,5 +1,5 @@
 import { readFileSync } from 'fs'
-import { packColor } from '../../shared/mapDataTypes'
+import { packColor, terrainGeneratedColorFromIndex } from '../../shared/mapDataTypes'
 import type { TerrainCategory } from '../../shared/mapDataTypes'
 
 export class TerrainTxt {
@@ -11,14 +11,17 @@ export class TerrainTxt {
 
   load(): TerrainCategory[] {
     const results: TerrainCategory[] = []
+    let terrainIndex = 0
     for (const filePath of this.filePaths) {
       const content = readFileSync(filePath, 'utf-8')
-      results.push(...TerrainTxt.parse(content))
+      const parsed = TerrainTxt.parse(content, terrainIndex)
+      results.push(...parsed)
+      terrainIndex += parsed.length
     }
     return results
   }
 
-  static parse(content: string): TerrainCategory[] {
+  static parse(content: string, startIndex = 0): TerrainCategory[] {
     const results: TerrainCategory[] = []
 
     const catIdx = content.search(/\bcategories\s*=\s*\{/)
@@ -31,10 +34,12 @@ export class TerrainTxt {
     for (const { name, content: blockContent } of parseNamedBlocks(catBlock.content)) {
       const colorMatch = blockContent.match(/\bcolor\s*=\s*\{\s*(\d+)\s+(\d+)\s+(\d+)\s*\}/)
       if (!colorMatch) continue
+      const terrainIndex = startIndex + results.length
 
       results.push({
         codeName: name,
-        color: packColor(parseInt(colorMatch[1]), parseInt(colorMatch[2]), parseInt(colorMatch[3]))
+        color: packColor(parseInt(colorMatch[1]), parseInt(colorMatch[2]), parseInt(colorMatch[3])),
+        generatedColor: terrainGeneratedColorFromIndex(terrainIndex)
       })
     }
 
