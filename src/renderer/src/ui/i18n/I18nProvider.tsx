@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import type { AppLocale } from '../../../shared/i18n'
+import type { AppLocale } from '../../../../shared/i18n'
 import { enMessages, type MessageKey } from './messages/en'
 import { frMessages } from './messages/fr'
 

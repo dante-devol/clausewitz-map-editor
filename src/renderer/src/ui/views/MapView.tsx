@@ -1,16 +1,16 @@
 import { useMemo, useCallback, useState } from 'react'
 import { makeStyles, tokens, Divider } from '@fluentui/react-components'
-import { useCoreApi } from '../bridge/CoreProvider'
-import { useCoreSelector } from '../bridge/useCoreSelector'
+import { useCoreApi } from '../../bridge/CoreProvider'
+import { useCoreSelector } from '../../bridge/useCoreSelector'
 import { MapModePanel } from '../components/MapModePanel'
 import { MapCanvas } from '../components/MapCanvas'
 import { ProvinceList } from '../components/ProvinceList'
-import { mapCommands } from '../core/commands/mapCommands'
-import { selectColorMap, selectDisplayMode, selectHighlightColor, selectHoverTooltip, selectModeValuesByMode, selectSelectedProvinceId } from '../core/selectors/mapSelectors'
+import { mapCommands } from '../../core/commands/mapCommands'
+import { selectColorMap, selectDisplayMode, selectHighlightColor, selectHoverTooltip, selectModeValuesByMode, selectSelectedProvinceId } from '../../core/selectors/mapSelectors'
 import { useI18n } from '../i18n/I18nProvider'
-import { useMapDataStore } from '../store/mapDataStore'
-import { useDisplayModeConfigStore } from '../store/displayModeConfigStore'
-import { packColor } from '../../../shared/mapDataTypes'
+import { useMapDataStore } from '../../infra/store/mapDataStore'
+import { useDisplayModeConfigStore } from '../../infra/store/displayModeConfigStore'
+import { packColor } from '../../../../shared/mapDataTypes'
 
 const useStyles = makeStyles({
   root: {

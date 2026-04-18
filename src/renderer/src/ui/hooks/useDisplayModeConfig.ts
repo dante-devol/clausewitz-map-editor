@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useDisplayModeConfigStore } from '../store/displayModeConfigStore'
+import { useDisplayModeConfigStore } from '../../infra/store/displayModeConfigStore'
 
 // Loads persisted display-mode color overrides once per app session.
 export function useDisplayModeConfig(): void {

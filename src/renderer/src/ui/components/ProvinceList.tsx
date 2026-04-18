@@ -1,11 +1,11 @@
 import { useRef, useEffect, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { List, ListItem, makeStyles, mergeClasses, tokens, Text } from '@fluentui/react-components'
-import type { Province } from '../../../shared/mapDataTypes'
-import { unpackColor } from '../../../shared/mapDataTypes'
-import { TYPE_COLORS, continentColor } from '../config/displayModes'
+import type { Province } from '../../../../shared/mapDataTypes'
+import { unpackColor } from '../../../../shared/mapDataTypes'
+import { TYPE_COLORS, continentColor } from '../../infra/config/displayModes'
 import { useI18n } from '../i18n/I18nProvider'
-import { useMapDataStore } from '../store/mapDataStore'
+import { useMapDataStore } from '../../infra/store/mapDataStore'
 
 const ROW_H = 36
 

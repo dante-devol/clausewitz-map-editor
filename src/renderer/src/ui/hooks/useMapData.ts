@@ -1,5 +1,5 @@
-import { useMapDataStore } from '../store/mapDataStore'
-import type { Province, TerrainCategory, Continent } from '../../../shared/mapDataTypes'
+import { useMapDataStore } from '../../infra/store/mapDataStore'
+import type { Province, TerrainCategory, Continent } from '../../../../shared/mapDataTypes'
 
 // ─── React hooks (subscribe to store, trigger re-renders) ────────────────────
 

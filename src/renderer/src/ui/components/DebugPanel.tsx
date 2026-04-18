@@ -13,8 +13,8 @@ import {
   Badge
 } from '@fluentui/react-components'
 import { useI18n } from '../i18n/I18nProvider'
-import { useMapDataStore } from '../store/mapDataStore'
-import { unpackColor } from '../../../shared/mapDataTypes'
+import { useMapDataStore } from '../../infra/store/mapDataStore'
+import { unpackColor } from '../../../../shared/mapDataTypes'
 
 const useStyles = makeStyles({
   surface: {

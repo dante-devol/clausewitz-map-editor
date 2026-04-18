@@ -23,7 +23,7 @@ import {
   CheckmarkCircleRegular
 } from '@fluentui/react-icons'
 import { ProjectChip } from '../components/ProjectChip'
-import type { GameVerificationResult, ModVerificationResult } from '../../../shared/pathTypes'
+import type { GameVerificationResult, ModVerificationResult } from '../../../../shared/pathTypes'
 import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/messages/en'
 

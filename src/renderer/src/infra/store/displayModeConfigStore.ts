@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AppConfig } from '../../../shared/contract/api'
+import type { AppConfig } from '../../../../shared/contract/api'
 
 export type DisplayModeOverrides = AppConfig['displayModeOverrides']
 type ConfigurableDisplayModeKey = 'type' | 'terrain' | 'coastal' | 'continent'

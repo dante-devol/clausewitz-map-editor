@@ -1,4 +1,4 @@
-import type { Continent, Province, TerrainCategory } from '../../../shared/mapDataTypes'
+import type { Continent, Province, TerrainCategory } from '../../../../shared/mapDataTypes'
 import type { DisplayModeOverrides } from '../store/displayModeConfigStore'
 
 export type DisplayMode = 'provinces' | 'type' | 'terrain' | 'coastal' | 'continent'

@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react'
 import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components'
-import { Shell } from './components/layout/Shell'
-import { MapView } from './views/MapView'
-import { SettingsView } from './views/SettingsView'
-import { ProjectSelectionView } from './views/ProjectSelectionView'
-import { DebugPanel } from './components/DebugPanel'
-import { useAppState } from './hooks/useAppState'
-import { useDisplayModeConfig } from './hooks/useDisplayModeConfig'
-import { useProjectSelection } from './hooks/useProjectSelection'
-import { useMapLoader } from './hooks/useMapLoader'
+import { Shell } from '../components/layout/Shell'
+import { MapView } from '../views/MapView'
+import { SettingsView } from '../views/SettingsView'
+import { ProjectSelectionView } from '../views/ProjectSelectionView'
+import { DebugPanel } from '../components/DebugPanel'
+import { useAppState } from '../hooks/useAppState'
+import { useDisplayModeConfig } from '../hooks/useDisplayModeConfig'
+import { useProjectSelection } from '../hooks/useProjectSelection'
+import { useMapLoader } from '../hooks/useMapLoader'
 
 const VIEWS = {
   map: <MapView />,

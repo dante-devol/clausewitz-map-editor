@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
-import { useCoreApi } from '../bridge/CoreProvider'
-import { sessionCommands } from '../core/commands/sessionCommands'
-import { useCoreSelector } from '../bridge/useCoreSelector'
-import { selectCurrentProjectId, selectCurrentProjectPath } from '../core/selectors/sessionSelectors'
-import { useProjectStore } from '../store/projectStore'
+import { useCoreApi } from '../../bridge/CoreProvider'
+import { sessionCommands } from '../../core/commands/sessionCommands'
+import { useCoreSelector } from '../../bridge/useCoreSelector'
+import { selectCurrentProjectId, selectCurrentProjectPath } from '../../core/selectors/sessionSelectors'
+import { useProjectStore } from '../../infra/store/projectStore'
 
 export function useProjectSelection() {
   const api = useCoreApi()

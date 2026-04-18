@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useFileStore, type TrackedFile } from '../store/fileStore'
+import { useFileStore, type TrackedFile } from '../../infra/store/fileStore'
 
 export interface TrackedFileState {
   file: TrackedFile | null

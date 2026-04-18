@@ -6,8 +6,8 @@ import {
   listModeValues,
   type ConfigurableDisplayMode,
   type DisplayModeContext
-} from '../../config/displayModes'
-import type { DisplayModeOverrides } from '../../store/displayModeConfigStore'
+} from '../../infra/config/displayModes'
+import type { DisplayModeOverrides } from '../../infra/store/displayModeConfigStore'
 
 export const selectDisplayMode = (state: CoreState) => state.map.displayMode
 
@@ -86,4 +86,3 @@ export function selectHoverTooltip(
     value: province.continent ? province.continent : t('mapValue.none')
   }
 }
-

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Province, TerrainCategory, Continent } from '../../../shared/mapDataTypes'
+import type { Province, TerrainCategory, Continent } from '../../../../shared/mapDataTypes'
 
 interface MapDataState {
   // Primary lookups

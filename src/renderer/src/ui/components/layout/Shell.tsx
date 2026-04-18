@@ -11,7 +11,7 @@ import {
   WeatherMoonRegular,
   WeatherSunnyRegular
 } from '@fluentui/react-icons'
-import type { View, Theme } from '../../hooks/useAppState'
+import type { View, Theme } from '../../../core/contracts/CoreState'
 import { useI18n } from '../../i18n/I18nProvider'
 
 const useStyles = makeStyles({

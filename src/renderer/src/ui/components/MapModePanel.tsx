@@ -19,6 +19,9 @@ import {
   tokens
 } from '@fluentui/react-components'
 import { SettingsRegular } from '@fluentui/react-icons'
+import { useI18n } from '../i18n/I18nProvider'
+import type { MessageKey } from '../i18n/messages/en'
+import { useDisplayModeConfigStore } from '../../infra/store/displayModeConfigStore'
 import {
   type ConfigurableDisplayMode,
   type DisplayMode,
@@ -26,10 +29,7 @@ import {
   DISPLAY_MODES,
   isConfigurableDisplayMode,
   packedColorToHex
-} from '../config/displayModes'
-import { useI18n } from '../i18n/I18nProvider'
-import type { MessageKey } from '../i18n/messages/en'
-import { useDisplayModeConfigStore } from '../store/displayModeConfigStore'
+} from '../../infra/config/displayModes'
 
 const MODE_LABEL_KEYS: Record<DisplayMode, MessageKey> = {
   provinces: 'mapMode.provinces',

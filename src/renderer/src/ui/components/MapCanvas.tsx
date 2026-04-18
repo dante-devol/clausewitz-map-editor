@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { makeStyles, mergeClasses, tokens, Button, Text, Tooltip, Skeleton, SkeletonItem } from '@fluentui/react-components'
 import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, LocationTargetSquareRegular } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
-import { MapRenderer } from '../lib/MapRenderer'
+import { MapRenderer } from '../../infra/lib/MapRenderer'
 
 const ZOOM_STEP = 1.25
 const ZOOM_MIN = 0.02

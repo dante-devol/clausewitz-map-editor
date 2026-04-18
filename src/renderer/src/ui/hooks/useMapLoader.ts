@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
-import { useCoreApi } from '../bridge/CoreProvider'
-import { sessionCommands } from '../core/commands/sessionCommands'
-import { useCoreSelector } from '../bridge/useCoreSelector'
-import { selectCurrentProjectId } from '../core/selectors/sessionSelectors'
-import { useMapDataStore } from '../store/mapDataStore'
+import { useCoreApi } from '../../bridge/CoreProvider'
+import { sessionCommands } from '../../core/commands/sessionCommands'
+import { useCoreSelector } from '../../bridge/useCoreSelector'
+import { selectCurrentProjectId } from '../../core/selectors/sessionSelectors'
+import { useMapDataStore } from '../../infra/store/mapDataStore'
 
 // Loads and keeps map data in sync for the active project session.
 export function useMapLoader(): void {
@@ -40,9 +40,9 @@ export function useMapLoader(): void {
 
     const unsubscribe = window.api.map.onChanged((event) => {
       if (event.projectId !== projectId) return
-      if (event.type === 'continents') loadContinents(event.data as import('../../../shared/mapDataTypes').Continent[])
-      else if (event.type === 'definitions') loadProvinces(event.data as import('../../../shared/mapDataTypes').Province[])
-      else if (event.type === 'terrain') loadTerrains(event.data as import('../../../shared/mapDataTypes').TerrainCategory[])
+      if (event.type === 'continents') loadContinents(event.data as import('../../../../shared/mapDataTypes').Continent[])
+      else if (event.type === 'definitions') loadProvinces(event.data as import('../../../../shared/mapDataTypes').Province[])
+      else if (event.type === 'terrain') loadTerrains(event.data as import('../../../../shared/mapDataTypes').TerrainCategory[])
       else if (event.type === 'image') loadProvincesImage(event.data as string)
     })
 

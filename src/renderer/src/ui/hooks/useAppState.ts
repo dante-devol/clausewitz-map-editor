@@ -1,8 +1,8 @@
-import { useCoreApi } from '../bridge/CoreProvider'
-import { useCoreSelector } from '../bridge/useCoreSelector'
-import { appCommands } from '../core/commands/appCommands'
-import { selectActiveView, selectTheme } from '../core/selectors/appSelectors'
-import type { Theme, View } from '../core/contracts/CoreState'
+import { useCoreApi } from '../../bridge/CoreProvider'
+import { useCoreSelector } from '../../bridge/useCoreSelector'
+import { appCommands } from '../../core/commands/appCommands'
+import { selectActiveView, selectTheme } from '../../core/selectors/appSelectors'
+import type { Theme, View } from '../../core/contracts/CoreState'
 
 export function useAppState() {
   const api = useCoreApi()

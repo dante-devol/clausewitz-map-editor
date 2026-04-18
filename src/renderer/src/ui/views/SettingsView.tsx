@@ -1,6 +1,6 @@
 import { makeStyles, tokens, Radio, RadioGroup, Text } from '@fluentui/react-components'
 import { useI18n } from '../i18n/I18nProvider'
-import { SUPPORTED_APP_LOCALES, type AppLocale } from '../../../shared/i18n'
+import { SUPPORTED_APP_LOCALES, type AppLocale } from '../../../../shared/i18n'
 
 const useStyles = makeStyles({
   root: {

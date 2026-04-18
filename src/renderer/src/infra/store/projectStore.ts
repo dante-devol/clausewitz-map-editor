@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { GameVerificationResult, ModVerificationResult } from '../../../shared/pathTypes'
+import type { GameVerificationResult, ModVerificationResult } from '../../../../shared/pathTypes'
 
 interface ProjectState {
   recentProjects: string[]
