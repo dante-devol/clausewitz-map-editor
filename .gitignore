@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+out/
+dist/
+
+# Electron builder cache
+.electron-builder-cache/
+
+# Vite
+*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Env
+.env
+.env.*
