@@ -23,13 +23,21 @@ import {
   type ConfigurableDisplayMode,
   type DisplayMode,
   type DisplayModeValueDescriptor,
-  DISPLAY_MODE_LABELS,
+  DISPLAY_MODES,
   isConfigurableDisplayMode,
   packedColorToHex
 } from '../config/displayModes'
+import { useI18n } from '../i18n/I18nProvider'
+import type { MessageKey } from '../i18n/messages/en'
 import { useDisplayModeConfigStore } from '../store/displayModeConfigStore'
 
-const MODES = Object.keys(DISPLAY_MODE_LABELS) as DisplayMode[]
+const MODE_LABEL_KEYS: Record<DisplayMode, MessageKey> = {
+  provinces: 'mapMode.provinces',
+  type: 'mapMode.type',
+  terrain: 'mapMode.terrain',
+  coastal: 'mapMode.coastal',
+  continent: 'mapMode.continent'
+}
 
 const useStyles = makeStyles({
   root: {
@@ -206,6 +214,7 @@ interface Props {
 
 export function MapModePanel({ mode, onModeChange, valuesByMode }: Props): JSX.Element {
   const styles = useStyles()
+  const { t } = useI18n()
   const [dialogMode, setDialogMode] = useState<ConfigurableDisplayMode | null>(null)
 
   const activeValues = dialogMode ? (valuesByMode[dialogMode] ?? []) : []
@@ -213,25 +222,26 @@ export function MapModePanel({ mode, onModeChange, valuesByMode }: Props): JSX.E
   return (
     <>
       <div className={styles.root}>
-        <Text size={200} weight="semibold" className={styles.label}>Display Mode</Text>
+        <Text size={200} weight="semibold" className={styles.label}>{t('mapMode.title')}</Text>
         <RadioGroup
           value={mode}
           layout="vertical"
           onChange={(_, data) => onModeChange(data.value as DisplayMode)}
         >
           <div className={styles.modeList}>
-            {MODES.map((entryMode) => {
+            {DISPLAY_MODES.map((entryMode) => {
               const configurable = isConfigurableDisplayMode(entryMode)
+              const modeLabel = t(MODE_LABEL_KEYS[entryMode])
               return (
                 <div key={entryMode} className={styles.modeRow}>
-                  <Radio className={styles.modeRadio} value={entryMode} label={DISPLAY_MODE_LABELS[entryMode]} />
+                  <Radio className={styles.modeRadio} value={entryMode} label={modeLabel} />
                   {configurable && (
                     <Button
                       className={styles.iconButton}
                       appearance="subtle"
                       size="small"
                       icon={<SettingsRegular />}
-                      aria-label={`Configure ${DISPLAY_MODE_LABELS[entryMode]} colors`}
+                      aria-label={t('mapMode.configureColors', { mode: modeLabel })}
                       onClick={(event) => {
                         event.stopPropagation()
                         setDialogMode(entryMode)
@@ -262,6 +272,7 @@ interface ModeConfigDialogProps {
 
 function ModeConfigDialog({ mode, values, onClose }: ModeConfigDialogProps): JSX.Element {
   const styles = useStyles()
+  const { t } = useI18n()
   const resetModeOverrides = useDisplayModeConfigStore((s) => s.resetModeOverrides)
   const hasOverrides = useMemo(() => values.some((value) => value.isOverride), [values])
   const [selectedValueKey, setSelectedValueKey] = useState<string | null>(null)
@@ -277,7 +288,11 @@ function ModeConfigDialog({ mode, values, onClose }: ModeConfigDialogProps): JSX
       <DialogSurface className={styles.dialogSurface}>
         <DialogBody>
           <div className={styles.dialogHeader}>
-            <DialogTitle>{mode ? `${DISPLAY_MODE_LABELS[mode]} Colors` : 'Colors'}</DialogTitle>
+            <DialogTitle>
+              {mode
+                ? t('mapMode.colorsTitle', { mode: t(MODE_LABEL_KEYS[mode]) })
+                : t('mapMode.colorsFallbackTitle')}
+            </DialogTitle>
             {mode && (
               <Button
                 size="small"
@@ -285,13 +300,13 @@ function ModeConfigDialog({ mode, values, onClose }: ModeConfigDialogProps): JSX
                 disabled={!hasOverrides}
                 onClick={() => void resetModeOverrides(mode)}
               >
-                Reset Mode
+                {t('mapMode.resetMode')}
               </Button>
             )}
           </div>
           <DialogContent className={styles.dialogContent}>
             {mode === null || values.length === 0 ? (
-              <Text size={100} className={styles.empty}>No values loaded</Text>
+              <Text size={100} className={styles.empty}>{t('mapMode.noValuesLoaded')}</Text>
             ) : (
               <>
                 <div className={styles.valueList}>
@@ -309,7 +324,7 @@ function ModeConfigDialog({ mode, values, onClose }: ModeConfigDialogProps): JSX
             )}
           </DialogContent>
           <DialogActions>
-            <Button appearance="primary" onClick={onClose}>Close</Button>
+            <Button appearance="primary" onClick={onClose}>{t('mapMode.close')}</Button>
           </DialogActions>
         </DialogBody>
       </DialogSurface>
@@ -325,6 +340,7 @@ interface ModeValueRowProps {
 
 function ModeValueRow({ value, selected, onSelect }: ModeValueRowProps): JSX.Element {
   const styles = useStyles()
+  const { t } = useI18n()
 
   return (
     <div
@@ -342,12 +358,12 @@ function ModeValueRow({ value, selected, onSelect }: ModeValueRowProps): JSX.Ele
       <div className={styles.swatch} style={{ backgroundColor: packedColorToHex(value.color) }} />
       <div>
         <div className={styles.valueMeta}>
-          <Text size={100} weight="medium" className={styles.valueName}>{value.label}</Text>
+          <Text size={100} weight="medium" className={styles.valueName}>{getModeValueDisplayLabel(value.key, t)}</Text>
           <Text
             size={100}
             className={mergeClasses(styles.valueSource, value.isOverride && styles.valueSourceOverride)}
           >
-            {value.isOverride ? 'override' : 'default'}
+            {value.isOverride ? t('mapMode.valueSource.override') : t('mapMode.valueSource.default')}
           </Text>
         </div>
         <Text size={100} className={styles.valueSource}>{packedColorToHex(value.color)}</Text>
@@ -371,6 +387,7 @@ type HsvColor = {
 
 function ModeValueEditor({ mode, value, values }: ModeValueEditorProps): JSX.Element {
   const styles = useStyles()
+  const { t } = useI18n()
   const setOverride = useDisplayModeConfigStore((s) => s.setOverride)
   const resetOverride = useDisplayModeConfigStore((s) => s.resetOverride)
   const [draft, setDraft] = useState(packedColorToHex(value.color))
@@ -391,13 +408,13 @@ function ModeValueEditor({ mode, value, values }: ModeValueEditorProps): JSX.Ele
       <div className={styles.editorHeader}>
         <div className={styles.editorTitle}>
           <div className={styles.editorSwatch} style={{ backgroundColor: hsvToHex(pickerColor) }} />
-          <Text size={300} weight="semibold" className={styles.valueName}>{value.label}</Text>
+          <Text size={300} weight="semibold" className={styles.valueName}>{getModeValueDisplayLabel(value.key, t)}</Text>
         </div>
         <Text
           size={100}
           className={mergeClasses(styles.valueSource, value.isOverride && styles.valueSourceOverride)}
         >
-          {value.isOverride ? 'override' : 'default'}
+          {value.isOverride ? t('mapMode.valueSource.override') : t('mapMode.valueSource.default')}
         </Text>
       </div>
 
@@ -434,7 +451,7 @@ function ModeValueEditor({ mode, value, values }: ModeValueEditorProps): JSX.Ele
               setPickerColor(hexToHsv(randomHex))
             }}
           >
-            Random
+            {t('mapMode.random')}
           </Button>
           <Button
             size="small"
@@ -444,7 +461,7 @@ function ModeValueEditor({ mode, value, values }: ModeValueEditorProps): JSX.Ele
               if (normalized) void setOverride(mode, value.key, normalized)
             }}
           >
-            Apply
+            {t('mapMode.apply')}
           </Button>
           <Button
             size="small"
@@ -452,12 +469,19 @@ function ModeValueEditor({ mode, value, values }: ModeValueEditorProps): JSX.Ele
             disabled={!value.isOverride}
             onClick={() => void resetOverride(mode, value.key)}
           >
-            Reset
+            {t('mapMode.reset')}
           </Button>
         </div>
       </div>
     </div>
   )
+}
+
+function getModeValueDisplayLabel(valueKey: string, t: (key: MessageKey) => string): string {
+  if (valueKey === 'coastal') return t('mapValue.coastal')
+  if (valueKey === 'inland') return t('mapValue.inland')
+  if (valueKey === 'none') return t('mapValue.none')
+  return valueKey
 }
 
 function normalizeHexCandidate(value: string): string | null {

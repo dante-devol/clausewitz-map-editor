@@ -4,6 +4,7 @@ import { List, ListItem, makeStyles, mergeClasses, tokens, Text } from '@fluentu
 import type { Province } from '../../../shared/mapDataTypes'
 import { unpackColor } from '../../../shared/mapDataTypes'
 import { TYPE_COLORS, continentColor } from '../config/displayModes'
+import { useI18n } from '../i18n/I18nProvider'
 import { useMapDataStore } from '../store/mapDataStore'
 
 const ROW_H = 36
@@ -160,6 +161,7 @@ interface Props {
 
 export function ProvinceList({ provinces, selectedId, onSelect }: Props): JSX.Element {
   const styles = useStyles()
+  const { t, formatNumber } = useI18n()
   const scrollRef = useRef<HTMLDivElement>(null)
   const terrains = useMapDataStore((s) => s.terrains)
   const continents = useMapDataStore((s) => s.continents)
@@ -207,12 +209,12 @@ export function ProvinceList({ provinces, selectedId, onSelect }: Props): JSX.El
   return (
     <div className={styles.root}>
       <div className={styles.header}>
-        <Text size={100} weight="semibold">Provinces</Text>
-        <Text size={100} className={styles.count}>{sortedProvinces.length}</Text>
+        <Text size={100} weight="semibold">{t('provinceList.title')}</Text>
+        <Text size={100} className={styles.count}>{formatNumber(sortedProvinces.length)}</Text>
       </div>
 
       {sortedProvinces.length === 0 ? (
-        <Text size={200} className={styles.empty}>No data loaded</Text>
+        <Text size={200} className={styles.empty}>{t('provinceList.empty')}</Text>
       ) : (
         <div ref={scrollRef} className={styles.scroll}>
           <List as="div" className={styles.list}>

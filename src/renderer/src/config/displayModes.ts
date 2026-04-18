@@ -6,7 +6,6 @@ export type ConfigurableDisplayMode = Exclude<DisplayMode, 'provinces'>
 
 export interface DisplayModeValueDescriptor {
   key: string
-  label: string
   color: number
   isOverride: boolean
 }
@@ -16,13 +15,7 @@ export interface DisplayModeContext {
   continents: ReadonlyMap<string, Continent>
 }
 
-export const DISPLAY_MODE_LABELS: Record<DisplayMode, string> = {
-  provinces: 'Provinces',
-  type: 'Type',
-  terrain: 'Terrain',
-  coastal: 'Coastal',
-  continent: 'Continent',
-}
+export const DISPLAY_MODES: DisplayMode[] = ['provinces', 'type', 'terrain', 'coastal', 'continent']
 
 export const TYPE_COLORS: Record<string, string> = {
   land: '#5a7c52',
@@ -82,8 +75,6 @@ export function getModeValueKey(mode: DisplayMode, province: Province): string |
 }
 
 export function getModeValueLabel(mode: DisplayMode, valueKey: string): string {
-  if (mode === 'coastal' && valueKey === 'inland') return 'inland'
-  if (mode === 'continent' && valueKey === 'none') return 'none'
   return valueKey
 }
 
@@ -139,7 +130,6 @@ export function listModeValues(
     .sort((a, b) => a.localeCompare(b))
     .map((key) => ({
       key,
-      label: getModeValueLabel(mode, key),
       color: getResolvedModeValueColor(mode, key, overrides, context),
       isOverride: overrides[mode]?.[key] !== undefined
     }))

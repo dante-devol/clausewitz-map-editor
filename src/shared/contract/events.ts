@@ -1,4 +1,7 @@
 export const channels = {
+  app: {
+    getSystemLocale: 'app:getSystemLocale'
+  },
   projects: {
     getRecent: 'projects:getRecent',
     addRecent: 'projects:addRecent',
@@ -35,4 +38,3 @@ export const channels = {
     enterEditor: 'window:enterEditor'
   }
 } as const
-

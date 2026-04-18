@@ -12,6 +12,7 @@ import {
   Text,
   Badge
 } from '@fluentui/react-components'
+import { useI18n } from '../i18n/I18nProvider'
 import { useMapDataStore } from '../store/mapDataStore'
 import { unpackColor } from '../../../shared/mapDataTypes'
 
@@ -95,6 +96,7 @@ function Swatch({ color }: { color: number }) {
 
 function ProvincesTab() {
   const styles = useStyles()
+  const { t, formatNumber } = useI18n()
   const provinces = useMapDataStore((s) => s.provinces)
   const rows = Array.from(provinces.values()).slice(0, ROW_CAP)
   const total = provinces.size
@@ -102,20 +104,20 @@ function ProvincesTab() {
   return (
     <>
       <div className={styles.summary}>
-        <Badge appearance="filled" color="informative">{total.toLocaleString()}</Badge>
-        <Text size={200}>provinces loaded</Text>
-        {total > ROW_CAP && <Text className={styles.cap}>(showing first {ROW_CAP})</Text>}
+        <Badge appearance="filled" color="informative">{formatNumber(total)}</Badge>
+        <Text size={200}>{t('debug.provincesLoaded', { count: formatNumber(total) })}</Text>
+        {total > ROW_CAP && <Text className={styles.cap}>{t('debug.showingFirst', { count: formatNumber(ROW_CAP) })}</Text>}
       </div>
       <div className={styles.tableWrap}>
         <table className={styles.table}>
           <thead>
             <tr>
-              <th className={styles.th}>ID</th>
-              <th className={styles.th}>Color</th>
-              <th className={styles.th}>Type</th>
-              <th className={styles.th}>Coastal</th>
-              <th className={styles.th}>Terrain</th>
-              <th className={styles.th}>Continent</th>
+              <th className={styles.th}>{t('debug.column.id')}</th>
+              <th className={styles.th}>{t('debug.column.color')}</th>
+              <th className={styles.th}>{t('debug.column.type')}</th>
+              <th className={styles.th}>{t('debug.column.coastal')}</th>
+              <th className={styles.th}>{t('debug.column.terrain')}</th>
+              <th className={styles.th}>{t('debug.column.continent')}</th>
             </tr>
           </thead>
           <tbody>
@@ -144,21 +146,22 @@ function ProvincesTab() {
 
 function TerrainsTab() {
   const styles = useStyles()
+  const { t, formatNumber } = useI18n()
   const terrains = useMapDataStore((s) => s.terrains)
   const rows = Array.from(terrains.values())
 
   return (
     <>
       <div className={styles.summary}>
-        <Badge appearance="filled" color="informative">{rows.length}</Badge>
-        <Text size={200}>terrain categories loaded</Text>
+        <Badge appearance="filled" color="informative">{formatNumber(rows.length)}</Badge>
+        <Text size={200}>{t('debug.terrainCategoriesLoaded', { count: formatNumber(rows.length) })}</Text>
       </div>
       <div className={styles.tableWrap}>
         <table className={styles.table}>
           <thead>
             <tr>
-              <th className={styles.th}>Code Name</th>
-              <th className={styles.th}>Color</th>
+              <th className={styles.th}>{t('debug.column.codeName')}</th>
+              <th className={styles.th}>{t('debug.column.color')}</th>
             </tr>
           </thead>
           <tbody>
@@ -183,21 +186,22 @@ function TerrainsTab() {
 
 function ContinentsTab() {
   const styles = useStyles()
+  const { t, formatNumber } = useI18n()
   const continents = useMapDataStore((s) => s.continents)
   const rows = Array.from(continents.values()).sort((a, b) => a.position - b.position)
 
   return (
     <>
       <div className={styles.summary}>
-        <Badge appearance="filled" color="informative">{rows.length}</Badge>
-        <Text size={200}>continents loaded</Text>
+        <Badge appearance="filled" color="informative">{formatNumber(rows.length)}</Badge>
+        <Text size={200}>{t('debug.continentsLoaded', { count: formatNumber(rows.length) })}</Text>
       </div>
       <div className={styles.tableWrap}>
         <table className={styles.table}>
           <thead>
             <tr>
-              <th className={styles.th}>Position</th>
-              <th className={styles.th}>Code Name</th>
+              <th className={styles.th}>{t('debug.column.position')}</th>
+              <th className={styles.th}>{t('debug.column.codeName')}</th>
             </tr>
           </thead>
           <tbody>
@@ -223,6 +227,7 @@ interface DebugPanelProps {
 
 export function DebugPanel({ open, onClose }: DebugPanelProps) {
   const styles = useStyles()
+  const { t, formatNumber } = useI18n()
   const [tab, setTab] = useState<TabId>('provinces')
 
   const provinces = useMapDataStore((s) => s.provinces)
@@ -232,20 +237,20 @@ export function DebugPanel({ open, onClose }: DebugPanelProps) {
   return (
     <Dialog open={open} onOpenChange={(_, d) => { if (!d.open) onClose() }}>
       <DialogSurface className={styles.surface}>
-        <DialogTitle>Debug — Map Data</DialogTitle>
+        <DialogTitle>{t('debug.title')}</DialogTitle>
         <DialogBody className={styles.body}>
           <TabList
             selectedValue={tab}
             onTabSelect={(_, d) => setTab(d.value as TabId)}
           >
             <Tab value="provinces">
-              Provinces <Badge appearance="tint">{provinces.size.toLocaleString()}</Badge>
+              {t('debug.tab.provinces')} <Badge appearance="tint">{formatNumber(provinces.size)}</Badge>
             </Tab>
             <Tab value="terrains">
-              Terrain <Badge appearance="tint">{terrains.size}</Badge>
+              {t('debug.tab.terrain')} <Badge appearance="tint">{formatNumber(terrains.size)}</Badge>
             </Tab>
             <Tab value="continents">
-              Continents <Badge appearance="tint">{continents.size}</Badge>
+              {t('debug.tab.continents')} <Badge appearance="tint">{formatNumber(continents.size)}</Badge>
             </Tab>
           </TabList>
           <DialogContent>

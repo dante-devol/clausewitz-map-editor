@@ -1,4 +1,5 @@
 import { createIpcContext } from './context'
+import { registerAppHandlers } from './handlers/appHandlers'
 import { registerDialogHandlers } from './handlers/dialogHandlers'
 import { registerFileHandlers } from './handlers/fileHandlers'
 import { registerGameHandlers } from './handlers/gameHandlers'
@@ -9,6 +10,7 @@ import { registerWindowHandlers } from './handlers/windowHandlers'
 
 export function registerIpcHandlers(): void {
   const context = createIpcContext()
+  registerAppHandlers()
   registerDialogHandlers()
   registerFileHandlers()
   registerGameHandlers()

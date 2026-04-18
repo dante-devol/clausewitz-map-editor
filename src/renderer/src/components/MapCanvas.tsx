@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { makeStyles, mergeClasses, tokens, Button, Text, Tooltip, Skeleton, SkeletonItem } from '@fluentui/react-components'
 import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, LocationTargetSquareRegular } from '@fluentui/react-icons'
+import { useI18n } from '../i18n/I18nProvider'
 import { MapRenderer } from '../lib/MapRenderer'
 
 const ZOOM_STEP = 1.25
@@ -126,6 +127,7 @@ export function MapCanvas({
   onHoverColorChange,
 }: Props): JSX.Element {
   const styles = useStyles()
+  const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const overlayRef   = useRef<HTMLCanvasElement>(null)
@@ -434,7 +436,7 @@ export function MapCanvas({
       )}
       <div className={styles.controls} onMouseDown={(e) => e.stopPropagation()}>
         <div className={styles.widget}>
-          <Tooltip content="Pick color" relationship="label">
+          <Tooltip content={t('mapCanvas.pickColor')} relationship="label">
             <Button
               appearance={eyedropperActive ? 'primary' : 'subtle'}
               size="small"
@@ -449,7 +451,7 @@ export function MapCanvas({
                 style={{ backgroundColor: `rgb(${sampledColor.r},${sampledColor.g},${sampledColor.b})` }}
               />
               <Text size={200} className={styles.colorLabel}>{colorToHex(sampledColor)}</Text>
-              <Tooltip content="Center on province" relationship="label">
+              <Tooltip content={t('mapCanvas.centerOnProvince')} relationship="label">
                 <Button
                   appearance="subtle"
                   size="small"
@@ -466,7 +468,7 @@ export function MapCanvas({
           <Button appearance="subtle" size="small" icon={<ZoomOutRegular />} onClick={() => zoomBy(1 / ZOOM_STEP)} />
           <Text size={200} className={styles.zoomLabel}>{Math.round(displayScale * 100)}%</Text>
           <Button appearance="subtle" size="small" icon={<ZoomInRegular />} onClick={() => zoomBy(ZOOM_STEP)} />
-          <Button appearance="subtle" size="small" icon={<FullScreenMaximizeRegular />} onClick={fit} title="Fit to view" />
+          <Button appearance="subtle" size="small" icon={<FullScreenMaximizeRegular />} onClick={fit} title={t('mapCanvas.fitToView')} />
         </div>
       </div>
     </div>

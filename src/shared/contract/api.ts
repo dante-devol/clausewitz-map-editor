@@ -1,7 +1,9 @@
 import type { Continent, Province, TerrainCategory } from '../mapDataTypes'
 import type { GameVerificationResult, ModVerificationResult, ResolvedPaths } from '../pathTypes'
+import type { AppLocale } from '../i18n'
 
 export interface AppConfig {
+  locale: AppLocale | null
   paths: {
     defaultMap: string
     definitions: string
@@ -47,6 +49,9 @@ export interface MapChangedEvent {
 }
 
 export interface ApiContract {
+  app: {
+    getSystemLocale: () => Promise<AppLocale>
+  }
   dialogs: {
     openFolder: () => Promise<string | null>
   }

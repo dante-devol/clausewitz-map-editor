@@ -24,6 +24,8 @@ import {
 } from '@fluentui/react-icons'
 import { ProjectChip } from '../components/ProjectChip'
 import type { GameVerificationResult, ModVerificationResult } from '../../../shared/pathTypes'
+import { useI18n } from '../i18n/I18nProvider'
+import type { MessageKey } from '../i18n/messages/en'
 
 const useStyles = makeStyles({
   root: {
@@ -110,12 +112,12 @@ interface ProjectSelectionViewProps {
   onCancelPending: () => void
 }
 
-const PATH_LABELS: Record<string, string> = {
-  defaultMap: 'Default Map',
-  definitions: 'Definitions',
-  provinces: 'Provinces',
-  continent: 'Continent',
-  provinceTerrain: 'Province Terrain'
+const PATH_LABEL_KEYS: Record<string, MessageKey> = {
+  defaultMap: 'path.defaultMap',
+  definitions: 'path.definitions',
+  provinces: 'path.provinces',
+  continent: 'path.continent',
+  provinceTerrain: 'path.provinceTerrain'
 }
 
 export function ProjectSelectionView({
@@ -132,6 +134,7 @@ export function ProjectSelectionView({
   onCancelPending
 }: ProjectSelectionViewProps) {
   const styles = useStyles()
+  const { t } = useI18n()
   const hasGamePath = !!gamePath
   const gameInvalid = hasGamePath && gamePathValid === false
   const canProceed = gamePathValid === true
@@ -139,18 +142,18 @@ export function ProjectSelectionView({
   return (
     <div className={styles.root}>
       <div className={styles.header}>
-        <Text size={600} weight="bold">HOI4 Map Editor</Text>
+        <Text size={600} weight="bold">{t('app.title')}</Text>
         <Text size={300} style={{ color: 'var(--colorNeutralForeground3)' }}>
-          Open a mod folder to get started
+          {t('projectSelection.subtitle')}
         </Text>
       </div>
 
       {!hasGamePath ? (
         <MessageBar intent="warning">
-          <MessageBarBody>A vanilla game path is required to continue.</MessageBarBody>
+          <MessageBarBody>{t('projectSelection.gamePathRequired')}</MessageBarBody>
           <MessageBarActions>
             <Button appearance="subtle" icon={<FolderOpenRegular />} onClick={onBrowseGamePath}>
-              Locate game folder…
+              {t('projectSelection.locateGameFolder')}
             </Button>
           </MessageBarActions>
         </MessageBar>
@@ -163,16 +166,16 @@ export function ProjectSelectionView({
               style={{ color: gameInvalid ? tokens.colorPaletteRedForeground3 : tokens.colorBrandForeground1 }}
             />
             <div className={styles.gameChipText}>
-              <Text size={300} weight="semibold">Hearts of Iron IV</Text>
+              <Text size={300} weight="semibold">{t('projectSelection.gameTitle')}</Text>
               <Text size={200} className={styles.gameChipPath}>{gamePath}</Text>
               {gameInvalid && gameVerification && (
                 <div className={styles.missingPaths}>
                   <Text size={200} style={{ color: tokens.colorPaletteRedForeground3 }}>
-                    Missing required files:
+                    {t('projectSelection.missingRequiredFiles')}
                   </Text>
                   {gameVerification.missingPaths.map((key) => (
                     <Text key={key} size={200} style={{ color: tokens.colorPaletteRedForeground3 }}>
-                      · {PATH_LABELS[key] ?? key}
+                      · {PATH_LABEL_KEYS[key] ? t(PATH_LABEL_KEYS[key]) : key}
                     </Text>
                   ))}
                 </div>
@@ -199,7 +202,7 @@ export function ProjectSelectionView({
 
       {recentProjects.length > 0 && (
         <>
-          <Divider className={styles.divider}>Recent</Divider>
+          <Divider className={styles.divider}>{t('projectSelection.recent')}</Divider>
           <div className={styles.recentList}>
             {recentProjects.map((path) => (
               <ProjectChip
@@ -223,26 +226,24 @@ export function ProjectSelectionView({
         size="large"
         disabled={!canProceed}
       >
-        Open a mod folder…
+        {t('projectSelection.openModFolder')}
       </Button>
 
       {/* Mod warning dialog — shown when the selected mod has no recognized paths */}
       <Dialog open={!!pendingProject} onOpenChange={(_, d) => { if (!d.open) onCancelPending() }}>
         <DialogSurface>
           <DialogBody>
-            <DialogTitle>No recognized files found</DialogTitle>
+            <DialogTitle>{t('projectSelection.noRecognizedFilesTitle')}</DialogTitle>
             <DialogContent>
               <Text size={300}>
-                This folder doesn't contain any of the expected mod files. It may be a full vanilla
-                overwrite or an empty project. You can still open it — missing files will fall back
-                to the game installation.
+                {t('projectSelection.noRecognizedFilesBody')}
               </Text>
             </DialogContent>
             <DialogActions>
               <DialogTrigger disableButtonEnhancement>
-                <Button appearance="secondary" onClick={onCancelPending}>Cancel</Button>
+                <Button appearance="secondary" onClick={onCancelPending}>{t('projectSelection.cancel')}</Button>
               </DialogTrigger>
-              <Button appearance="primary" onClick={onConfirmPending}>Open anyway</Button>
+              <Button appearance="primary" onClick={onConfirmPending}>{t('projectSelection.openAnyway')}</Button>
             </DialogActions>
           </DialogBody>
         </DialogSurface>

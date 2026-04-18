@@ -13,6 +13,7 @@ import {
   DialogActions
 } from '@fluentui/react-components'
 import { DismissRegular, FolderRegular } from '@fluentui/react-icons'
+import { useI18n } from '../i18n/I18nProvider'
 
 const useStyles = makeStyles({
   chip: {
@@ -71,6 +72,7 @@ function folderName(path: string): string {
 
 export function ProjectChip({ path, onClick, onRemove, disabled }: ProjectChipProps) {
   const styles = useStyles()
+  const { t } = useI18n()
   const [hovered, setHovered] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
@@ -105,16 +107,16 @@ export function ProjectChip({ path, onClick, onRemove, disabled }: ProjectChipPr
       <Dialog open={confirmOpen} onOpenChange={(_, d) => setConfirmOpen(d.open)}>
         <DialogSurface>
           <DialogBody>
-            <DialogTitle>Remove from recents?</DialogTitle>
+            <DialogTitle>{t('projectChip.removeFromRecents')}</DialogTitle>
             <DialogContent>
               <Text size={300} style={{ color: 'var(--colorNeutralForeground3)' }}>{path}</Text>
             </DialogContent>
             <DialogActions>
               <DialogTrigger disableButtonEnhancement>
-                <Button appearance="secondary">Cancel</Button>
+                <Button appearance="secondary">{t('projectSelection.cancel')}</Button>
               </DialogTrigger>
               <Button appearance="primary" onClick={() => { setConfirmOpen(false); onRemove() }}>
-                Remove
+                {t('projectChip.remove')}
               </Button>
             </DialogActions>
           </DialogBody>

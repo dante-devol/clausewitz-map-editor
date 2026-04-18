@@ -3,6 +3,7 @@ import { makeStyles, tokens, Divider } from '@fluentui/react-components'
 import { MapModePanel } from '../components/MapModePanel'
 import { MapCanvas } from '../components/MapCanvas'
 import { ProvinceList } from '../components/ProvinceList'
+import { useI18n } from '../i18n/I18nProvider'
 import { useMapDataStore } from '../store/mapDataStore'
 import { useDisplayModeConfigStore } from '../store/displayModeConfigStore'
 import { packColor, type Province } from '../../../shared/mapDataTypes'
@@ -13,6 +14,7 @@ import {
   getResolvedModeValueColor,
   listModeValues,
 } from '../config/displayModes'
+import type { MessageKey } from '../i18n/messages/en'
 
 const useStyles = makeStyles({
   root: {
@@ -42,24 +44,43 @@ interface HoveredProvince {
   y: number
 }
 
-function getHoverTooltip(displayMode: DisplayMode, province: Province): { label: string; value: string } {
+function getModeValueDisplay(mode: DisplayMode, value: string): string {
+  if (mode === 'coastal' && value === 'coastal') return 'mapValue.coastal'
+  if (mode === 'coastal' && value === 'inland') return 'mapValue.inland'
+  if (mode === 'continent' && value === 'none') return 'mapValue.none'
+  return value
+}
+
+function getHoverTooltip(
+  displayMode: DisplayMode,
+  province: Province,
+  t: (key: MessageKey) => string
+): { label: string; value: string } {
   if (displayMode === 'provinces') {
-    return { label: 'Province ID', value: province.id.toString() }
+    return { label: t('map.hover.provinceId'), value: province.id.toString() }
   }
   if (displayMode === 'type') {
-    return { label: 'Type', value: province.type }
+    return { label: t('map.hover.type'), value: province.type }
   }
   if (displayMode === 'terrain') {
-    return { label: 'Terrain', value: province.terrain }
+    return { label: t('map.hover.terrain'), value: province.terrain }
   }
   if (displayMode === 'coastal') {
-    return { label: 'Coastal', value: province.isCoastal ? 'coastal' : 'inland' }
+    return {
+      label: t('map.hover.coastal'),
+      value: t(getModeValueDisplay(displayMode, province.isCoastal ? 'coastal' : 'inland') as MessageKey)
+    }
   }
-  return { label: 'Continent', value: province.continent || 'none' }
+  const continent = province.continent || 'none'
+  return {
+    label: t('map.hover.continent'),
+    value: continent === 'none' ? t('mapValue.none') : continent
+  }
 }
 
 export function MapView() {
   const styles = useStyles()
+  const { t } = useI18n()
   const [displayMode, setDisplayMode] = useState<DisplayMode>('provinces')
   const [hoveredProvince, setHoveredProvince] = useState<HoveredProvince | null>(null)
 
@@ -125,8 +146,8 @@ export function MapView() {
     if (!hoveredProvince) return null
     const province = provinces.get(hoveredProvince.id)
     if (!province) return null
-    return getHoverTooltip(displayMode, province)
-  }, [displayMode, hoveredProvince, provinces])
+    return getHoverTooltip(displayMode, province, t)
+  }, [displayMode, hoveredProvince, provinces, t])
 
   return (
     <div className={styles.root}>

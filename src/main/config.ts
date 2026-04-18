@@ -8,6 +8,7 @@ import type { AppConfig } from '../shared/contract/api'
 export interface Config extends AppConfig {}
 
 export const DEFAULT_CONFIG: Config = {
+  locale: null,
   paths: {
     defaultMap: '/map/default.map',
     definitions: '/map/definition.csv',

@@ -12,6 +12,7 @@ import {
   WeatherSunnyRegular
 } from '@fluentui/react-icons'
 import type { View, Theme } from '../../hooks/useAppState'
+import { useI18n } from '../../i18n/I18nProvider'
 
 const useStyles = makeStyles({
   root: {
@@ -67,19 +68,20 @@ interface ShellProps {
   children: React.ReactNode
 }
 
-const NAV_ITEMS: { view: View; icon: React.ReactNode; label: string }[] = [
-  { view: 'map', icon: <MapRegular />, label: 'Map' },
-  { view: 'settings', icon: <SettingsRegular />, label: 'Settings' }
+const NAV_ITEMS: { view: View; icon: React.ReactNode; labelKey: 'shell.nav.map' | 'shell.nav.settings' }[] = [
+  { view: 'map', icon: <MapRegular />, labelKey: 'shell.nav.map' },
+  { view: 'settings', icon: <SettingsRegular />, labelKey: 'shell.nav.settings' }
 ]
 
 export function Shell({ activeView, theme, onViewChange, onToggleTheme, children }: ShellProps) {
   const styles = useStyles()
+  const { t } = useI18n()
 
   return (
     <div className={styles.root}>
       <nav className={styles.sidebar}>
-        {NAV_ITEMS.map(({ view, icon, label }) => (
-          <Tooltip key={view} content={label} relationship="label" positioning="after">
+        {NAV_ITEMS.map(({ view, icon, labelKey }) => (
+          <Tooltip key={view} content={t(labelKey)} relationship="label" positioning="after">
             <Button
               appearance={activeView === view ? 'primary' : 'subtle'}
               icon={icon}
@@ -90,7 +92,7 @@ export function Shell({ activeView, theme, onViewChange, onToggleTheme, children
 
         <div className={styles.sidebarBottom}>
           <Tooltip
-            content={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            content={theme === 'dark' ? t('shell.theme.light') : t('shell.theme.dark')}
             relationship="label"
             positioning="after"
           >
@@ -105,7 +107,7 @@ export function Shell({ activeView, theme, onViewChange, onToggleTheme, children
 
       <div className={styles.main}>
         <div className={styles.titleBar}>
-          <Text size={100} weight="semibold">HOI4 Map Editor</Text>
+          <Text size={100} weight="semibold">{t('app.title')}</Text>
         </div>
         <div className={styles.content}>{children}</div>
       </div>
