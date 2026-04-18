@@ -15,8 +15,12 @@
     "directories": {
       "output": "dist"
     },
+    "icon": "resources/icon.png",
     "files": [
       "out/**/*"
+    ],
+    "extraResources": [
+      { "from": "resources/", "to": "resources/" }
     ]
   },
   "devDependencies": {
