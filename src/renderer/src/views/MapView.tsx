@@ -9,7 +9,6 @@ import {
   type DisplayMode,
   TYPE_COLORS,
   COASTAL_COLORS,
-  continentColor,
   hexToPackedColor,
 } from '../config/displayModes'
 
@@ -49,11 +48,6 @@ export function MapView() {
 
   const src = provincesImageB64 ? `data:image/bmp;base64,${provincesImageB64}` : null
 
-  const sortedProvinces = useMemo(
-    () => [...provinces.values()].sort((a, b) => a.id - b.id),
-    [provinces]
-  )
-
   const highlightColor = selectedProvinceId !== null
     ? (provinces.get(selectedProvinceId)?.color ?? null)
     : null
@@ -79,7 +73,7 @@ export function MapView() {
     } else if (displayMode === 'continent') {
       for (const p of provinces.values()) {
         const continent = continents.get(p.continent)
-        map.set(p.color, continent ? continentColor(continent.position) : 0x303030)
+        map.set(p.color, continent?.color ?? 0x303030)
       }
     }
 
@@ -107,7 +101,7 @@ export function MapView() {
         </div>
         <Divider style={{ flexGrow: 0 }} />
         <ProvinceList
-          provinces={sortedProvinces}
+          provinces={provinces}
           selectedId={selectedProvinceId}
           onSelect={setSelectedProvince}
         />

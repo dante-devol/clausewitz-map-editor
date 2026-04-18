@@ -1,5 +1,5 @@
 import { readFileSync } from 'fs'
-import type { Continent } from '../../shared/mapDataTypes'
+import { continentColorFromPosition, type Continent } from '../../shared/mapDataTypes'
 
 export class ContinentTxt {
   private readonly filePath: string
@@ -22,6 +22,10 @@ export class ContinentTxt {
       .map((s) => s.trim())
       .filter((s) => s.length > 0 && !s.startsWith('#'))
 
-    return names.map((codeName, i) => ({ codeName, position: i }))
+    return names.map((codeName, i) => ({
+      codeName,
+      position: i,
+      color: continentColorFromPosition(i)
+    }))
   }
 }
