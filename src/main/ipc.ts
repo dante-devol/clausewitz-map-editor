@@ -12,6 +12,34 @@ import { DefinitionsCsv } from './parsers/DefinitionsCsv'
 import { TerrainTxt } from './parsers/TerrainTxt'
 import type { Continent } from '../shared/mapDataTypes'
 
+// Per-session state needed to re-parse dependent data when files change.
+const session = {
+  continents: [] as Continent[],
+  definitionPath: '',
+  terrainPaths: [] as string[]
+}
+
+function pushReload(type: string, data: unknown): void {
+  getMainWindow()?.webContents.send('data:reloaded', { type, data })
+}
+
+function reloadContinents(filePath: string): Continent[] {
+  const continents = new ContinentTxt(filePath).load()
+  session.continents = continents
+  pushReload('continents', continents)
+  return continents
+}
+
+function reloadDefinitions(): void {
+  const provinces = new DefinitionsCsv(session.definitionPath).load(session.continents)
+  pushReload('definitions', provinces)
+}
+
+function reloadTerrain(): void {
+  const terrains = new TerrainTxt(session.terrainPaths).load()
+  pushReload('terrain', terrains)
+}
+
 export function registerIpcHandlers(): void {
   ipcMain.handle('projects:getRecent', () => getRecentProjects())
   ipcMain.handle('projects:addRecent', (_e, path: string) => addRecentProject(path))
@@ -58,18 +86,40 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('paths:verifyMod', (_e, modPath: string) => verifyModPaths(modPath))
   ipcMain.handle('paths:resolve', (_e, gamePath: string, modPath: string) => resolvePaths(gamePath, modPath))
 
-  ipcMain.handle('data:loadContinents', (_e, filePath: string) =>
-    new ContinentTxt(filePath).load()
-  )
+  ipcMain.handle('data:loadContinents', (_e, filePath: string) => {
+    const mainWindow = getMainWindow()
+    const continents = reloadContinents(filePath)
+    loadFile(filePath)
+    if (mainWindow) {
+      watchFile(filePath, mainWindow, () => {
+        // When continents change, cascade into definitions since they depend on continent IDs.
+        reloadContinents(filePath)
+        if (session.definitionPath) reloadDefinitions()
+      })
+    }
+    return continents
+  })
 
-  // Continents must be passed in so definition IDs can be resolved to names.
-  ipcMain.handle('data:loadDefinitions', (_e, filePath: string, continents: Continent[]) =>
-    new DefinitionsCsv(filePath).load(continents)
-  )
+  ipcMain.handle('data:loadDefinitions', (_e, filePath: string, continents: Continent[]) => {
+    const mainWindow = getMainWindow()
+    session.definitionPath = filePath
+    session.continents = continents
+    const provinces = new DefinitionsCsv(filePath).load(continents)
+    loadFile(filePath)
+    if (mainWindow) watchFile(filePath, mainWindow, () => reloadDefinitions())
+    return provinces
+  })
 
-  ipcMain.handle('data:loadTerrain', (_e, filePaths: string[]) =>
-    new TerrainTxt(filePaths).load()
-  )
+  ipcMain.handle('data:loadTerrain', (_e, filePaths: string[]) => {
+    const mainWindow = getMainWindow()
+    session.terrainPaths = filePaths
+    const terrains = new TerrainTxt(filePaths).load()
+    for (const filePath of filePaths) {
+      loadFile(filePath)
+      if (mainWindow) watchFile(filePath, mainWindow, () => reloadTerrain())
+    }
+    return terrains
+  })
 
   ipcMain.handle('config:get', () => getConfig())
   ipcMain.handle('config:getValue', (_e, key: keyof Config) => getConfigValue(key))

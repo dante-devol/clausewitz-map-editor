@@ -34,8 +34,15 @@ export function useMapLoader(): void {
 
     load()
 
+    const unsubscribe = window.api.onDataReloaded((event) => {
+      if (event.type === 'continents') loadContinents(event.data as import('../../../shared/mapDataTypes').Continent[])
+      else if (event.type === 'definitions') loadProvinces(event.data as import('../../../shared/mapDataTypes').Province[])
+      else if (event.type === 'terrain') loadTerrains(event.data as import('../../../shared/mapDataTypes').TerrainCategory[])
+    })
+
     return () => {
       cancelled = true
+      unsubscribe()
       clear()
     }
   }, [paths])

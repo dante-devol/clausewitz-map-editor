@@ -51,6 +51,7 @@ declare global {
 
       // Push events
       onFileChanged: (callback: (data: FileChangedEvent) => void) => () => void
+      onDataReloaded: (callback: (data: DataReloadedEvent) => void) => () => void
     }
   }
 }

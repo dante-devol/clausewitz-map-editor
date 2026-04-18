@@ -37,8 +37,12 @@ const api = {
   // Push events from main → renderer
   onFileChanged: (callback: (data: FileChangedEvent) => void) => {
     ipcRenderer.on('file:changed', (_e, data) => callback(data))
-    // Return a cleanup function
     return () => ipcRenderer.removeAllListeners('file:changed')
+  },
+
+  onDataReloaded: (callback: (data: DataReloadedEvent) => void) => {
+    ipcRenderer.on('data:reloaded', (_e, data) => callback(data))
+    return () => ipcRenderer.removeAllListeners('data:reloaded')
   }
 }
 
@@ -52,6 +56,8 @@ interface TerrainData { codeName: string; color: number }
 interface GameVerificationResult { valid: boolean; missingPaths: string[] }
 interface ModVerificationResult { hasAny: boolean; foundPaths: string[]; missingPaths: string[] }
 interface ResolvedPaths { defaultMap: string; definitions: string; provinces: string; continent: string; provinceTerrain: string[] }
+
+interface DataReloadedEvent { type: 'continents' | 'definitions' | 'terrain'; data: unknown }
 
 interface FileLoadResult {
   path: string
