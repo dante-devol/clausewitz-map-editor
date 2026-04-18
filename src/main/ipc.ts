@@ -2,6 +2,15 @@ import { ipcMain, dialog } from 'electron'
 import { getMainWindow, enterEditor } from './window'
 import { getRecentProjects, addRecentProject, removeRecentProject } from './recentProjects'
 import { loadFile, watchFile, unwatchFile, getRecord } from './fileManager'
+import { getConfig, getConfigValue, setConfigValue, resetConfig } from './config'
+import type { Config } from './config'
+import { getGamePath, setGamePath } from './gamePath'
+import { verifyGamePaths, verifyModPaths } from './pathVerifier'
+import { resolvePaths } from './pathResolver'
+import { ContinentTxt } from './parsers/ContinentTxt'
+import { DefinitionsCsv } from './parsers/DefinitionsCsv'
+import { TerrainTxt } from './parsers/TerrainTxt'
+import type { Continent } from '../shared/mapDataTypes'
 
 export function registerIpcHandlers(): void {
   ipcMain.handle('projects:getRecent', () => getRecentProjects())
@@ -41,4 +50,29 @@ export function registerIpcHandlers(): void {
 
   // Returns the current in-memory hash for a path without hitting disk.
   ipcMain.handle('file:getHash', (_e, path: string) => getRecord(path)?.hash ?? null)
+
+  ipcMain.handle('gamePath:get', () => getGamePath())
+  ipcMain.handle('gamePath:set', (_e, path: string) => setGamePath(path))
+
+  ipcMain.handle('paths:verifyGame', (_e, gamePath: string) => verifyGamePaths(gamePath))
+  ipcMain.handle('paths:verifyMod', (_e, modPath: string) => verifyModPaths(modPath))
+  ipcMain.handle('paths:resolve', (_e, gamePath: string, modPath: string) => resolvePaths(gamePath, modPath))
+
+  ipcMain.handle('data:loadContinents', (_e, filePath: string) =>
+    new ContinentTxt(filePath).load()
+  )
+
+  // Continents must be passed in so definition IDs can be resolved to names.
+  ipcMain.handle('data:loadDefinitions', (_e, filePath: string, continents: Continent[]) =>
+    new DefinitionsCsv(filePath).load(continents)
+  )
+
+  ipcMain.handle('data:loadTerrain', (_e, filePaths: string[]) =>
+    new TerrainTxt(filePaths).load()
+  )
+
+  ipcMain.handle('config:get', () => getConfig())
+  ipcMain.handle('config:getValue', (_e, key: keyof Config) => getConfigValue(key))
+  ipcMain.handle('config:set', (_e, key: keyof Config, value: Config[typeof key]) => setConfigValue(key, value))
+  ipcMain.handle('config:reset', () => resetConfig())
 }

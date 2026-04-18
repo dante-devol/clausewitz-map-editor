@@ -33,8 +33,10 @@ export function getRecord(path: string): FileRecord | undefined {
 
 // Starts watching a file for external changes.
 // Fires file:changed on the window when the hash changes.
+// onChanged is also called after the hash check confirms a real change — use it
+// to trigger re-parsing or other side effects in the main process.
 // Safe to call multiple times — subsequent calls for the same path are no-ops.
-export function watchFile(path: string, window: BrowserWindow): void {
+export function watchFile(path: string, window: BrowserWindow, onChanged?: () => void): void {
   if (watchers.has(path)) return
 
   const entry: WatchEntry = { watcher: null!, debounce: null }
@@ -50,6 +52,7 @@ export function watchFile(path: string, window: BrowserWindow): void {
         if (!existing || hash === existing.hash) return
         records.set(path, { path, hash, content })
         window.webContents.send('file:changed', { path, hash })
+        onChanged?.()
       } catch {
         // File may have been temporarily unavailable during a write — ignore.
       }

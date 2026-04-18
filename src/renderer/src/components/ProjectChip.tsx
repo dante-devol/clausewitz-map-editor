@@ -1,14 +1,21 @@
+import { useState } from 'react'
 import {
   makeStyles,
   tokens,
   Text,
-  Button
+  Button,
+  Dialog,
+  DialogTrigger,
+  DialogSurface,
+  DialogTitle,
+  DialogBody,
+  DialogContent,
+  DialogActions
 } from '@fluentui/react-components'
 import { DismissRegular, FolderRegular } from '@fluentui/react-icons'
 
 const useStyles = makeStyles({
   chip: {
-    position: 'relative',
     display: 'flex',
     alignItems: 'flex-start',
     gap: tokens.spacingHorizontalS,
@@ -48,13 +55,6 @@ const useStyles = makeStyles({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     color: tokens.colorNeutralForeground4
-  },
-  remove: {
-    position: 'absolute',
-    top: tokens.spacingVerticalXS,
-    right: tokens.spacingHorizontalXS,
-    opacity: 0,
-    '$chip:hover &': { opacity: 1 }
   }
 })
 
@@ -62,30 +62,64 @@ interface ProjectChipProps {
   path: string
   onClick: () => void
   onRemove: () => void
+  disabled?: boolean
 }
 
 function folderName(path: string): string {
   return path.replace(/\\/g, '/').split('/').filter(Boolean).at(-1) ?? path
 }
 
-export function ProjectChip({ path, onClick, onRemove }: ProjectChipProps) {
+export function ProjectChip({ path, onClick, onRemove, disabled }: ProjectChipProps) {
   const styles = useStyles()
+  const [hovered, setHovered] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   return (
-    <div className={styles.chip} onClick={onClick} role="button" tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onClick()}>
-      <FolderRegular className={styles.icon} fontSize={20} />
-      <div className={styles.text}>
-        <Text className={styles.name} weight="semibold" size={300}>{folderName(path)}</Text>
-        <Text className={styles.path} size={200}>{path}</Text>
+    <>
+      <div
+        className={styles.chip}
+        onClick={disabled ? undefined : onClick}
+        role="button"
+        tabIndex={disabled ? -1 : 0}
+        aria-disabled={disabled}
+        style={{ opacity: disabled ? 0.5 : 1, cursor: disabled ? 'default' : 'pointer' }}
+        onKeyDown={(e) => !disabled && e.key === 'Enter' && onClick()}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        <FolderRegular className={styles.icon} fontSize={20} />
+        <div className={styles.text}>
+          <Text className={styles.name} weight="semibold" size={300}>{folderName(path)}</Text>
+          <Text className={styles.path} size={200}>{path}</Text>
+        </div>
+        {hovered && !disabled && (
+          <Button
+            appearance="subtle"
+            size="small"
+            icon={<DismissRegular />}
+            onClick={(e) => { e.stopPropagation(); setConfirmOpen(true) }}
+          />
+        )}
       </div>
-      <Button
-        className={styles.remove}
-        appearance="subtle"
-        size="small"
-        icon={<DismissRegular />}
-        onClick={(e) => { e.stopPropagation(); onRemove() }}
-      />
-    </div>
+
+      <Dialog open={confirmOpen} onOpenChange={(_, d) => setConfirmOpen(d.open)}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>Remove from recents?</DialogTitle>
+            <DialogContent>
+              <Text size={300} style={{ color: 'var(--colorNeutralForeground3)' }}>{path}</Text>
+            </DialogContent>
+            <DialogActions>
+              <DialogTrigger disableButtonEnhancement>
+                <Button appearance="secondary">Cancel</Button>
+              </DialogTrigger>
+              <Button appearance="primary" onClick={() => { setConfirmOpen(false); onRemove() }}>
+                Remove
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </>
   )
 }
