@@ -4,7 +4,7 @@ import { MapModePanel } from '../components/MapModePanel'
 import { MapCanvas } from '../components/MapCanvas'
 import { ProvinceList } from '../components/ProvinceList'
 import { useMapDataStore } from '../store/mapDataStore'
-import { packColor } from '../../../shared/mapDataTypes'
+import { packColor, type Province } from '../../../shared/mapDataTypes'
 import {
   type DisplayMode,
   TYPE_COLORS,
@@ -34,9 +34,32 @@ const useStyles = makeStyles({
   }
 })
 
+interface HoveredProvince {
+  id: number
+  x: number
+  y: number
+}
+
+function getHoverTooltip(displayMode: DisplayMode, province: Province): { label: string; value: string } {
+  if (displayMode === 'provinces') {
+    return { label: 'Province ID', value: province.id.toString() }
+  }
+  if (displayMode === 'type') {
+    return { label: 'Type', value: province.type }
+  }
+  if (displayMode === 'terrain') {
+    return { label: 'Terrain', value: province.terrain }
+  }
+  if (displayMode === 'coastal') {
+    return { label: 'Coastal', value: province.isCoastal ? 'coastal' : 'inland' }
+  }
+  return { label: 'Continent', value: province.continent || 'none' }
+}
+
 export function MapView() {
   const styles = useStyles()
   const [displayMode, setDisplayMode] = useState<DisplayMode>('provinces')
+  const [hoveredProvince, setHoveredProvince] = useState<HoveredProvince | null>(null)
 
   const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
   const provinces         = useMapDataStore((s) => s.provinces)
@@ -85,6 +108,26 @@ export function MapView() {
     if (id !== undefined) setSelectedProvince(id)
   }, [provincesByColor, setSelectedProvince])
 
+  const onHoverColorChange = useCallback((color: { r: number; g: number; b: number; x: number; y: number } | null) => {
+    if (!color) {
+      setHoveredProvince(null)
+      return
+    }
+    const id = provincesByColor.get(packColor(color.r, color.g, color.b))
+    if (id === undefined) {
+      setHoveredProvince(null)
+      return
+    }
+    setHoveredProvince({ id, x: color.x, y: color.y })
+  }, [provincesByColor])
+
+  const hoverTooltip = useMemo(() => {
+    if (!hoveredProvince) return null
+    const province = provinces.get(hoveredProvince.id)
+    if (!province) return null
+    return getHoverTooltip(displayMode, province)
+  }, [displayMode, hoveredProvince, provinces])
+
   return (
     <div className={styles.root}>
       <div className={styles.viewport}>
@@ -93,6 +136,9 @@ export function MapView() {
           highlightColor={highlightColor}
           colorMap={colorMap}
           onColorPicked={onColorPicked}
+          hoverTooltipPosition={hoveredProvince ? { x: hoveredProvince.x, y: hoveredProvince.y } : null}
+          hoverTooltip={hoverTooltip}
+          onHoverColorChange={onHoverColorChange}
         />
       </div>
       <div className={styles.sidebar}>

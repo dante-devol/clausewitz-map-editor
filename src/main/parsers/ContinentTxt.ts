@@ -24,8 +24,9 @@ export class ContinentTxt {
 
     return names.map((codeName, i) => ({
       codeName,
-      position: i,
-      color: continentColorFromPosition(i)
+      // HOI4 reserves continent 0 for "none"; named continents start at 1.
+      position: i + 1,
+      color: continentColorFromPosition(i + 1)
     }))
   }
 }

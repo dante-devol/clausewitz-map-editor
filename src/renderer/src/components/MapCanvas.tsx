@@ -13,6 +13,8 @@ const PULSE_SPEED = 0.003
 
 interface Transform { x: number; y: number; scale: number }
 interface SampledColor { r: number; g: number; b: number }
+interface HoveredColor extends SampledColor { x: number; y: number }
+interface HoverTooltipPosition { x: number; y: number }
 
 function toHex(n: number) { return n.toString(16).padStart(2, '0').toUpperCase() }
 function colorToHex({ r, g, b }: SampledColor) { return `#${toHex(r)}${toHex(g)}${toHex(b)}` }
@@ -81,6 +83,26 @@ const useStyles = makeStyles({
   colorLabel: {
     fontFamily: 'monospace',
     minWidth: '58px'
+  },
+  hoverTooltip: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    pointerEvents: 'none',
+    background: tokens.colorNeutralBackground1,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: tokens.borderRadiusMedium,
+    boxShadow: tokens.shadow8,
+    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
+    maxWidth: '220px',
+    zIndex: 1
+  },
+  hoverTooltipLabel: {
+    color: tokens.colorNeutralForeground2
+  },
+  hoverTooltipValue: {
+    display: 'block',
+    fontFamily: 'monospace'
   }
 })
 
@@ -89,9 +111,20 @@ interface Props {
   highlightColor: number | null
   colorMap?: Map<number, number> | null
   onColorPicked?: (r: number, g: number, b: number) => void
+  hoverTooltipPosition?: HoverTooltipPosition | null
+  hoverTooltip?: { label: string; value: string } | null
+  onHoverColorChange?: (color: HoveredColor | null) => void
 }
 
-export function MapCanvas({ src, highlightColor, colorMap, onColorPicked }: Props): JSX.Element {
+export function MapCanvas({
+  src,
+  highlightColor,
+  colorMap,
+  onColorPicked,
+  hoverTooltipPosition,
+  hoverTooltip,
+  onHoverColorChange,
+}: Props): JSX.Element {
   const styles = useStyles()
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
@@ -312,13 +345,24 @@ export function MapCanvas({ src, highlightColor, colorMap, onColorPicked }: Prop
   }, [eyedropperActive, onColorPicked])
 
   const onMouseMove = useCallback((e: React.MouseEvent) => {
+    const canvas = canvasRef.current
+    if (canvas && !dragRef.current) {
+      const rect = canvas.getBoundingClientRect()
+      const cx = e.clientX - rect.left
+      const cy = e.clientY - rect.top
+      const { x: tx, y: ty, scale } = transformRef.current
+      const color = rendererRef.current?.readOriginalPixel(cx, cy, tx, ty, scale)
+      onHoverColorChange?.(color ? { ...color, x: cx, y: cy } : null)
+    } else if (dragRef.current) {
+      onHoverColorChange?.(null)
+    }
     if (!dragRef.current) return
     applyTransform({
       ...transformRef.current,
       x: dragRef.current.startTX + (e.clientX - dragRef.current.startX),
       y: dragRef.current.startTY + (e.clientY - dragRef.current.startY)
     })
-  }, [applyTransform])
+  }, [applyTransform, onHoverColorChange])
 
   const stopDrag = useCallback(() => {
     dragRef.current = null
@@ -361,7 +405,10 @@ export function MapCanvas({ src, highlightColor, colorMap, onColorPicked }: Prop
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={stopDrag}
-      onMouseLeave={stopDrag}
+      onMouseLeave={() => {
+        stopDrag()
+        onHoverColorChange?.(null)
+      }}
     >
       <canvas ref={canvasRef}  className={mergeClasses(styles.canvas,  !imageLoaded && styles.canvasHidden)} />
       <canvas ref={overlayRef} className={mergeClasses(styles.overlay, !imageLoaded && styles.canvasHidden)} />
@@ -370,6 +417,19 @@ export function MapCanvas({ src, highlightColor, colorMap, onColorPicked }: Prop
           <Skeleton style={{ width: '100%', height: '100%' }}>
             <SkeletonItem style={{ width: '100%', height: '100%', borderRadius: 0 }} />
           </Skeleton>
+        </div>
+      )}
+      {hoverTooltipPosition && hoverTooltip && !eyedropperActive && !dragging && (
+        <div
+          className={styles.hoverTooltip}
+          style={{
+            transform: `translate(${hoverTooltipPosition.x + 14}px, ${hoverTooltipPosition.y + 14}px)`,
+          }}
+        >
+          <Text size={100} className={styles.hoverTooltipLabel}>{hoverTooltip.label}</Text>
+          <Text size={200} weight="semibold" className={styles.hoverTooltipValue}>
+            {hoverTooltip.value}
+          </Text>
         </div>
       )}
       <div className={styles.controls} onMouseDown={(e) => e.stopPropagation()}>
