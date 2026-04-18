@@ -72,7 +72,7 @@ export function MapView() {
             onHideAll={layers.hideAll}
           />
         </div>
-        <Divider />
+        <Divider style={{ flexGrow: 0 }} />
         <ProvinceList
           provinces={sortedProvinces}
           selectedId={selectedProvinceId}

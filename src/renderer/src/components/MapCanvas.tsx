@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { makeStyles, mergeClasses, tokens, Button, Text, Tooltip } from '@fluentui/react-components'
-import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled } from '@fluentui/react-icons'
-import { MapRenderer, type BoundingBox } from '../lib/MapRenderer'
+import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, LocationTargetSquareRegular } from '@fluentui/react-icons'
+import { MapRenderer } from '../lib/MapRenderer'
 
 const ZOOM_STEP = 1.25
 const ZOOM_MIN = 0.02
 const ZOOM_MAX = 32
 
-// Glow pulse: period ~3 s, alpha range 0.35–1.0
-const PULSE_SPEED = 0.002
-const PULSE_MIN   = 0.35
-const PULSE_RANGE = 0.65
+// Glow pulse: ~2 s period, full 0→1 range with a quadratic ease that spends
+// most of the cycle near-zero and snaps to bright — flash rather than fade.
+const PULSE_SPEED = 0.003
 
 interface Transform { x: number; y: number; scale: number }
 interface SampledColor { r: number; g: number; b: number }
@@ -92,9 +91,9 @@ export function MapCanvas({ src, highlightColor, onColorPicked }: Props): JSX.El
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const overlayRef   = useRef<HTMLCanvasElement>(null)
   const rendererRef  = useRef<MapRenderer | null>(null)
-  const transformRef = useRef<Transform>({ x: 0, y: 0, scale: 1 })
-  const bboxRef      = useRef<BoundingBox | null>(null)
-  const alphaRef     = useRef(1)
+  const transformRef      = useRef<Transform>({ x: 0, y: 0, scale: 1 })
+  const highlightColorRef = useRef<number | null>(null)
+  const alphaRef          = useRef(1)
   const animFrameRef = useRef<number | null>(null)
   const dragRef      = useRef<{ startX: number; startY: number; startTX: number; startTY: number } | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -102,28 +101,49 @@ export function MapCanvas({ src, highlightColor, onColorPicked }: Props): JSX.El
   const [eyedropperActive, setEyedropperActive] = useState(false)
   const [sampledColor, setSampledColor] = useState<SampledColor | null>(null)
 
-  // Draws the overlay at whatever alphaRef.current is.
-  // Called both from the RAF animation loop and imperatively on transform/resize.
+  // Draws the per-pixel province edge at whatever alphaRef.current is.
+  // Called from the RAF animation loop and imperatively on transform/resize.
   const drawOverlay = useCallback(() => {
     const canvas = overlayRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')!
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    const bbox = bboxRef.current
-    if (!bbox) return
+
+    const hc = highlightColorRef.current
+    if (hc === null) return
+    const edgeMask = rendererRef.current?.computeEdgeMask(hc)
+    if (!edgeMask) return
 
     const { x: tx, y: ty, scale } = transformRef.current
-    const rx = tx + bbox.x1 * scale
-    const ry = ty + bbox.y1 * scale
-    const rw = (bbox.x2 - bbox.x1) * scale
-    const rh = (bbox.y2 - bbox.y1) * scale
-    const a  = alphaRef.current
+    const { width: iw, height: ih } = rendererRef.current!.imageSize
+    const a = alphaRef.current
 
-    ctx.strokeStyle = '#ffffff'
-    // Three concentric strokes: wide+faint outer glow → medium → sharp core.
-    ctx.globalAlpha = a * 0.15; ctx.lineWidth = 8; ctx.strokeRect(rx, ry, rw, rh)
-    ctx.globalAlpha = a * 0.40; ctx.lineWidth = 3; ctx.strokeRect(rx, ry, rw, rh)
-    ctx.globalAlpha = a;        ctx.lineWidth = 1.5; ctx.strokeRect(rx, ry, rw, rh)
+    // Boost blur for provinces that appear small on screen so they stay visible
+    // when zoomed out. screenArea < THRESHOLD → boost up to MAX_BOOST×.
+    const provincePixels = rendererRef.current!.edgeMaskProvincePixels
+    const screenArea = Math.max(1, provincePixels * scale * scale)
+    const THRESHOLD = 8_000
+    const MAX_BOOST = 6
+    const t = Math.max(0, 1 - screenArea / THRESHOLD)
+    const boost = 1 + (MAX_BOOST - 1) * Math.sqrt(t)
+
+    // Wide outer halo.
+    ctx.filter = `blur(${Math.round(12 * boost)}px)`
+    ctx.globalAlpha = a * 0.55
+    ctx.imageSmoothingEnabled = true
+    ctx.drawImage(edgeMask, tx, ty, iw * scale, ih * scale)
+
+    // Mid glow.
+    ctx.filter = `blur(${Math.round(4 * boost)}px)`
+    ctx.globalAlpha = a * 0.75
+    ctx.drawImage(edgeMask, tx, ty, iw * scale, ih * scale)
+
+    // Sharp core.
+    ctx.filter = 'none'
+    ctx.globalAlpha = a
+    ctx.imageSmoothingEnabled = scale < 1
+    ctx.drawImage(edgeMask, tx, ty, iw * scale, ih * scale)
+
     ctx.globalAlpha = 1
   }, [])
 
@@ -169,11 +189,9 @@ export function MapCanvas({ src, highlightColor, onColorPicked }: Props): JSX.El
     return () => { cancelled = true }
   }, [src, fit])
 
-  // Compute bbox and manage the pulse animation loop.
+  // Compute edge mask and manage the pulse animation loop.
   useEffect(() => {
-    bboxRef.current = highlightColor !== null
-      ? (rendererRef.current?.computeBoundingBox(highlightColor) ?? null)
-      : null
+    highlightColorRef.current = highlightColor
 
     // Always cancel the previous loop before deciding whether to start a new one.
     if (animFrameRef.current !== null) {
@@ -181,14 +199,15 @@ export function MapCanvas({ src, highlightColor, onColorPicked }: Props): JSX.El
       animFrameRef.current = null
     }
 
-    if (!bboxRef.current) {
+    if (highlightColor === null) {
       alphaRef.current = 1
       drawOverlay()   // clears the overlay
       return
     }
 
     const loop = (time: number) => {
-      alphaRef.current = PULSE_MIN + PULSE_RANGE * (Math.sin(time * PULSE_SPEED) * 0.5 + 0.5)
+      const raw = Math.sin(time * PULSE_SPEED) * 0.5 + 0.5  // 0→1 sine
+      alphaRef.current = raw * raw                            // ease-in: flash bright, linger dark
       drawOverlay()
       animFrameRef.current = requestAnimationFrame(loop)
     }
@@ -275,6 +294,20 @@ export function MapCanvas({ src, highlightColor, onColorPicked }: Props): JSX.El
     setDragging(false)
   }, [])
 
+  const centerOnProvince = useCallback(() => {
+    const renderer = rendererRef.current
+    const canvas   = canvasRef.current
+    if (!renderer || !canvas) return
+    const centroid = renderer.edgeMaskCentroid
+    if (!centroid) return
+    const { scale } = transformRef.current
+    applyTransform({
+      scale,
+      x: canvas.width  / 2 - centroid.x * scale,
+      y: canvas.height / 2 - centroid.y * scale,
+    })
+  }, [applyTransform])
+
   const zoomBy = useCallback((factor: number) => {
     const canvas = canvasRef.current
     const prev   = transformRef.current
@@ -301,7 +334,7 @@ export function MapCanvas({ src, highlightColor, onColorPicked }: Props): JSX.El
     >
       <canvas ref={canvasRef}  className={styles.canvas}  />
       <canvas ref={overlayRef} className={styles.overlay} />
-      <div className={styles.controls}>
+      <div className={styles.controls} onMouseDown={(e) => e.stopPropagation()}>
         <div className={styles.widget}>
           <Tooltip content="Pick color" relationship="label">
             <Button
@@ -318,6 +351,14 @@ export function MapCanvas({ src, highlightColor, onColorPicked }: Props): JSX.El
                 style={{ backgroundColor: `rgb(${sampledColor.r},${sampledColor.g},${sampledColor.b})` }}
               />
               <Text size={200} className={styles.colorLabel}>{colorToHex(sampledColor)}</Text>
+              <Tooltip content="Center on province" relationship="label">
+                <Button
+                  appearance="subtle"
+                  size="small"
+                  icon={<LocationTargetSquareRegular />}
+                  onClick={centerOnProvince}
+                />
+              </Tooltip>
             </>
           ) : (
             <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>—</Text>

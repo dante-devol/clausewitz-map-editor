@@ -27,8 +27,6 @@ const QUAD = new Float32Array([
   1, 0,  1, 1,  0, 1
 ])
 
-export interface BoundingBox { x1: number; y1: number; x2: number; y2: number }
-
 function compileShader(gl: WebGLRenderingContext, type: number, src: string): WebGLShader {
   const s = gl.createShader(type)!
   gl.shaderSource(s, src)
@@ -49,11 +47,17 @@ export class MapRenderer {
   private readonly matrixData = new Float32Array([1,0,0, 0,1,0, 0,0,1])
   private texture: WebGLTexture | null = null
   private _imageSize = { width: 0, height: 0 }
-  // CPU-side pixel data for bounding-box queries. Populated on image load.
+  // CPU-side pixel data for edge-mask queries. Populated on image load.
   private pixelData: Uint8ClampedArray | null = null
   private pixelDataWidth = 0
-  // Results cached by packed color so repeated selections are instant.
-  private readonly bboxCache = new Map<number, BoundingBox | null>()
+  // Single cached edge mask for the current selection; replaced on color change.
+  private edgeMaskCanvas: OffscreenCanvas | null = null
+  private edgeMaskColor = -1
+  // Province pixel count for the last computed mask — used by the renderer to
+  // scale glow size based on how large the province appears on screen.
+  edgeMaskProvincePixels = 0
+  // Centroid of the last computed mask in image-space coordinates.
+  edgeMaskCentroid: { x: number; y: number } | null = null
 
   get imageSize() { return this._imageSize }
 
@@ -75,9 +79,9 @@ export class MapRenderer {
     gl.deleteShader(frag)
     this.program = program
 
-    this.posLoc = gl.getAttribLocation(program, 'a_pos')
+    this.posLoc    = gl.getAttribLocation(program, 'a_pos')
     this.matrixLoc = gl.getUniformLocation(program, 'u_matrix')!
-    this.texLoc = gl.getUniformLocation(program, 'u_tex')!
+    this.texLoc    = gl.getUniformLocation(program, 'u_tex')!
 
     this.quadBuffer = gl.createBuffer()!
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer)
@@ -87,21 +91,22 @@ export class MapRenderer {
   }
 
   // Decodes the image off the main thread via createImageBitmap, uploads it as a
-  // GPU texture, and caches a CPU-side copy for bounding-box queries.
+  // GPU texture, and caches a CPU-side copy for edge-mask queries.
   async loadImage(src: string): Promise<void> {
-    const blob = await fetch(src).then((r) => r.blob())
+    const blob   = await fetch(src).then((r) => r.blob())
     const bitmap = await createImageBitmap(blob)
     const { gl } = this
 
     this._imageSize = { width: bitmap.width, height: bitmap.height }
-    this.bboxCache.clear()
+    this.edgeMaskCanvas = null
+    this.edgeMaskColor  = -1
 
-    // Draw bitmap to an offscreen 2D canvas to get raw pixel data for CPU queries.
+    // Draw to an offscreen 2D canvas to get raw pixel data for CPU queries.
     const offscreen = new OffscreenCanvas(bitmap.width, bitmap.height)
-    const ctx2d = offscreen.getContext('2d')!
+    const ctx2d     = offscreen.getContext('2d')!
     ctx2d.drawImage(bitmap, 0, 0)
-    const imageData = ctx2d.getImageData(0, 0, bitmap.width, bitmap.height)
-    this.pixelData = imageData.data
+    const imageData     = ctx2d.getImageData(0, 0, bitmap.width, bitmap.height)
+    this.pixelData      = imageData.data
     this.pixelDataWidth = bitmap.width
 
     if (this.texture) gl.deleteTexture(this.texture)
@@ -140,10 +145,13 @@ export class MapRenderer {
   clearImage(): void {
     const { gl } = this
     if (this.texture) { gl.deleteTexture(this.texture); this.texture = null }
-    this._imageSize = { width: 0, height: 0 }
-    this.pixelData = null
-    this.pixelDataWidth = 0
-    this.bboxCache.clear()
+    this._imageSize          = { width: 0, height: 0 }
+    this.pixelData           = null
+    this.pixelDataWidth      = 0
+    this.edgeMaskCanvas      = null
+    this.edgeMaskColor       = -1
+    this.edgeMaskCentroid    = null
+    this.edgeMaskProvincePixels = 0
     gl.clear(gl.COLOR_BUFFER_BIT)
   }
 
@@ -159,11 +167,13 @@ export class MapRenderer {
     return { r: buf[0], g: buf[1], b: buf[2] }
   }
 
-  // Scans the CPU pixel data for the bounding box of the given packed color.
-  // Results are cached — only the first call per color is slow (~20-50 ms for a
-  // full HOI4 provinces.bmp). Returns null if the color is not found.
-  computeBoundingBox(packedColor: number): BoundingBox | null {
-    if (this.bboxCache.has(packedColor)) return this.bboxCache.get(packedColor)!
+  // Builds an OffscreenCanvas the same size as the source image with white pixels
+  // wherever a province-colored pixel has at least one 4-connected neighbour of a
+  // different color (i.e. the per-pixel boundary of the region).
+  // The result is cached for the current color; only one mask is kept at a time.
+  computeEdgeMask(packedColor: number): OffscreenCanvas | null {
+    if (this.edgeMaskColor === packedColor && this.edgeMaskCanvas) return this.edgeMaskCanvas
+
     const pixels = this.pixelData
     if (!pixels) return null
 
@@ -173,24 +183,47 @@ export class MapRenderer {
     const tg = (packedColor >>  8) & 0xff
     const tb =  packedColor        & 0xff
 
-    let x1 = tw, y1 = th, x2 = -1, y2 = -1
+    const canvas  = new OffscreenCanvas(tw, th)
+    const ctx     = canvas.getContext('2d')!
+    const imgData = ctx.createImageData(tw, th)
+    const out     = imgData.data
 
+    let provincePixelCount = 0
+    let sumX = 0, sumY = 0
     for (let y = 0; y < th; y++) {
       const row = y * tw
       for (let x = 0; x < tw; x++) {
         const i = (row + x) * 4
+        // Skip pixels that belong to the province — we want the ring outside it.
         if (pixels[i] === tr && pixels[i + 1] === tg && pixels[i + 2] === tb) {
-          if (x < x1) x1 = x
-          if (x > x2) x2 = x
-          if (y < y1) y1 = y
-          if (y > y2) y2 = y
+          provincePixelCount++
+          sumX += x
+          sumY += y
+          continue
+        }
+
+        // Mark if any cardinal neighbour belongs to the province.
+        const isEdge =
+          (y > 0    && pixels[(row - tw + x) * 4] === tr && pixels[(row - tw + x) * 4 + 1] === tg && pixels[(row - tw + x) * 4 + 2] === tb) ||
+          (y < th-1 && pixels[(row + tw + x) * 4] === tr && pixels[(row + tw + x) * 4 + 1] === tg && pixels[(row + tw + x) * 4 + 2] === tb) ||
+          (x > 0    && pixels[(row + x - 1)  * 4] === tr && pixels[(row + x - 1)  * 4 + 1] === tg && pixels[(row + x - 1)  * 4 + 2] === tb) ||
+          (x < tw-1 && pixels[(row + x + 1)  * 4] === tr && pixels[(row + x + 1)  * 4 + 1] === tg && pixels[(row + x + 1)  * 4 + 2] === tb)
+
+        if (isEdge) {
+          out[i] = out[i + 1] = out[i + 2] = 255
+          out[i + 3] = 255
         }
       }
     }
 
-    const result = x2 === -1 ? null : { x1, y1, x2: x2 + 1, y2: y2 + 1 }
-    this.bboxCache.set(packedColor, result)
-    return result
+    ctx.putImageData(imgData, 0, 0)
+    this.edgeMaskCanvas         = canvas
+    this.edgeMaskColor          = packedColor
+    this.edgeMaskProvincePixels = provincePixelCount
+    this.edgeMaskCentroid       = provincePixelCount > 0
+      ? { x: sumX / provincePixelCount, y: sumY / provincePixelCount }
+      : null
+    return canvas
   }
 
   dispose(): void {
@@ -202,24 +235,18 @@ export class MapRenderer {
 
   // Builds the column-major mat3 that maps the unit quad [0,1]×[0,1] to
   // clip space given a canvas-pixel pan (tx, ty) and zoom scale.
-  //
-  // For a point (u, v) on the quad:
-  //   canvas_x = tx + u * imageW * scale
-  //   canvas_y = ty + v * imageH * scale
-  //   clip_x   = 2 * canvas_x / canvasW - 1
-  //   clip_y   = 1 - 2 * canvas_y / canvasH   (y is inverted)
   private buildMatrix(tx: number, ty: number, scale: number): Float32Array {
     const cw = this.gl.drawingBufferWidth
     const ch = this.gl.drawingBufferHeight
     const { width: iw, height: ih } = this._imageSize
     const m = this.matrixData
-    m[0] = iw * scale * 2 / cw           // col0: x scale
+    m[0] = iw * scale * 2 / cw
     m[1] = 0; m[2] = 0
     m[3] = 0
-    m[4] = -(ih * scale * 2 / ch)        // col1: y scale (negated for y-flip)
+    m[4] = -(ih * scale * 2 / ch)
     m[5] = 0
-    m[6] = tx * 2 / cw - 1              // col2: x translation in NDC
-    m[7] = 1 - ty * 2 / ch              // col2: y translation in NDC
+    m[6] = tx * 2 / cw - 1
+    m[7] = 1 - ty * 2 / ch
     m[8] = 1
     return m
   }
