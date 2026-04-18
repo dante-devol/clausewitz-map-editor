@@ -1,8 +1,29 @@
+import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components'
+import { Shell } from './components/layout/Shell'
+import { MapView } from './views/MapView'
+import { SettingsView } from './views/SettingsView'
+import { useAppState } from './hooks/useAppState'
+
+const VIEWS = {
+  map: <MapView />,
+  provinces: <MapView />,
+  settings: <SettingsView />
+}
+
 function App(): JSX.Element {
+  const { theme, activeView, setActiveView, toggleTheme } = useAppState()
+
   return (
-    <div className="app">
-      <h1>HOI4 Map Editor</h1>
-    </div>
+    <FluentProvider theme={theme === 'dark' ? webDarkTheme : webLightTheme}>
+      <Shell
+        activeView={activeView}
+        theme={theme}
+        onViewChange={setActiveView}
+        onToggleTheme={toggleTheme}
+      >
+        {VIEWS[activeView]}
+      </Shell>
+    </FluentProvider>
   )
 }
 
