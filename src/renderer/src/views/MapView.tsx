@@ -4,14 +4,14 @@ import { MapModePanel } from '../components/MapModePanel'
 import { MapCanvas } from '../components/MapCanvas'
 import { ProvinceList } from '../components/ProvinceList'
 import { useMapDataStore } from '../store/mapDataStore'
+import { useDisplayModeConfigStore } from '../store/displayModeConfigStore'
 import { packColor, type Province } from '../../../shared/mapDataTypes'
 import {
+  type ConfigurableDisplayMode,
   type DisplayMode,
-  TYPE_COLORS,
-  COASTAL_COLORS,
-  continentColor,
-  hexToPackedColor,
-  terrainGeneratedColor,
+  getModeValueKey,
+  getResolvedModeValueColor,
+  listModeValues,
 } from '../config/displayModes'
 
 const useStyles = makeStyles({
@@ -70,8 +70,10 @@ export function MapView() {
   const continents        = useMapDataStore((s) => s.continents)
   const selectedProvinceId = useMapDataStore((s) => s.selectedProvinceId)
   const setSelectedProvince = useMapDataStore((s) => s.setSelectedProvince)
+  const displayModeOverrides = useDisplayModeConfigStore((s) => s.overrides)
 
   const src = provincesImageB64 ? `data:image/bmp;base64,${provincesImageB64}` : null
+  const displayModeContext = useMemo(() => ({ terrains, continents }), [terrains, continents])
 
   const highlightColor = selectedProvinceId !== null
     ? (provinces.get(selectedProvinceId)?.color ?? null)
@@ -81,33 +83,25 @@ export function MapView() {
     if (displayMode === 'provinces' || provinces.size === 0) return null
 
     const map = new Map<number, number>()
-
-    if (displayMode === 'type') {
-      for (const p of provinces.values()) {
-        map.set(p.color, hexToPackedColor(TYPE_COLORS[p.type] ?? '#808080'))
-      }
-    } else if (displayMode === 'terrain') {
-      for (const p of provinces.values()) {
-        map.set(p.color, terrains.get(p.terrain)?.color ?? 0x606060)
-      }
-    } else if (displayMode === 'terrainGenerated') {
-      for (const p of provinces.values()) {
-        map.set(p.color, terrainGeneratedColor(p.terrain))
-      }
-    } else if (displayMode === 'coastal') {
-      for (const p of provinces.values()) {
-        const hex = p.isCoastal ? COASTAL_COLORS.coastal : COASTAL_COLORS.inland
-        map.set(p.color, hexToPackedColor(hex))
-      }
-    } else if (displayMode === 'continent') {
-      for (const p of provinces.values()) {
-        const continent = continents.get(p.continent)
-        map.set(p.color, continent ? continentColor(continent.position) : 0x303030)
-      }
+    for (const p of provinces.values()) {
+      const valueKey = getModeValueKey(displayMode, p)
+      if (!valueKey) continue
+      map.set(p.color, getResolvedModeValueColor(displayMode, valueKey, displayModeOverrides, displayModeContext))
     }
 
     return map
-  }, [displayMode, provinces, terrains, continents])
+  }, [displayMode, provinces, displayModeOverrides, displayModeContext])
+
+  const modeValuesByMode = useMemo(() => {
+    const configurableModes: ConfigurableDisplayMode[] = ['type', 'terrain', 'coastal', 'continent']
+    return configurableModes.reduce<Partial<Record<ConfigurableDisplayMode, ReturnType<typeof listModeValues>>>>(
+      (acc, currentMode) => {
+        acc[currentMode] = listModeValues(currentMode, provinces, displayModeOverrides, displayModeContext)
+        return acc
+      },
+      {}
+    )
+  }, [provinces, displayModeOverrides, displayModeContext])
 
   const onColorPicked = useCallback((r: number, g: number, b: number) => {
     const id = provincesByColor.get(packColor(r, g, b))
@@ -149,7 +143,7 @@ export function MapView() {
       </div>
       <div className={styles.sidebar}>
         <div className={styles.sidebarTop}>
-          <MapModePanel mode={displayMode} onModeChange={setDisplayMode} />
+          <MapModePanel mode={displayMode} onModeChange={setDisplayMode} valuesByMode={modeValuesByMode} />
         </div>
         <Divider style={{ flexGrow: 0 }} />
         <ProvinceList

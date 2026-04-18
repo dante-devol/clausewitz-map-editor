@@ -9,6 +9,7 @@ export interface AppConfig {
     continent: string
     provinceTerrain: string
   }
+  displayModeOverrides: Partial<Record<string, Partial<Record<string, string>>>>
 }
 
 export interface FileLoadResult {

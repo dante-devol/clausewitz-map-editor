@@ -6,6 +6,7 @@ import { SettingsView } from './views/SettingsView'
 import { ProjectSelectionView } from './views/ProjectSelectionView'
 import { DebugPanel } from './components/DebugPanel'
 import { useAppState } from './hooks/useAppState'
+import { useDisplayModeConfig } from './hooks/useDisplayModeConfig'
 import { useProjectSelection } from './hooks/useProjectSelection'
 import { useMapLoader } from './hooks/useMapLoader'
 
@@ -23,6 +24,7 @@ function App(): JSX.Element {
     confirmPendingProject, cancelPendingProject, removeProject
   } = useProjectSelection()
 
+  useDisplayModeConfig()
   useMapLoader()
 
   const [debugOpen, setDebugOpen] = useState(false)

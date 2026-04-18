@@ -14,7 +14,8 @@ export const DEFAULT_CONFIG: Config = {
     provinces: '/map/provinces.bmp',
     continent: '/map/continent.txt',
     provinceTerrain: '/common/terrain'
-  }
+  },
+  displayModeOverrides: {}
 }
 
 const CONFIG_PATH = () => join(app.getPath('userData'), 'config.json')
