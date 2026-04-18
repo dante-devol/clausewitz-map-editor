@@ -1,11 +1,17 @@
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, useState } from 'react'
 import { makeStyles, tokens, Divider } from '@fluentui/react-components'
-import { MapLayerPanel } from '../components/MapLayerPanel'
+import { MapModePanel } from '../components/MapModePanel'
 import { MapCanvas } from '../components/MapCanvas'
 import { ProvinceList } from '../components/ProvinceList'
-import { useMapLayers } from '../hooks/useMapLayers'
 import { useMapDataStore } from '../store/mapDataStore'
 import { packColor } from '../../../shared/mapDataTypes'
+import {
+  type DisplayMode,
+  TYPE_COLORS,
+  COASTAL_COLORS,
+  continentColor,
+  hexToPackedColor,
+} from '../config/displayModes'
 
 const useStyles = makeStyles({
   root: {
@@ -31,11 +37,13 @@ const useStyles = makeStyles({
 
 export function MapView() {
   const styles = useStyles()
-  const layers = useMapLayers()
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('provinces')
 
   const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
-  const provinces = useMapDataStore((s) => s.provinces)
-  const provincesByColor = useMapDataStore((s) => s.provincesByColor)
+  const provinces         = useMapDataStore((s) => s.provinces)
+  const provincesByColor  = useMapDataStore((s) => s.provincesByColor)
+  const terrains          = useMapDataStore((s) => s.terrains)
+  const continents        = useMapDataStore((s) => s.continents)
   const selectedProvinceId = useMapDataStore((s) => s.selectedProvinceId)
   const setSelectedProvince = useMapDataStore((s) => s.setSelectedProvince)
 
@@ -50,6 +58,34 @@ export function MapView() {
     ? (provinces.get(selectedProvinceId)?.color ?? null)
     : null
 
+  const colorMap = useMemo((): Map<number, number> | null => {
+    if (displayMode === 'provinces' || provinces.size === 0) return null
+
+    const map = new Map<number, number>()
+
+    if (displayMode === 'type') {
+      for (const p of provinces.values()) {
+        map.set(p.color, hexToPackedColor(TYPE_COLORS[p.type] ?? '#808080'))
+      }
+    } else if (displayMode === 'terrain') {
+      for (const p of provinces.values()) {
+        map.set(p.color, terrains.get(p.terrain)?.color ?? 0x606060)
+      }
+    } else if (displayMode === 'coastal') {
+      for (const p of provinces.values()) {
+        const hex = p.isCoastal ? COASTAL_COLORS.coastal : COASTAL_COLORS.inland
+        map.set(p.color, hexToPackedColor(hex))
+      }
+    } else if (displayMode === 'continent') {
+      for (const p of provinces.values()) {
+        const continent = continents.get(p.continent)
+        map.set(p.color, continent ? continentColor(continent.position) : 0x303030)
+      }
+    }
+
+    return map
+  }, [displayMode, provinces, terrains, continents])
+
   const onColorPicked = useCallback((r: number, g: number, b: number) => {
     const id = provincesByColor.get(packColor(r, g, b))
     if (id !== undefined) setSelectedProvince(id)
@@ -58,19 +94,16 @@ export function MapView() {
   return (
     <div className={styles.root}>
       <div className={styles.viewport}>
-        <MapCanvas src={src} highlightColor={highlightColor} onColorPicked={onColorPicked} />
+        <MapCanvas
+          src={src}
+          highlightColor={highlightColor}
+          colorMap={colorMap}
+          onColorPicked={onColorPicked}
+        />
       </div>
       <div className={styles.sidebar}>
         <div className={styles.sidebarTop}>
-          <MapLayerPanel
-            layers={layers.layers}
-            visibleCount={layers.visibleCount}
-            allVisible={layers.allVisible}
-            noneVisible={layers.noneVisible}
-            onToggleLayer={layers.toggleLayer}
-            onShowAll={layers.showAll}
-            onHideAll={layers.hideAll}
-          />
+          <MapModePanel mode={displayMode} onModeChange={setDisplayMode} />
         </div>
         <Divider style={{ flexGrow: 0 }} />
         <ProvinceList

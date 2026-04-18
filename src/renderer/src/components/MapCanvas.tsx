@@ -82,10 +82,11 @@ const useStyles = makeStyles({
 interface Props {
   src: string | null
   highlightColor: number | null
+  colorMap?: Map<number, number> | null
   onColorPicked?: (r: number, g: number, b: number) => void
 }
 
-export function MapCanvas({ src, highlightColor, onColorPicked }: Props): JSX.Element {
+export function MapCanvas({ src, highlightColor, colorMap, onColorPicked }: Props): JSX.Element {
   const styles = useStyles()
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
@@ -93,6 +94,7 @@ export function MapCanvas({ src, highlightColor, onColorPicked }: Props): JSX.El
   const rendererRef  = useRef<MapRenderer | null>(null)
   const transformRef      = useRef<Transform>({ x: 0, y: 0, scale: 1 })
   const highlightColorRef = useRef<number | null>(null)
+  const colorMapRef       = useRef<Map<number, number> | null | undefined>(null)
   const alphaRef          = useRef(1)
   const animFrameRef = useRef<number | null>(null)
   const dragRef      = useRef<{ startX: number; startY: number; startTX: number; startTY: number } | null>(null)
@@ -185,9 +187,27 @@ export function MapCanvas({ src, highlightColor, onColorPicked }: Props): JSX.El
   useEffect(() => {
     if (!src) { rendererRef.current?.clearImage(); return }
     let cancelled = false
-    rendererRef.current?.loadImage(src).then(() => { if (!cancelled) fit() })
+    rendererRef.current?.loadImage(src).then(() => {
+      if (cancelled) return
+      const cm = colorMapRef.current
+      if (cm && cm.size > 0) rendererRef.current?.recolorTexture(cm)
+      fit()
+    })
     return () => { cancelled = true }
   }, [src, fit])
+
+  useEffect(() => {
+    colorMapRef.current = colorMap ?? null
+    const renderer = rendererRef.current
+    if (!renderer) return
+    if (colorMap && colorMap.size > 0) {
+      renderer.recolorTexture(colorMap)
+    } else {
+      renderer.restoreOriginalTexture()
+    }
+    const t = transformRef.current
+    renderer.render(t.x, t.y, t.scale)
+  }, [colorMap])
 
   // Compute edge mask and manage the pulse animation loop.
   useEffect(() => {
@@ -269,8 +289,11 @@ export function MapCanvas({ src, highlightColor, onColorPicked }: Props): JSX.El
     if (eyedropperActive) {
       const canvas = canvasRef.current
       if (!canvas) return
-      const rect  = canvas.getBoundingClientRect()
-      const color = rendererRef.current?.readPixel(e.clientX - rect.left, e.clientY - rect.top)
+      const rect = canvas.getBoundingClientRect()
+      const cx = e.clientX - rect.left
+      const cy = e.clientY - rect.top
+      const { x: tx, y: ty, scale } = transformRef.current
+      const color = rendererRef.current?.readOriginalPixel(cx, cy, tx, ty, scale)
       setSampledColor(color ?? null)
       if (color) onColorPicked?.(color.r, color.g, color.b)
       return

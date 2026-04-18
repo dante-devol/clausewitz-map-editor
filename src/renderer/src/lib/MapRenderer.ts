@@ -167,6 +167,24 @@ export class MapRenderer {
     return { r: buf[0], g: buf[1], b: buf[2] }
   }
 
+  // Reads the original province color at a canvas coordinate, independent of any
+  // active colorMap. Maps canvas → image space via the current pan/zoom transform.
+  readOriginalPixel(
+    canvasX: number, canvasY: number,
+    tx: number, ty: number, scale: number
+  ): { r: number; g: number; b: number } | null {
+    const pixels = this.pixelData
+    if (!pixels) return null
+    const imgX = Math.floor((canvasX - tx) / scale)
+    const imgY = Math.floor((canvasY - ty) / scale)
+    const tw = this.pixelDataWidth
+    const th = this._imageSize.height
+    if (imgX < 0 || imgX >= tw || imgY < 0 || imgY >= th) return null
+    const i = (imgY * tw + imgX) * 4
+    if (pixels[i + 3] === 0) return null
+    return { r: pixels[i], g: pixels[i + 1], b: pixels[i + 2] }
+  }
+
   // Builds an OffscreenCanvas the same size as the source image with white pixels
   // wherever a province-colored pixel has at least one 4-connected neighbour of a
   // different color (i.e. the per-pixel boundary of the region).
@@ -224,6 +242,40 @@ export class MapRenderer {
       ? { x: sumX / provincePixelCount, y: sumY / provincePixelCount }
       : null
     return canvas
+  }
+
+  // Remaps every pixel using colorMap (provincePackedColor → displayPackedColor).
+  // Pixels with no mapping get a neutral dark fill. Does not touch pixelData —
+  // restoreOriginalTexture() can undo this at any time.
+  recolorTexture(colorMap: Map<number, number>): void {
+    const pixels = this.pixelData
+    if (!pixels || !this.texture) return
+    const { gl } = this
+    const tw = this.pixelDataWidth
+    const th = this._imageSize.height
+    const out = new Uint8Array(tw * th * 4)
+    for (let i = 0; i < pixels.length; i += 4) {
+      const packed = (pixels[i] << 16) | (pixels[i + 1] << 8) | pixels[i + 2]
+      const mapped = colorMap.get(packed) ?? 0x404040
+      out[i]     = (mapped >> 16) & 0xff
+      out[i + 1] = (mapped >>  8) & 0xff
+      out[i + 2] =  mapped        & 0xff
+      out[i + 3] = pixels[i + 3]
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.texture)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, tw, th, 0, gl.RGBA, gl.UNSIGNED_BYTE, out)
+  }
+
+  restoreOriginalTexture(): void {
+    const pixels = this.pixelData
+    if (!pixels || !this.texture) return
+    const { gl } = this
+    gl.bindTexture(gl.TEXTURE_2D, this.texture)
+    gl.texImage2D(
+      gl.TEXTURE_2D, 0, gl.RGBA,
+      this.pixelDataWidth, this._imageSize.height, 0,
+      gl.RGBA, gl.UNSIGNED_BYTE, pixels
+    )
   }
 
   dispose(): void {
