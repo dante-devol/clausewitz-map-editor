@@ -58,13 +58,12 @@ export function selectModeValuesByMode(
 }
 
 export function selectHoverTooltip(
-  state: CoreState,
+  displayMode: CoreState['map']['displayMode'],
   province: Province | undefined,
   t: (key: string) => string
 ): { label: string; value: string } | null {
   if (!province) return null
 
-  const displayMode = selectDisplayMode(state)
   if (displayMode === 'provinces') {
     return { label: t('map.hover.provinceId'), value: province.id.toString() }
   }

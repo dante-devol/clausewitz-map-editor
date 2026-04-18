@@ -83,10 +83,14 @@ export function MapView() {
     setHoveredProvince({ id, x: color.x, y: color.y })
   }, [provincesByColor])
 
-  const resolvedHoverTooltip = useCoreSelector((state) => {
+  const resolvedHoverTooltip = useMemo(() => {
     if (!hoveredProvince) return null
-    return selectHoverTooltip(state, provinces.get(hoveredProvince.id), t as (key: string) => string)
-  })
+    return selectHoverTooltip(
+      displayMode,
+      provinces.get(hoveredProvince.id),
+      t as (key: string) => string
+    )
+  }, [displayMode, hoveredProvince, provinces, t])
 
   return (
     <div className={styles.root}>
