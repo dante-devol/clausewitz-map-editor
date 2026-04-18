@@ -1,4 +1,5 @@
 import type { DisplayMode } from '../../config/displayModes'
+import { INITIAL_MAP_OVERLAYS, type MapOverlayState } from './MapOverlay'
 import type { SessionLifecycle } from './SessionLifecycle'
 
 export type Theme = 'dark' | 'light'
@@ -16,6 +17,7 @@ export interface CoreState {
   session: SessionLifecycle
   map: {
     displayMode: DisplayMode
+    overlays: MapOverlayState[]
     selection: MapSelection
   }
 }
@@ -33,6 +35,7 @@ export const INITIAL_CORE_STATE: CoreState = {
   },
   map: {
     displayMode: 'provinces',
+    overlays: INITIAL_MAP_OVERLAYS,
     selection: { kind: 'none' }
   }
 }

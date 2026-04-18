@@ -1,4 +1,5 @@
 import type { DisplayMode } from '../../config/displayModes'
+import type { OverlayFilterRule, OverlayId } from './MapOverlay'
 import type { Theme, View } from './CoreState'
 
 export type CoreCommand =
@@ -12,5 +13,9 @@ export type CoreCommand =
   | { type: 'session/failed'; message: string }
   | { type: 'session/cleared' }
   | { type: 'map/setDisplayMode'; mode: DisplayMode }
+  | { type: 'map/setOverlayVisibility'; overlayId: OverlayId; visible: boolean }
+  | { type: 'map/setOverlayOpacity'; overlayId: OverlayId; opacity: number }
+  | { type: 'map/setOverlayFilterRules'; overlayId: OverlayId; rules: OverlayFilterRule[] }
+  | { type: 'map/moveOverlay'; overlayId: OverlayId; targetOverlayId: OverlayId }
   | { type: 'map/selectProvince'; provinceId: number }
   | { type: 'map/clearSelection' }

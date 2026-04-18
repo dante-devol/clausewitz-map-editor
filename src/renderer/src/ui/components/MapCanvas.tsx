@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { makeStyles, mergeClasses, tokens, Button, Text, Tooltip, Skeleton, SkeletonItem } from '@fluentui/react-components'
+import { makeStyles, mergeClasses, tokens, Button, Spinner, Text, Tooltip, Skeleton, SkeletonItem } from '@fluentui/react-components'
 import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, LocationTargetSquareRegular } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
 import { MapRenderer } from '../../infra/lib/MapRenderer'
+import type { CanvasOverlay } from '../contracts/CanvasOverlay'
+import type { OverlayFilterRule } from '../../core/contracts/MapOverlay'
 
 const ZOOM_STEP = 1.25
 const ZOOM_MIN = 0.02
@@ -16,6 +18,15 @@ interface Transform { x: number; y: number; scale: number }
 interface SampledColor { r: number; g: number; b: number }
 interface HoveredColor extends SampledColor { x: number; y: number }
 interface HoverTooltipPosition { x: number; y: number }
+interface OverlayBitmapEntry {
+  src: string
+  bitmap: ImageBitmap
+  pixelData: Uint8ClampedArray
+  width: number
+  height: number
+  filteredCanvas: OffscreenCanvas | null
+  filteredSignature: string | null
+}
 
 function toHex(n: number) { return n.toString(16).padStart(2, '0').toUpperCase() }
 function colorToHex({ r, g, b }: SampledColor) { return `#${toHex(r)}${toHex(g)}${toHex(b)}` }
@@ -40,6 +51,25 @@ const useStyles = makeStyles({
     position: 'absolute',
     inset: 0,
   },
+  loadingOverlay: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    pointerEvents: 'none',
+    zIndex: 2
+  },
+  loadingSpinnerShell: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '44px',
+    height: '44px',
+    borderRadius: tokens.borderRadiusCircular,
+    backgroundColor: 'rgba(0, 0, 0, 0.32)',
+    boxShadow: tokens.shadow8
+  },
   canvasHidden: { visibility: 'hidden' },
   // mix-blend-mode:difference means drawing white = |255 - background| per channel.
   // pointer-events:none keeps clicks and gl.readPixels on the WebGL canvas unaffected.
@@ -49,6 +79,12 @@ const useStyles = makeStyles({
     inset: 0,
     pointerEvents: 'none',
     mixBlendMode: 'difference'
+  },
+  imageOverlay: {
+    display: 'block',
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none'
   },
   controls: {
     position: 'absolute',
@@ -109,6 +145,7 @@ const useStyles = makeStyles({
 
 interface Props {
   src: string | null
+  overlays?: CanvasOverlay[]
   highlightColor: number | null
   colorMap?: Map<number, number> | null
   onColorPicked?: (r: number, g: number, b: number) => void
@@ -119,6 +156,7 @@ interface Props {
 
 export function MapCanvas({
   src,
+  overlays = [],
   highlightColor,
   colorMap,
   onColorPicked,
@@ -130,8 +168,11 @@ export function MapCanvas({
   const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
+  const imageOverlayRef = useRef<HTMLCanvasElement>(null)
   const overlayRef   = useRef<HTMLCanvasElement>(null)
   const rendererRef  = useRef<MapRenderer | null>(null)
+  const canvasOverlaysRef = useRef<CanvasOverlay[]>([])
+  const overlayBitmapsRef = useRef(new Map<string, OverlayBitmapEntry>())
   const transformRef      = useRef<Transform>({ x: 0, y: 0, scale: 1 })
   const highlightColorRef = useRef<number | null>(null)
   const colorMapRef       = useRef<Map<number, number> | null | undefined>(null)
@@ -143,6 +184,40 @@ export function MapCanvas({
   const [eyedropperActive, setEyedropperActive] = useState(false)
   const [sampledColor, setSampledColor] = useState<SampledColor | null>(null)
   const [imageLoaded, setImageLoaded] = useState(false)
+  const [baseImageLoading, setBaseImageLoading] = useState(false)
+  const [overlaysLoadingCount, setOverlaysLoadingCount] = useState(0)
+
+  const isCanvasLoading = baseImageLoading || overlaysLoadingCount > 0
+
+  const drawCanvasOverlays = useCallback(() => {
+    const canvas = imageOverlayRef.current
+    if (!canvas) return
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    const { x: tx, y: ty, scale } = transformRef.current
+    ctx.imageSmoothingEnabled = scale < 1
+
+    for (const overlay of canvasOverlaysRef.current) {
+      if (!overlay.visible) continue
+      const entry = overlayBitmapsRef.current.get(overlay.id)
+      if (!entry) continue
+      ctx.globalAlpha = overlay.opacity
+      const source = getOverlayRenderSource(entry, overlay)
+      ctx.drawImage(
+        source,
+        tx,
+        ty,
+        entry.width * scale,
+        entry.height * scale
+      )
+    }
+
+    ctx.globalAlpha = 1
+  }, [])
 
   // Draws the per-pixel province edge at whatever alphaRef.current is.
   // Called from the RAF animation loop and imperatively on transform/resize.
@@ -194,8 +269,9 @@ export function MapCanvas({
     transformRef.current = next
     setDisplayScale(next.scale)
     rendererRef.current?.render(next.x, next.y, next.scale)
+    drawCanvasOverlays()
     drawOverlay()
-  }, [drawOverlay])
+  }, [drawCanvasOverlays, drawOverlay])
 
   const fit = useCallback(() => {
     const renderer = rendererRef.current
@@ -213,21 +289,30 @@ export function MapCanvas({
   // Create renderer on mount; cancel any pending RAF and dispose on unmount.
   useEffect(() => {
     const canvas    = canvasRef.current!
+    const imageOverlay = imageOverlayRef.current!
     const overlay   = overlayRef.current!
     const container = containerRef.current!
-    canvas.width = overlay.width = container.clientWidth
-    canvas.height = overlay.height = container.clientHeight
+    canvas.width = imageOverlay.width = overlay.width = container.clientWidth
+    canvas.height = imageOverlay.height = overlay.height = container.clientHeight
     rendererRef.current = new MapRenderer(canvas)
     return () => {
       if (animFrameRef.current !== null) cancelAnimationFrame(animFrameRef.current)
+      for (const entry of overlayBitmapsRef.current.values()) entry.bitmap.close()
+      overlayBitmapsRef.current.clear()
       rendererRef.current?.dispose()
       rendererRef.current = null
     }
   }, [])
 
   useEffect(() => {
-    if (!src) { rendererRef.current?.clearImage(); setImageLoaded(false); return }
+    if (!src) {
+      rendererRef.current?.clearImage()
+      setImageLoaded(false)
+      setBaseImageLoading(false)
+      return
+    }
     setImageLoaded(false)
+    setBaseImageLoading(true)
     let cancelled = false
     rendererRef.current?.loadImage(src).then(() => {
       if (cancelled) return
@@ -235,8 +320,16 @@ export function MapCanvas({
       if (cm && cm.size > 0) rendererRef.current?.recolorTexture(cm)
       fit()
       setImageLoaded(true)
+      setBaseImageLoading(false)
     })
-    return () => { cancelled = true }
+      .catch(() => {
+        if (cancelled) return
+        setBaseImageLoading(false)
+      })
+    return () => {
+      cancelled = true
+      setBaseImageLoading(false)
+    }
   }, [src, fit])
 
   useEffect(() => {
@@ -250,7 +343,81 @@ export function MapCanvas({
     }
     const t = transformRef.current
     renderer.render(t.x, t.y, t.scale)
-  }, [colorMap])
+    drawCanvasOverlays()
+  }, [colorMap, drawCanvasOverlays])
+
+  useEffect(() => {
+    canvasOverlaysRef.current = overlays
+
+    let cancelled = false
+
+    for (const [id, entry] of overlayBitmapsRef.current.entries()) {
+      const overlay = overlays.find((candidate) => candidate.id === id)
+      if (!overlay || overlay.src !== entry.src) {
+        entry.bitmap.close()
+        overlayBitmapsRef.current.delete(id)
+      }
+    }
+
+    async function loadOverlays() {
+      const pendingOverlays = overlays.filter((overlay) => {
+        const existing = overlayBitmapsRef.current.get(overlay.id)
+        return !existing || existing.src !== overlay.src
+      })
+
+      setOverlaysLoadingCount(pendingOverlays.length)
+
+      const pending = await Promise.all(
+        pendingOverlays.map(async (overlay) => {
+          const existing = overlayBitmapsRef.current.get(overlay.id)
+          if (existing && existing.src === overlay.src) return null
+
+          const blob = await fetch(overlay.src).then((response) => response.blob())
+          const bitmap = await createImageBitmap(blob)
+          const image = await readBitmapPixels(bitmap)
+          return { overlay, image }
+        })
+      )
+
+      if (cancelled) {
+        for (const result of pending) result?.image.bitmap.close()
+        setOverlaysLoadingCount(0)
+        return
+      }
+
+      for (const result of pending) {
+        if (!result) continue
+        const previous = overlayBitmapsRef.current.get(result.overlay.id)
+        if (previous) previous.bitmap.close()
+        overlayBitmapsRef.current.set(result.overlay.id, {
+          src: result.overlay.src,
+          bitmap: result.image.bitmap,
+          pixelData: result.image.pixelData,
+          width: result.image.bitmap.width,
+          height: result.image.bitmap.height,
+          filteredCanvas: null,
+          filteredSignature: null
+        })
+      }
+
+      setOverlaysLoadingCount(0)
+      drawCanvasOverlays()
+    }
+
+    void loadOverlays().catch(() => {
+      setOverlaysLoadingCount(0)
+    })
+
+    if (overlays.length === 0) {
+      setOverlaysLoadingCount(0)
+      drawCanvasOverlays()
+    }
+
+    return () => {
+      cancelled = true
+      setOverlaysLoadingCount(0)
+    }
+  }, [overlays, drawCanvasOverlays])
 
   // Compute edge mask and manage the pulse animation loop.
   useEffect(() => {
@@ -287,18 +454,20 @@ export function MapCanvas({
   useEffect(() => {
     const container = containerRef.current
     const canvas    = canvasRef.current
+    const imageOverlay = imageOverlayRef.current
     const overlay   = overlayRef.current
-    if (!container || !canvas || !overlay) return
+    if (!container || !canvas || !imageOverlay || !overlay) return
     const observer = new ResizeObserver(() => {
-      canvas.width = overlay.width = container.clientWidth
-      canvas.height = overlay.height = container.clientHeight
+      canvas.width = imageOverlay.width = overlay.width = container.clientWidth
+      canvas.height = imageOverlay.height = overlay.height = container.clientHeight
       const t = transformRef.current
       rendererRef.current?.render(t.x, t.y, t.scale)
+      drawCanvasOverlays()
       drawOverlay()
     })
     observer.observe(container)
     return () => observer.disconnect()
-  }, [drawOverlay])
+  }, [drawCanvasOverlays, drawOverlay])
 
   useEffect(() => {
     const el = containerRef.current
@@ -413,12 +582,24 @@ export function MapCanvas({
       }}
     >
       <canvas ref={canvasRef}  className={mergeClasses(styles.canvas,  !imageLoaded && styles.canvasHidden)} />
+      <canvas ref={imageOverlayRef} className={mergeClasses(styles.imageOverlay, !imageLoaded && styles.canvasHidden)} />
       <canvas ref={overlayRef} className={mergeClasses(styles.overlay, !imageLoaded && styles.canvasHidden)} />
       {!imageLoaded && (
         <div className={styles.skeleton}>
           <Skeleton style={{ width: '100%', height: '100%' }}>
             <SkeletonItem style={{ width: '100%', height: '100%', borderRadius: 0 }} />
           </Skeleton>
+        </div>
+      )}
+      {isCanvasLoading && (
+        <div className={styles.loadingOverlay}>
+          <div className={styles.loadingSpinnerShell}>
+            <Spinner
+              size="medium"
+              labelPosition="below"
+              aria-label={t('mapCanvas.loading')}
+            />
+          </div>
         </div>
       )}
       {hoverTooltipPosition && hoverTooltip && !eyedropperActive && !dragging && (
@@ -473,4 +654,103 @@ export function MapCanvas({
       </div>
     </div>
   )
+}
+
+function getOverlayRenderSource(entry: OverlayBitmapEntry, overlay: CanvasOverlay): CanvasImageSource {
+  const signature = JSON.stringify({
+    configuration: overlay.configuration,
+    filterRules: overlay.filterRules
+  })
+
+  if (overlay.filterRules.length === 0) {
+    entry.filteredCanvas = null
+    entry.filteredSignature = null
+    return entry.bitmap
+  }
+
+  if (entry.filteredSignature === signature && entry.filteredCanvas) return entry.filteredCanvas
+
+  const canvas = new OffscreenCanvas(entry.width, entry.height)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return entry.bitmap
+
+  const imageData = new ImageData(new Uint8ClampedArray(entry.pixelData), entry.width, entry.height)
+  applyOverlayFilterRules(imageData.data, overlay.filterRules, overlay.configuration.groups)
+  ctx.putImageData(imageData, 0, 0)
+  entry.filteredCanvas = canvas
+  entry.filteredSignature = signature
+  return canvas
+}
+
+function applyOverlayFilterRules(
+  pixels: Uint8ClampedArray,
+  rules: OverlayFilterRule[],
+  groups: CanvasOverlay['configuration']['groups']
+): void {
+  if (rules.length === 0) return
+
+  const groupColors = new Map(groups.map((group) => [
+    group.id,
+    new Set(group.colors.map((color) => hexToPackedColor(color)))
+  ]))
+
+  for (let i = 0; i < pixels.length; i += 4) {
+    if (pixels[i + 3] === 0) continue
+
+    const packed = (pixels[i] << 16) | (pixels[i + 1] << 8) | pixels[i + 2]
+    let alphaMultiplier = 1
+    let visible = true
+    let overrideColor: number | null = null
+
+    for (const rule of rules) {
+      if (!matchesOverlayRule(rule, packed, groupColors)) continue
+      if (!rule.visible) {
+        visible = false
+        break
+      }
+      alphaMultiplier *= rule.opacity / 100
+      if (rule.color) overrideColor = hexToPackedColor(rule.color)
+    }
+
+    if (!visible) {
+      pixels[i + 3] = 0
+      continue
+    }
+
+    if (overrideColor !== null) {
+      pixels[i] = (overrideColor >> 16) & 0xff
+      pixels[i + 1] = (overrideColor >> 8) & 0xff
+      pixels[i + 2] = overrideColor & 0xff
+    }
+
+    pixels[i + 3] = Math.round(pixels[i + 3] * alphaMultiplier)
+  }
+}
+
+function matchesOverlayRule(
+  rule: OverlayFilterRule,
+  packedColor: number,
+  groupColors: Map<string, Set<number>>
+): boolean {
+  if (rule.target.kind === 'group') {
+    return groupColors.get(rule.target.groupId)?.has(packedColor) ?? false
+  }
+
+  return rule.target.colors.some((color) => hexToPackedColor(color) === packedColor)
+}
+
+async function readBitmapPixels(bitmap: ImageBitmap): Promise<{ bitmap: ImageBitmap; pixelData: Uint8ClampedArray }> {
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return { bitmap, pixelData: new Uint8ClampedArray(bitmap.width * bitmap.height * 4) }
+  ctx.drawImage(bitmap, 0, 0)
+  return {
+    bitmap,
+    pixelData: ctx.getImageData(0, 0, bitmap.width, bitmap.height).data
+  }
+}
+
+function hexToPackedColor(hex: string): number {
+  const normalized = hex.trim().replace(/^#/, '')
+  return parseInt(normalized, 16)
 }

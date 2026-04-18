@@ -10,6 +10,7 @@ export interface AppConfig {
     provinces: string
     continent: string
     provinceTerrain: string
+    rivers: string
   }
   displayModeOverrides: Partial<Record<string, Partial<Record<string, string>>>>
 }

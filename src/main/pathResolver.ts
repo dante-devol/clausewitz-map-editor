@@ -41,6 +41,7 @@ export function resolvePaths(gamePath: string, modPath: string): ResolvedPaths {
     definitions:     resolveFile(gamePath, modPath, p.definitions),
     provinces:       resolveFile(gamePath, modPath, p.provinces),
     continent:       resolveFile(gamePath, modPath, p.continent),
-    provinceTerrain: resolveFolder(gamePath, modPath, p.provinceTerrain)
+    provinceTerrain: resolveFolder(gamePath, modPath, p.provinceTerrain),
+    rivers:          resolveFile(gamePath, modPath, p.rivers)
   }
 }

@@ -14,7 +14,8 @@ export const DEFAULT_CONFIG: Config = {
     definitions: '/map/definition.csv',
     provinces: '/map/provinces.bmp',
     continent: '/map/continent.txt',
-    provinceTerrain: '/common/terrain'
+    provinceTerrain: '/common/terrain',
+    rivers: '/map/rivers.bmp'
   },
   displayModeOverrides: {}
 }

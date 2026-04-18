@@ -1,4 +1,4 @@
-export type PathKey = 'defaultMap' | 'definitions' | 'provinces' | 'continent' | 'provinceTerrain'
+export type PathKey = 'defaultMap' | 'definitions' | 'provinces' | 'continent' | 'provinceTerrain' | 'rivers'
 
 // File paths resolve to a single absolute path (mod wins if present, else game).
 // Folder paths resolve to a merged file list — mod files overwrite same-named game
@@ -9,6 +9,7 @@ export interface ResolvedPaths {
   provinces: string
   continent: string
   provinceTerrain: string[]
+  rivers: string
 }
 
 export interface GameVerificationResult {

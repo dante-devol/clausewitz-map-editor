@@ -13,6 +13,7 @@ export function useProjectSelection() {
   const gamePath = useProjectStore((s) => s.gamePath)
   const gameVerification = useProjectStore((s) => s.gameVerification)
   const pendingProject = useProjectStore((s) => s.pendingProject)
+  const setResolvedPaths = useProjectStore((s) => s.setResolvedPaths)
   const setRecentProjects = useProjectStore((s) => s.setRecentProjects)
   const setGamePath = useProjectStore((s) => s.setGamePath)
   const setGameVerification = useProjectStore((s) => s.setGameVerification)
@@ -61,6 +62,7 @@ export function useProjectSelection() {
     api.dispatch(sessionCommands.openProjectStarted(path))
     try {
       const opened = await window.api.projects.open({ gamePath: gamePath!, modPath: path })
+      setResolvedPaths(opened.resolvedPaths)
       api.dispatch(sessionCommands.projectOpened(opened.projectId, path))
       await window.api.projects.addRecent(path)
       setRecentProjects(await window.api.projects.getRecent())

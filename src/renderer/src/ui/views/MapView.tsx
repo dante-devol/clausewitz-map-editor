@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import { makeStyles, tokens, Divider } from '@fluentui/react-components'
 import { useCoreApi } from '../../bridge/CoreProvider'
 import { useMapQueryApi } from '../../bridge/MapQueryProvider'
@@ -7,10 +7,20 @@ import { MapModePanel } from '../components/MapModePanel'
 import { MapCanvas } from '../components/MapCanvas'
 import { ProvinceList } from '../components/ProvinceList'
 import { mapCommands } from '../../core/commands/mapCommands'
-import { selectColorMap, selectDisplayMode, selectHighlightColor, selectHoverTooltip, selectModeValuesByMode, selectSelectedProvinceId } from '../../core/selectors/mapSelectors'
+import {
+  selectColorMap,
+  selectDisplayMode,
+  selectHighlightColor,
+  selectHoverTooltip,
+  selectMapOverlays,
+  selectModeValuesByMode,
+  selectSelectedProvinceId
+} from '../../core/selectors/mapSelectors'
 import { useI18n } from '../i18n/I18nProvider'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
 import { useDisplayModeConfigStore } from '../../infra/store/displayModeConfigStore'
+import { useProjectStore } from '../../infra/store/projectStore'
+import { useOverlayAssets } from '../hooks/useOverlayAssets'
 import { packColor } from '../../../../shared/mapDataTypes'
 
 const useStyles = makeStyles({
@@ -43,28 +53,46 @@ interface HoveredProvince {
 
 export function MapView() {
   const styles = useStyles()
+  const overlayStates = useCoreSelector(selectMapOverlays)
+  const resolvedPaths = useProjectStore((s) => s.resolvedPaths)
+  const { panelOverlays, canvasOverlays } = useOverlayAssets(overlayStates, resolvedPaths)
+
+  return (
+    <div className={styles.root}>
+      <MapViewportPane className={styles.viewport} canvasOverlays={canvasOverlays} />
+      <div className={styles.sidebar}>
+        <MapSidebarTop className={styles.sidebarTop} panelOverlays={panelOverlays} />
+        <Divider style={{ flexGrow: 0 }} />
+        <ProvinceListPane />
+      </div>
+    </div>
+  )
+}
+
+const MapViewportPane = memo(function MapViewportPane({
+  className,
+  canvasOverlays
+}: {
+  className: string
+  canvasOverlays: ReturnType<typeof useOverlayAssets>['canvasOverlays']
+}) {
   const { t } = useI18n()
   const api = useCoreApi()
   const query = useMapQueryApi()
   const [hoveredProvince, setHoveredProvince] = useState<HoveredProvince | null>(null)
 
   const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
-  const provinces         = useMapDataStore((s) => s.provinces)
-  const terrains          = useMapDataStore((s) => s.terrains)
-  const continents        = useMapDataStore((s) => s.continents)
+  const provinces = useMapDataStore((s) => s.provinces)
+  const terrains = useMapDataStore((s) => s.terrains)
+  const continents = useMapDataStore((s) => s.continents)
   const displayModeOverrides = useDisplayModeConfigStore((s) => s.overrides)
   const displayMode = useCoreSelector(selectDisplayMode)
-  const selectedProvinceId = useCoreSelector(selectSelectedProvinceId)
 
   const src = provincesImageB64 ? `data:image/bmp;base64,${provincesImageB64}` : null
   const displayModeContext = useMemo(() => ({ terrains, continents }), [terrains, continents])
 
   const highlightColor = useCoreSelector((state) => selectHighlightColor(state, provinces))
   const colorMap = useCoreSelector((state) => selectColorMap(state, provinces, displayModeOverrides, displayModeContext))
-  const modeValuesByMode = useMemo(
-    () => selectModeValuesByMode(provinces, displayModeOverrides, displayModeContext),
-    [provinces, displayModeOverrides, displayModeContext]
-  )
 
   const onColorPicked = useCallback((r: number, g: number, b: number) => {
     const province = query.getProvinceByColor(packColor(r, g, b))
@@ -76,7 +104,7 @@ export function MapView() {
       setHoveredProvince(null)
       return
     }
-    const province = query.getProvinceByColor(packColor(color.r, color.g, color.b))
+    const province = query.getProvinceByColor(packColor(color.r, g, color.b))
     if (!province) {
       setHoveredProvince(null)
       return
@@ -94,33 +122,67 @@ export function MapView() {
   }, [displayMode, hoveredProvince, query, t])
 
   return (
-    <div className={styles.root}>
-      <div className={styles.viewport}>
-        <MapCanvas
-          src={src}
-          highlightColor={highlightColor}
-          colorMap={colorMap}
-          onColorPicked={onColorPicked}
-          hoverTooltipPosition={hoveredProvince ? { x: hoveredProvince.x, y: hoveredProvince.y } : null}
-          hoverTooltip={resolvedHoverTooltip}
-          onHoverColorChange={onHoverColorChange}
-        />
-      </div>
-      <div className={styles.sidebar}>
-        <div className={styles.sidebarTop}>
-          <MapModePanel
-            mode={displayMode}
-            onModeChange={(mode) => api.dispatch(mapCommands.setDisplayMode(mode))}
-            valuesByMode={modeValuesByMode}
-          />
-        </div>
-        <Divider style={{ flexGrow: 0 }} />
-        <ProvinceList
-          provinces={provinces}
-          selectedId={selectedProvinceId}
-          onSelect={(provinceId) => api.dispatch(mapCommands.selectProvince(provinceId))}
-        />
-      </div>
+    <div className={className}>
+      <MapCanvas
+        src={src}
+        overlays={canvasOverlays}
+        highlightColor={highlightColor}
+        colorMap={colorMap}
+        onColorPicked={onColorPicked}
+        hoverTooltipPosition={hoveredProvince ? { x: hoveredProvince.x, y: hoveredProvince.y } : null}
+        hoverTooltip={resolvedHoverTooltip}
+        onHoverColorChange={onHoverColorChange}
+      />
     </div>
   )
-}
+})
+
+const MapSidebarTop = memo(function MapSidebarTop({
+  className,
+  panelOverlays
+}: {
+  className: string
+  panelOverlays: ReturnType<typeof useOverlayAssets>['panelOverlays']
+}) {
+  const api = useCoreApi()
+  const provinces = useMapDataStore((s) => s.provinces)
+  const terrains = useMapDataStore((s) => s.terrains)
+  const continents = useMapDataStore((s) => s.continents)
+  const displayModeOverrides = useDisplayModeConfigStore((s) => s.overrides)
+  const displayMode = useCoreSelector(selectDisplayMode)
+
+  const displayModeContext = useMemo(() => ({ terrains, continents }), [terrains, continents])
+  const modeValuesByMode = useMemo(
+    () => selectModeValuesByMode(provinces, displayModeOverrides, displayModeContext),
+    [provinces, displayModeOverrides, displayModeContext]
+  )
+
+  return (
+    <div className={className}>
+      <MapModePanel
+        mode={displayMode}
+        onModeChange={(mode) => api.dispatch(mapCommands.setDisplayMode(mode))}
+        valuesByMode={modeValuesByMode}
+        overlays={panelOverlays}
+        onOverlayMove={(overlayId, targetOverlayId) => api.dispatch(mapCommands.moveOverlay(overlayId, targetOverlayId))}
+        onOverlayVisibilityChange={(overlayId, visible) => api.dispatch(mapCommands.setOverlayVisibility(overlayId, visible))}
+        onOverlayOpacityChange={(overlayId, opacity) => api.dispatch(mapCommands.setOverlayOpacity(overlayId, opacity))}
+        onOverlayFilterRulesChange={(overlayId, rules) => api.dispatch(mapCommands.setOverlayFilterRules(overlayId, rules))}
+      />
+    </div>
+  )
+})
+
+const ProvinceListPane = memo(function ProvinceListPane() {
+  const api = useCoreApi()
+  const provinces = useMapDataStore((s) => s.provinces)
+  const selectedProvinceId = useCoreSelector(selectSelectedProvinceId)
+
+  return (
+    <ProvinceList
+      provinces={provinces}
+      selectedId={selectedProvinceId}
+      onSelect={(provinceId) => api.dispatch(mapCommands.selectProvince(provinceId))}
+    />
+  )
+})

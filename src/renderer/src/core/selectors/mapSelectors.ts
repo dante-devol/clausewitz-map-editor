@@ -10,6 +10,7 @@ import {
 import type { DisplayModeOverrides } from '../../infra/store/displayModeConfigStore'
 
 export const selectDisplayMode = (state: CoreState) => state.map.displayMode
+export const selectMapOverlays = (state: CoreState) => state.map.overlays
 
 export function selectSelectedProvinceId(state: CoreState): number | null {
   return state.map.selection.kind === 'province' ? state.map.selection.provinceId : null
