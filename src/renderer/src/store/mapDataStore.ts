@@ -8,10 +8,14 @@ interface MapDataState {
   terrains: Map<string, TerrainCategory>   // codeName → TerrainCategory
   continents: Map<string, Continent>        // codeName → Continent
 
+  // Raw provinces.bmp image, base64-encoded
+  provincesImageB64: string | null
+
   // Bulk loaders — replace the entire table at once
   loadProvinces: (provinces: Province[]) => void
   loadTerrains: (terrains: TerrainCategory[]) => void
   loadContinents: (continents: Continent[]) => void
+  loadProvincesImage: (b64: string) => void
   clear: () => void
 }
 
@@ -19,7 +23,8 @@ const EMPTY_STATE = {
   provinces: new Map<number, Province>(),
   provincesByColor: new Map<number, number>(),
   terrains: new Map<string, TerrainCategory>(),
-  continents: new Map<string, Continent>()
+  continents: new Map<string, Continent>(),
+  provincesImageB64: null as string | null
 }
 
 export const useMapDataStore = create<MapDataState>((set) => ({
@@ -46,6 +51,8 @@ export const useMapDataStore = create<MapDataState>((set) => ({
     for (const c of incoming) continents.set(c.codeName, c)
     set({ continents })
   },
+
+  loadProvincesImage: (b64) => set({ provincesImageB64: b64 }),
 
   clear: () => set({ ...EMPTY_STATE })
 }))
