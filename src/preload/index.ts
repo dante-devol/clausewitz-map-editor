@@ -1,71 +1,51 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { ApiContract } from '../shared/contract/api'
+import { channels } from '../shared/contract/events'
 
-const api = {
-  // Projects
-  getRecentProjects: (): Promise<string[]> => ipcRenderer.invoke('projects:getRecent'),
-  addRecentProject: (path: string): Promise<void> => ipcRenderer.invoke('projects:addRecent', path),
-  removeRecentProject: (path: string): Promise<void> => ipcRenderer.invoke('projects:removeRecent', path),
-  openFolderDialog: (): Promise<string | null> => ipcRenderer.invoke('dialog:openFolder'),
-  enterEditor: (): Promise<void> => ipcRenderer.invoke('window:enterEditor'),
-
-  // Files
-  loadFile: (path: string): Promise<FileLoadResult> => ipcRenderer.invoke('file:load', path),
-  readFile: (path: string): Promise<FileLoadResult> => ipcRenderer.invoke('file:read', path),
-  unloadFile: (path: string): Promise<void> => ipcRenderer.invoke('file:unload', path),
-  getFileHash: (path: string): Promise<string | null> => ipcRenderer.invoke('file:getHash', path),
-
-  // Game path
-  getGamePath: (): Promise<string | null> => ipcRenderer.invoke('gamePath:get'),
-  setGamePath: (path: string): Promise<void> => ipcRenderer.invoke('gamePath:set', path),
-
-  // Path verification & resolution
-  verifyGamePaths: (gamePath: string): Promise<GameVerificationResult> => ipcRenderer.invoke('paths:verifyGame', gamePath),
-  verifyModPaths: (modPath: string): Promise<ModVerificationResult> => ipcRenderer.invoke('paths:verifyMod', modPath),
-  resolvePaths: (gamePath: string, modPath: string): Promise<ResolvedPaths> => ipcRenderer.invoke('paths:resolve', gamePath, modPath),
-
-  // Data loading
-  loadContinents: (filePath: string): Promise<ContinentData[]> => ipcRenderer.invoke('data:loadContinents', filePath),
-  loadDefinitions: (filePath: string, continents: ContinentData[]): Promise<ProvinceData[]> => ipcRenderer.invoke('data:loadDefinitions', filePath, continents),
-  loadTerrain: (filePaths: string[]): Promise<TerrainData[]> => ipcRenderer.invoke('data:loadTerrain', filePaths),
-
-  // Config
-  getConfig: (): Promise<Record<string, unknown>> => ipcRenderer.invoke('config:get'),
-  getConfigValue: (key: string): Promise<unknown> => ipcRenderer.invoke('config:getValue', key),
-  setConfigValue: (key: string, value: unknown): Promise<void> => ipcRenderer.invoke('config:set', key, value),
-  resetConfig: (): Promise<void> => ipcRenderer.invoke('config:reset'),
-
-  // Push events from main → renderer
-  onFileChanged: (callback: (data: FileChangedEvent) => void) => {
-    ipcRenderer.on('file:changed', (_e, data) => callback(data))
-    return () => ipcRenderer.removeAllListeners('file:changed')
+const api: ApiContract = {
+  dialogs: {
+    openFolder: () => ipcRenderer.invoke(channels.dialogs.openFolder)
   },
-
-  onDataReloaded: (callback: (data: DataReloadedEvent) => void) => {
-    ipcRenderer.on('data:reloaded', (_e, data) => callback(data))
-    return () => ipcRenderer.removeAllListeners('data:reloaded')
+  files: {
+    load: (path) => ipcRenderer.invoke(channels.files.load, path),
+    read: (path) => ipcRenderer.invoke(channels.files.read, path),
+    unload: (path) => ipcRenderer.invoke(channels.files.unload, path),
+    getHash: (path) => ipcRenderer.invoke(channels.files.getHash, path),
+    onChanged: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
+      ipcRenderer.on(channels.files.changed, listener)
+      return () => ipcRenderer.off(channels.files.changed, listener)
+    }
+  },
+  projects: {
+    getRecent: () => ipcRenderer.invoke(channels.projects.getRecent),
+    addRecent: (path) => ipcRenderer.invoke(channels.projects.addRecent, path),
+    removeRecent: (path) => ipcRenderer.invoke(channels.projects.removeRecent, path),
+    verifyModPath: (modPath) => ipcRenderer.invoke(channels.projects.verifyModPath, modPath),
+    open: (request) => ipcRenderer.invoke(channels.projects.open, request)
+  },
+  game: {
+    getPath: () => ipcRenderer.invoke(channels.game.getPath),
+    setPath: (path) => ipcRenderer.invoke(channels.game.setPath, path),
+    verifyPath: (gamePath) => ipcRenderer.invoke(channels.game.verifyPath, gamePath)
+  },
+  map: {
+    load: (projectId) => ipcRenderer.invoke(channels.map.load, projectId),
+    onChanged: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
+      ipcRenderer.on(channels.map.changed, listener)
+      return () => ipcRenderer.off(channels.map.changed, listener)
+    }
+  },
+  settings: {
+    get: () => ipcRenderer.invoke(channels.settings.get),
+    getValue: (key) => ipcRenderer.invoke(channels.settings.getValue, key),
+    set: (key, value) => ipcRenderer.invoke(channels.settings.set, key, value),
+    reset: () => ipcRenderer.invoke(channels.settings.reset)
+  },
+  window: {
+    enterEditor: () => ipcRenderer.invoke(channels.window.enterEditor)
   }
 }
 
 contextBridge.exposeInMainWorld('api', api)
-
-// Types are inline here so the contextBridge closure captures them at preload compile time.
-interface ContinentData { codeName: string; position: number; color: number }
-interface ProvinceData { id: number; color: number; type: string; isCoastal: boolean; terrain: string; continent: string }
-interface TerrainData { codeName: string; color: number; generatedColor: number }
-
-interface GameVerificationResult { valid: boolean; missingPaths: string[] }
-interface ModVerificationResult { hasAny: boolean; foundPaths: string[]; missingPaths: string[] }
-interface ResolvedPaths { defaultMap: string; definitions: string; provinces: string; continent: string; provinceTerrain: string[] }
-
-interface DataReloadedEvent { type: 'continents' | 'definitions' | 'terrain'; data: unknown }
-
-interface FileLoadResult {
-  path: string
-  hash: string
-  content: string // base64
-}
-
-interface FileChangedEvent {
-  path: string
-  hash: string
-}

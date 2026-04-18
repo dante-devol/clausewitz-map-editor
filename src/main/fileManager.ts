@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import { readFileSync, watch, FSWatcher } from 'fs'
 import type { BrowserWindow } from 'electron'
+import { channels } from '../shared/contract/events'
 
 export interface FileRecord {
   path: string
@@ -51,7 +52,7 @@ export function watchFile(path: string, window: BrowserWindow, onChanged?: () =>
         const existing = records.get(path)
         if (!existing || hash === existing.hash) return
         records.set(path, { path, hash, content })
-        window.webContents.send('file:changed', { path, hash })
+        window.webContents.send(channels.files.changed, { path, hash })
         onChanged?.()
       } catch {
         // File may have been temporarily unavailable during a write — ignore.

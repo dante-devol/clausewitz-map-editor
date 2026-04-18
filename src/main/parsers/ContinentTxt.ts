@@ -1,5 +1,5 @@
 import { readFileSync } from 'fs'
-import { continentColorFromPosition, type Continent } from '../../shared/mapDataTypes'
+import type { Continent } from '../../shared/mapDataTypes'
 
 export class ContinentTxt {
   private readonly filePath: string
@@ -25,8 +25,7 @@ export class ContinentTxt {
     return names.map((codeName, i) => ({
       codeName,
       // HOI4 reserves continent 0 for "none"; named continents start at 1.
-      position: i + 1,
-      color: continentColorFromPosition(i + 1)
+      position: i + 1
     }))
   }
 }

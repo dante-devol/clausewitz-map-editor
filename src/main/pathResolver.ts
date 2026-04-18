@@ -17,19 +17,21 @@ function resolveFolder(gamePath: string, modPath: string, rel: string): string[]
   const files = new Map<string, string>() // filename → absolute path
 
   if (existsSync(gameDir)) {
-    for (const f of readdirSync(gameDir)) {
+    for (const f of readdirSync(gameDir).sort((a, b) => a.localeCompare(b))) {
       files.set(f, join(gameDir, f))
     }
   }
 
   // Mod entries overwrite same-named game entries; new filenames are simply added.
   if (existsSync(modDir)) {
-    for (const f of readdirSync(modDir)) {
+    for (const f of readdirSync(modDir).sort((a, b) => a.localeCompare(b))) {
       files.set(f, join(modDir, f))
     }
   }
 
-  return Array.from(files.values())
+  return Array.from(files.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, path]) => path)
 }
 
 export function resolvePaths(gamePath: string, modPath: string): ResolvedPaths {

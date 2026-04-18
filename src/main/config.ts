@@ -1,18 +1,11 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
+import type { AppConfig } from '../shared/contract/api'
 
 // Add new config keys here. Defaults are the source of truth —
 // only deviations from these are written to disk.
-export interface Config {
-  paths: {
-    defaultMap: string       // /map/default.map
-    definitions: string      // /map/definitions.csv
-    provinces: string        // /map/provinces.bmp
-    continent: string        // /map/continent.txt
-    provinceTerrain: string  // /common/terrain
-  }
-}
+export interface Config extends AppConfig {}
 
 export const DEFAULT_CONFIG: Config = {
   paths: {

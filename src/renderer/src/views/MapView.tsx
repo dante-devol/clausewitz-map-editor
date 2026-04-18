@@ -9,7 +9,9 @@ import {
   type DisplayMode,
   TYPE_COLORS,
   COASTAL_COLORS,
+  continentColor,
   hexToPackedColor,
+  terrainGeneratedColor,
 } from '../config/displayModes'
 
 const useStyles = makeStyles({
@@ -90,7 +92,7 @@ export function MapView() {
       }
     } else if (displayMode === 'terrainGenerated') {
       for (const p of provinces.values()) {
-        map.set(p.color, terrains.get(p.terrain)?.generatedColor ?? 0x606060)
+        map.set(p.color, terrainGeneratedColor(p.terrain))
       }
     } else if (displayMode === 'coastal') {
       for (const p of provinces.values()) {
@@ -100,7 +102,7 @@ export function MapView() {
     } else if (displayMode === 'continent') {
       for (const p of provinces.values()) {
         const continent = continents.get(p.continent)
-        map.set(p.color, continent?.color ?? 0x303030)
+        map.set(p.color, continent ? continentColor(continent.position) : 0x303030)
       }
     }
 

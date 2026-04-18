@@ -3,7 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { List, ListItem, makeStyles, mergeClasses, tokens, Text } from '@fluentui/react-components'
 import type { Province } from '../../../shared/mapDataTypes'
 import { unpackColor } from '../../../shared/mapDataTypes'
-import { TYPE_COLORS } from '../config/displayModes'
+import { TYPE_COLORS, continentColor } from '../config/displayModes'
 import { useMapDataStore } from '../store/mapDataStore'
 
 const ROW_H = 36
@@ -227,7 +227,7 @@ export function ProvinceList({ provinces, selectedId, onSelect }: Props): JSX.El
                   : undefined
                 const continent = continents.get(p.continent)
                 const continentChipStyle = continent !== undefined
-                  ? makePackedChipStyle(continent.color)
+                  ? makePackedChipStyle(continentColor(continent.position))
                   : undefined
                 return (
                   <ListItem

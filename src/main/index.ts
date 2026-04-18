@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import { createWindow } from './window'
-import { registerIpcHandlers } from './ipc'
+import { registerIpcHandlers } from './ipc/registerHandlers'
 
 registerIpcHandlers()
 

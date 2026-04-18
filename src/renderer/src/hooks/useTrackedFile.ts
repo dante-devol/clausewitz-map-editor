@@ -21,30 +21,30 @@ export function useTrackedFile(path: string | null): TrackedFileState {
   useEffect(() => {
     if (!path) return
 
-    window.api.loadFile(path).then((result) => {
+    window.api.files.load(path).then((result) => {
       addFile({ path: result.path, content: result.content, loadedHash: result.hash, diskHash: result.hash })
     })
 
-    const cleanup = window.api.onFileChanged((event) => {
+    const cleanup = window.api.files.onChanged((event) => {
       if (event.path === path) updateDiskHash(event.path, event.hash)
     })
 
     return () => {
       cleanup()
-      window.api.unloadFile(path)
+      window.api.files.unload(path)
       removeFile(path)
     }
   }, [path])
 
   async function reload() {
     if (!path) return
-    const result = await window.api.readFile(path)
+    const result = await window.api.files.read(path)
     updateFile({ path: result.path, content: result.content, loadedHash: result.hash, diskHash: result.hash })
   }
 
   async function unload() {
     if (!path) return
-    await window.api.unloadFile(path)
+    await window.api.files.unload(path)
     removeFile(path)
   }
 
