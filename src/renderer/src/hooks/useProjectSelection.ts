@@ -1,15 +1,18 @@
 import { useEffect } from 'react'
+import { useCoreApi } from '../bridge/CoreProvider'
+import { sessionCommands } from '../core/commands/sessionCommands'
+import { useCoreSelector } from '../bridge/useCoreSelector'
+import { selectCurrentProjectId, selectCurrentProjectPath } from '../core/selectors/sessionSelectors'
 import { useProjectStore } from '../store/projectStore'
 
 export function useProjectSelection() {
-  const currentProjectId = useProjectStore((s) => s.currentProjectId)
-  const currentProject = useProjectStore((s) => s.currentProject)
+  const api = useCoreApi()
+  const currentProjectId = useCoreSelector(selectCurrentProjectId)
+  const currentProject = useCoreSelector(selectCurrentProjectPath)
   const recentProjects = useProjectStore((s) => s.recentProjects)
   const gamePath = useProjectStore((s) => s.gamePath)
   const gameVerification = useProjectStore((s) => s.gameVerification)
   const pendingProject = useProjectStore((s) => s.pendingProject)
-  const setCurrentProjectId = useProjectStore((s) => s.setCurrentProjectId)
-  const setCurrentProject = useProjectStore((s) => s.setCurrentProject)
   const setRecentProjects = useProjectStore((s) => s.setRecentProjects)
   const setGamePath = useProjectStore((s) => s.setGamePath)
   const setGameVerification = useProjectStore((s) => s.setGameVerification)
@@ -55,12 +58,17 @@ export function useProjectSelection() {
   }
 
   async function loadProject(path: string) {
-    const opened = await window.api.projects.open({ gamePath: gamePath!, modPath: path })
-    setCurrentProjectId(opened.projectId)
-    await window.api.projects.addRecent(path)
-    setRecentProjects(await window.api.projects.getRecent())
-    await window.api.window.enterEditor()
-    setCurrentProject(path)
+    api.dispatch(sessionCommands.openProjectStarted(path))
+    try {
+      const opened = await window.api.projects.open({ gamePath: gamePath!, modPath: path })
+      api.dispatch(sessionCommands.projectOpened(opened.projectId, path))
+      await window.api.projects.addRecent(path)
+      setRecentProjects(await window.api.projects.getRecent())
+      await window.api.window.enterEditor()
+    } catch (error) {
+      api.dispatch(sessionCommands.failed(error instanceof Error ? error.message : 'Failed to open project'))
+      throw error
+    }
   }
 
   async function browseForProject() {

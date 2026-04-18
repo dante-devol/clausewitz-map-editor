@@ -1,10 +1,14 @@
 import { useEffect } from 'react'
+import { useCoreApi } from '../bridge/CoreProvider'
+import { sessionCommands } from '../core/commands/sessionCommands'
+import { useCoreSelector } from '../bridge/useCoreSelector'
+import { selectCurrentProjectId } from '../core/selectors/sessionSelectors'
 import { useMapDataStore } from '../store/mapDataStore'
-import { useProjectStore } from '../store/projectStore'
 
 // Loads and keeps map data in sync for the active project session.
 export function useMapLoader(): void {
-  const projectId = useProjectStore((s) => s.currentProjectId)
+  const api = useCoreApi()
+  const projectId = useCoreSelector(selectCurrentProjectId)
   const loadContinents = useMapDataStore((s) => s.loadContinents)
   const loadProvinces = useMapDataStore((s) => s.loadProvinces)
   const loadTerrains = useMapDataStore((s) => s.loadTerrains)
@@ -17,12 +21,19 @@ export function useMapLoader(): void {
     let cancelled = false
 
     async function load() {
-      const snapshot = await window.api.map.load(projectId)
-      if (cancelled) return
-      loadContinents(snapshot.continents)
-      loadTerrains(snapshot.terrains)
-      loadProvincesImage(snapshot.provincesImageB64)
-      loadProvinces(snapshot.provinces)
+      api.dispatch(sessionCommands.mapLoadingStarted())
+      try {
+        const snapshot = await window.api.map.load(projectId)
+        if (cancelled) return
+        loadContinents(snapshot.continents)
+        loadTerrains(snapshot.terrains)
+        loadProvincesImage(snapshot.provincesImageB64)
+        loadProvinces(snapshot.provinces)
+        api.dispatch(sessionCommands.mapReady())
+      } catch (error) {
+        if (cancelled) return
+        api.dispatch(sessionCommands.failed(error instanceof Error ? error.message : 'Failed to load map'))
+      }
     }
 
     load()
@@ -38,7 +49,8 @@ export function useMapLoader(): void {
     return () => {
       cancelled = true
       unsubscribe()
+      api.dispatch(sessionCommands.cleared())
       clear()
     }
-  }, [projectId])
+  }, [api, projectId])
 }
