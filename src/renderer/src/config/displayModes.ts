@@ -1,8 +1,8 @@
 import type { Continent, Province, TerrainCategory } from '../../../shared/mapDataTypes'
 import type { DisplayModeOverrides } from '../store/displayModeConfigStore'
 
-export type DisplayMode = 'provinces' | 'type' | 'terrain' | 'terrainGenerated' | 'coastal' | 'continent'
-export type ConfigurableDisplayMode = Exclude<DisplayMode, 'provinces' | 'terrainGenerated'>
+export type DisplayMode = 'provinces' | 'type' | 'terrain' | 'coastal' | 'continent'
+export type ConfigurableDisplayMode = Exclude<DisplayMode, 'provinces'>
 
 export interface DisplayModeValueDescriptor {
   key: string
@@ -20,7 +20,6 @@ export const DISPLAY_MODE_LABELS: Record<DisplayMode, string> = {
   provinces: 'Provinces',
   type: 'Type',
   terrain: 'Terrain',
-  terrainGenerated: 'Terrain (False Color)',
   coastal: 'Coastal',
   continent: 'Continent',
 }
@@ -64,35 +63,20 @@ function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: n
   }
 }
 
-function hashString(value: string): number {
-  let hash = 2166136261
-  for (let i = 0; i < value.length; i++) {
-    hash ^= value.charCodeAt(i)
-    hash = Math.imul(hash, 16777619)
-  }
-  return hash >>> 0
-}
-
 export function continentColor(position: number): number {
   const hue = (position * 137.508) % 360
   const { r, g, b } = hslToRgb(hue, 0.62, 0.52)
   return (r << 16) | (g << 8) | b
 }
 
-export function terrainGeneratedColor(codeName: string): number {
-  const hue = hashString(codeName) % 360
-  const { r, g, b } = hslToRgb(hue, 0.68, 0.5)
-  return (r << 16) | (g << 8) | b
-}
-
 export function isConfigurableDisplayMode(mode: DisplayMode): mode is ConfigurableDisplayMode {
-  return mode !== 'provinces' && mode !== 'terrainGenerated'
+  return mode !== 'provinces'
 }
 
 export function getModeValueKey(mode: DisplayMode, province: Province): string | null {
   if (mode === 'provinces') return null
   if (mode === 'type') return province.type
-  if (mode === 'terrain' || mode === 'terrainGenerated') return province.terrain
+  if (mode === 'terrain') return province.terrain
   if (mode === 'coastal') return province.isCoastal ? 'coastal' : 'inland'
   return province.continent || 'none'
 }
@@ -109,9 +93,6 @@ export function getModeValueColor(mode: DisplayMode, valueKey: string, context: 
   }
   if (mode === 'terrain') {
     return context.terrains.get(valueKey)?.color ?? 0x606060
-  }
-  if (mode === 'terrainGenerated') {
-    return terrainGeneratedColor(valueKey)
   }
   if (mode === 'coastal') {
     return hexToPackedColor(COASTAL_COLORS[valueKey] ?? '#808080')

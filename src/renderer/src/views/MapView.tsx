@@ -49,7 +49,7 @@ function getHoverTooltip(displayMode: DisplayMode, province: Province): { label:
   if (displayMode === 'type') {
     return { label: 'Type', value: province.type }
   }
-  if (displayMode === 'terrain' || displayMode === 'terrainGenerated') {
+  if (displayMode === 'terrain') {
     return { label: 'Terrain', value: province.terrain }
   }
   if (displayMode === 'coastal') {
