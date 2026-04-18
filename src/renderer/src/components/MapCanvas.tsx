@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { makeStyles, mergeClasses, tokens, Button, Text, Tooltip } from '@fluentui/react-components'
+import { makeStyles, mergeClasses, tokens, Button, Text, Tooltip, Skeleton, SkeletonItem } from '@fluentui/react-components'
 import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, LocationTargetSquareRegular } from '@fluentui/react-icons'
 import { MapRenderer } from '../lib/MapRenderer'
 
@@ -33,6 +33,11 @@ const useStyles = makeStyles({
     inset: 0,
     userSelect: 'none'
   },
+  skeleton: {
+    position: 'absolute',
+    inset: 0,
+  },
+  canvasHidden: { visibility: 'hidden' },
   // mix-blend-mode:difference means drawing white = |255 - background| per channel.
   // pointer-events:none keeps clicks and gl.readPixels on the WebGL canvas unaffected.
   overlay: {
@@ -102,6 +107,7 @@ export function MapCanvas({ src, highlightColor, colorMap, onColorPicked }: Prop
   const [displayScale, setDisplayScale] = useState(1)
   const [eyedropperActive, setEyedropperActive] = useState(false)
   const [sampledColor, setSampledColor] = useState<SampledColor | null>(null)
+  const [imageLoaded, setImageLoaded] = useState(false)
 
   // Draws the per-pixel province edge at whatever alphaRef.current is.
   // Called from the RAF animation loop and imperatively on transform/resize.
@@ -185,13 +191,15 @@ export function MapCanvas({ src, highlightColor, colorMap, onColorPicked }: Prop
   }, [])
 
   useEffect(() => {
-    if (!src) { rendererRef.current?.clearImage(); return }
+    if (!src) { rendererRef.current?.clearImage(); setImageLoaded(false); return }
+    setImageLoaded(false)
     let cancelled = false
     rendererRef.current?.loadImage(src).then(() => {
       if (cancelled) return
       const cm = colorMapRef.current
       if (cm && cm.size > 0) rendererRef.current?.recolorTexture(cm)
       fit()
+      setImageLoaded(true)
     })
     return () => { cancelled = true }
   }, [src, fit])
@@ -355,8 +363,15 @@ export function MapCanvas({ src, highlightColor, colorMap, onColorPicked }: Prop
       onMouseUp={stopDrag}
       onMouseLeave={stopDrag}
     >
-      <canvas ref={canvasRef}  className={styles.canvas}  />
-      <canvas ref={overlayRef} className={styles.overlay} />
+      <canvas ref={canvasRef}  className={mergeClasses(styles.canvas,  !imageLoaded && styles.canvasHidden)} />
+      <canvas ref={overlayRef} className={mergeClasses(styles.overlay, !imageLoaded && styles.canvasHidden)} />
+      {!imageLoaded && (
+        <div className={styles.skeleton}>
+          <Skeleton style={{ width: '100%', height: '100%' }}>
+            <SkeletonItem style={{ width: '100%', height: '100%', borderRadius: 0 }} />
+          </Skeleton>
+        </div>
+      )}
       <div className={styles.controls} onMouseDown={(e) => e.stopPropagation()}>
         <div className={styles.widget}>
           <Tooltip content="Pick color" relationship="label">
