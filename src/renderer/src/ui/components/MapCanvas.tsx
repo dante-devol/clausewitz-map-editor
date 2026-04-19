@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
-import { animateValue, easeOutCubic, lerpVec2 } from '../lib/animateValue'
-import { vec2 } from 'gl-matrix'
 import { makeStyles, mergeClasses, tokens, Button, Spinner, Text, Tooltip, Skeleton, SkeletonItem } from '@fluentui/react-components'
-import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, LocationTargetSquareRegular } from '@fluentui/react-icons'
+import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, PaintBucketRegular, PaintBucketFilled } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
 import { MapRenderer } from '../../infra/lib/MapRenderer'
 import { BmpProvinceMapSource } from '../../infra/lib/BmpProvinceMapSource'
@@ -16,8 +14,7 @@ const ZOOM_MIN = 0.02
 const ZOOM_MAX = 32
 
 interface Transform { x: number; y: number; scale: number }
-interface SampledColor { r: number; g: number; b: number }
-interface HoveredColor extends SampledColor { x: number; y: number }
+interface HoveredColor { r: number; g: number; b: number; x: number; y: number }
 interface HoverTooltipPosition { x: number; y: number }
 interface OverlayBitmapEntry {
   src: string
@@ -44,9 +41,6 @@ interface ScreenRect {
 }
 
 const BBOX_MERGE_PADDING_PX = 1
-
-function toHex(n: number) { return n.toString(16).padStart(2, '0').toUpperCase() }
-function colorToHex({ r, g, b }: SampledColor) { return `#${toHex(r)}${toHex(g)}${toHex(b)}` }
 
 const useStyles = makeStyles({
   root: {
@@ -158,7 +152,13 @@ interface Props {
   validationWarningColors: number[]
   validationErrorColors: number[]
   colorMap?: Map<number, number> | null
-  onColorPicked?: (r: number, g: number, b: number, additive: boolean) => void
+  activeTool: 'select' | 'eyedrop' | 'bucket'
+  eyedropEnabled: boolean
+  bucketEnabled: boolean
+  sampledValueColor?: string | null
+  sampledValueLabel?: string | null
+  onActiveToolChange?: (tool: 'select' | 'eyedrop' | 'bucket') => void
+  onMapClick?: (r: number, g: number, b: number, additive: boolean) => void
   hoverTooltipPosition?: HoverTooltipPosition | null
   hoverTooltip?: { label: string; value: string } | null
   onHoverColorChange?: (color: HoveredColor | null) => void
@@ -172,7 +172,13 @@ export function MapCanvas({
   validationWarningColors,
   validationErrorColors,
   colorMap,
-  onColorPicked,
+  activeTool,
+  eyedropEnabled,
+  bucketEnabled,
+  sampledValueColor,
+  sampledValueLabel,
+  onActiveToolChange,
+  onMapClick,
   hoverTooltipPosition,
   hoverTooltip,
   onHoverColorChange,
@@ -195,8 +201,6 @@ export function MapCanvas({
   const dragRef      = useRef<{ startX: number; startY: number; startTX: number; startTY: number } | null>(null)
   const [dragging, setDragging] = useState(false)
   const [displayScale, setDisplayScale] = useState(1)
-  const [eyedropperActive, setEyedropperActive] = useState(false)
-  const [sampledColor, setSampledColor] = useState<SampledColor | null>(null)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [baseImageLoading, setBaseImageLoading] = useState(false)
   const [overlaysLoadingCount, setOverlaysLoadingCount] = useState(0)
@@ -486,34 +490,20 @@ export function MapCanvas({
       return
     }
     if (e.button !== 0) return
-    if (eyedropperActive) {
-      // Eyedropper mode: sample color for display only, do NOT fire selection
-      const canvas = canvasRef.current
-      if (!canvas) return
+    const canvas = canvasRef.current
+    if (canvas) {
       const rect = canvas.getBoundingClientRect()
       const cx = e.clientX - rect.left
       const cy = e.clientY - rect.top
       const { x: tx, y: ty, scale } = transformRef.current
       const color = rendererRef.current?.readOriginalPixel(cx, cy, tx, ty, scale)
-      setSampledColor(color ?? null)
-      return
-    }
-    // Default left-click: select province AND start pan
-    {
-      const canvas = canvasRef.current
-      if (canvas) {
-        const rect = canvas.getBoundingClientRect()
-        const cx = e.clientX - rect.left
-        const cy = e.clientY - rect.top
-        const { x: tx, y: ty, scale } = transformRef.current
-        const color = rendererRef.current?.readOriginalPixel(cx, cy, tx, ty, scale)
-        if (color) onColorPicked?.(color.r, color.g, color.b, e.shiftKey)
-      }
+      if (color) onMapClick?.(color.r, color.g, color.b, activeTool === 'select' && e.shiftKey)
+      if (activeTool !== 'select') return
     }
     const t = transformRef.current
     dragRef.current = { startX: e.clientX, startY: e.clientY, startTX: t.x, startTY: t.y }
     setDragging(true)
-  }, [eyedropperActive, onColorPicked])
+  }, [activeTool, onMapClick])
 
   const onMouseMove = useCallback((e: React.MouseEvent) => {
     const canvas = canvasRef.current
@@ -540,33 +530,6 @@ export function MapCanvas({
     setDragging(false)
   }, [])
 
-  const centerOnProvince = useCallback(() => {
-    const renderer = rendererRef.current
-    const canvas   = canvasRef.current
-    if (!renderer || !canvas) return
-    const centroid = renderer.provinceCentroid
-    if (!centroid) return
-
-    const { scale } = transformRef.current
-    const from = transformRef.current
-    const toX = canvas.width  / 2 - centroid.x * scale
-    const toY = canvas.height / 2 - centroid.y * scale
-
-    // Skip animation if already within 1px of target.
-    if (Math.abs(from.x - toX) < 1 && Math.abs(from.y - toY) < 1) return
-
-    cancelPanRef.current?.()
-
-    const fromPos = vec2.fromValues(from.x, from.y)
-    const toPos   = vec2.fromValues(toX, toY)
-    const scratch = vec2.create()
-
-    cancelPanRef.current = animateValue(450, easeOutCubic, (t) => {
-      lerpVec2(scratch, fromPos, toPos, t)
-      applyTransform({ scale, x: scratch[0], y: scratch[1] })
-    })
-  }, [applyTransform])
-
   const zoomBy = useCallback((factor: number) => {
     const canvas = canvasRef.current
     const prev   = transformRef.current
@@ -587,7 +550,7 @@ export function MapCanvas({
 
   const rootClass = mergeClasses(
     styles.root,
-    eyedropperActive ? styles.eyedropping : (dragging ? styles.dragging : undefined)
+    activeTool !== 'select' ? styles.eyedropping : (dragging ? styles.dragging : undefined)
   )
 
   return (
@@ -621,7 +584,7 @@ export function MapCanvas({
           </div>
         </div>
       )}
-      {hoverTooltipPosition && hoverTooltip && !eyedropperActive && !dragging && (
+      {hoverTooltipPosition && hoverTooltip && !dragging && (
         <div
           className={styles.hoverTooltip}
           style={{
@@ -641,33 +604,38 @@ export function MapCanvas({
       )}
       <div className={styles.controls} onMouseDown={(e) => e.stopPropagation()}>
         <div className={styles.widget}>
-          <Tooltip content={t('mapCanvas.pickColor')} relationship="label">
+          <Tooltip content={t('mapCanvas.eyedrop')} relationship="label">
             <Button
-              appearance={eyedropperActive ? 'primary' : 'subtle'}
+              appearance={activeTool === 'eyedrop' ? 'primary' : 'subtle'}
               size="small"
-              icon={eyedropperActive ? <EyedropperFilled /> : <EyedropperRegular />}
-              onClick={() => setEyedropperActive((v) => !v)}
+              icon={activeTool === 'eyedrop' ? <EyedropperFilled /> : <EyedropperRegular />}
+              onClick={() => onActiveToolChange?.(activeTool === 'eyedrop' ? 'select' : 'eyedrop')}
+              disabled={!eyedropEnabled}
             />
           </Tooltip>
-          {sampledColor ? (
-            <>
-              <div
-                className={styles.colorSwatch}
-                style={{ backgroundColor: `rgb(${sampledColor.r},${sampledColor.g},${sampledColor.b})` }}
-              />
-              <Text size={200} className={styles.colorLabel}>{colorToHex(sampledColor)}</Text>
-              <Tooltip content={t('mapCanvas.centerOnProvince')} relationship="label">
-                <Button
-                  appearance="subtle"
-                  size="small"
-                  icon={<LocationTargetSquareRegular />}
-                  onClick={centerOnProvince}
-                />
-              </Tooltip>
-            </>
+          {sampledValueColor ? (
+            <div
+              className={styles.colorSwatch}
+              style={{ backgroundColor: sampledValueColor }}
+            />
           ) : (
-            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>—</Text>
+            <div
+              className={styles.colorSwatch}
+              style={{ backgroundColor: tokens.colorNeutralBackground4 }}
+            />
           )}
+          <Text size={200} className={styles.colorLabel}>
+            {sampledValueLabel ?? t('mapValue.none')}
+          </Text>
+          <Tooltip content={t('mapCanvas.bucket')} relationship="label">
+            <Button
+              appearance={activeTool === 'bucket' ? 'primary' : 'subtle'}
+              size="small"
+              icon={activeTool === 'bucket' ? <PaintBucketFilled /> : <PaintBucketRegular />}
+              onClick={() => onActiveToolChange?.(activeTool === 'bucket' ? 'select' : 'bucket')}
+              disabled={!bucketEnabled}
+            />
+          </Tooltip>
         </div>
         <div className={styles.widget}>
           <Button appearance="subtle" size="small" icon={<ZoomOutRegular />} onClick={() => zoomBy(1 / ZOOM_STEP)} />

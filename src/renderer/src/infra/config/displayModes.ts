@@ -1,4 +1,4 @@
-import type { Continent, TerrainCategory } from '../../../../shared/mapDataTypes'
+import type { Continent, ProvinceType, TerrainCategory } from '../../../../shared/mapDataTypes'
 import type { ProvinceDraftTarget } from '../../../../shared/provinceEditing'
 import type { DisplayModeOverrides } from '../store/displayModeConfigStore'
 
@@ -17,6 +17,14 @@ export interface DisplayModeValueDescriptor {
   color: number
   isOverride: boolean
 }
+
+export type DisplayModeEditable = Extract<DisplayMode, 'type' | 'terrain' | 'coastal' | 'continent'>
+
+export type DisplayModeSample =
+  | { mode: 'type'; value: ProvinceType | undefined }
+  | { mode: 'terrain'; value: string | undefined }
+  | { mode: 'coastal'; value: boolean | undefined }
+  | { mode: 'continent'; value: string | undefined }
 
 export interface DisplayModeContext {
   terrains: ReadonlyMap<string, TerrainCategory>
@@ -89,6 +97,10 @@ export function isConfigurableDisplayMode(mode: DisplayMode): mode is Configurab
   return mode === 'type' || mode === 'terrain' || mode === 'coastal' || mode === 'continent'
 }
 
+export function isEditableDisplayMode(mode: DisplayMode): mode is DisplayModeEditable {
+  return isConfigurableDisplayMode(mode)
+}
+
 function hashedGroupColor(id: number, variant: 'state' | 'strategicRegion'): number {
   const prime = variant === 'state' ? 1103515245 : 214013
   const offset = variant === 'state' ? 12345 : 2531011
@@ -121,6 +133,36 @@ export function getModeValueKey(
 
 export function getModeValueLabel(mode: DisplayMode, valueKey: string): string {
   return valueKey
+}
+
+export function sampleDisplayModeValue(
+  mode: DisplayMode,
+  province: ProvinceDraftTarget
+): DisplayModeSample | null {
+  if (mode === 'type') return { mode, value: province.type }
+  if (mode === 'terrain') return { mode, value: province.terrain }
+  if (mode === 'coastal') return { mode, value: province.isCoastal }
+  if (mode === 'continent') return { mode, value: province.continent }
+  return null
+}
+
+export function getDisplayModeSampleValueKey(sample: DisplayModeSample): string {
+  if (sample.mode === 'coastal') {
+    return sample.value === undefined ? 'none' : sample.value ? 'coastal' : 'inland'
+  }
+  return sample.value ?? 'none'
+}
+
+export function getDisplayModeSampleLabel(sample: DisplayModeSample): string {
+  return getModeValueLabel(sample.mode, getDisplayModeSampleValueKey(sample))
+}
+
+export function getDisplayModeSampleColor(
+  sample: DisplayModeSample,
+  overrides: DisplayModeOverrides,
+  context: DisplayModeContext
+): number {
+  return getResolvedModeValueColor(sample.mode, getDisplayModeSampleValueKey(sample), overrides, context)
 }
 
 export function getModeValueColor(mode: DisplayMode, valueKey: string, context: DisplayModeContext): number {

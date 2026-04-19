@@ -99,6 +99,8 @@ export const enMessages = {
   'map.hover.state': 'State',
   'map.hover.strategicRegion': 'Strategic Region',
   'mapCanvas.pickColor': 'Pick color',
+  'mapCanvas.eyedrop': 'Eyedrop value',
+  'mapCanvas.bucket': 'Apply sampled value',
   'mapCanvas.loading': 'Loading map',
   'mapCanvas.centerOnProvince': 'Center on province',
   'mapCanvas.fitToView': 'Fit to view',

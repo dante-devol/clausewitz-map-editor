@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { makeStyles, tokens } from '@fluentui/react-components'
 import { useCoreApi } from '../../bridge/CoreProvider'
 import { useMapQueryApi } from '../../bridge/MapQueryProvider'
@@ -21,6 +21,12 @@ import {
 import { useI18n } from '../i18n/I18nProvider'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
 import { useDisplayModeConfigStore } from '../../infra/store/displayModeConfigStore'
+import {
+  getDisplayModeSampleColor,
+  isEditableDisplayMode,
+  sampleDisplayModeValue,
+  type DisplayModeSample
+} from '../../infra/config/displayModes'
 import { useProjectStore } from '../../infra/store/projectStore'
 import { useOverlayAssets } from '../hooks/useOverlayAssets'
 import { packColor } from '../../../../shared/mapDataTypes'
@@ -96,6 +102,9 @@ const MapViewportPane = memo(function MapViewportPane({
   const api = useCoreApi()
   const query = useMapQueryApi()
   const [hoveredProvince, setHoveredProvince] = useState<HoveredProvince | null>(null)
+  const [activeTool, setActiveTool] = useState<'select' | 'eyedrop' | 'bucket'>('select')
+  const [sampledValue, setSampledValue] = useState<DisplayModeSample | null>(null)
+  const previousDisplayModeRef = useRef<number | string | null>(null)
 
   const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
   const provinces = useMapDataStore((s) => s.provinces)
@@ -116,6 +125,8 @@ const MapViewportPane = memo(function MapViewportPane({
   const extendSelection = useMapDataStore((s) => s.extendSelection)
   const setSelectedBmpGuids = useMapDataStore((s) => s.setSelectedBmpGuids)
   const toggleBmpGuid = useMapDataStore((s) => s.toggleBmpGuid)
+  const editProvince = useMapDataStore((s) => s.editProvince)
+  const editBmpOnlyProvince = useMapDataStore((s) => s.editBmpOnlyProvince)
   const issuesByProvinceKey = useProvinceValidationStore((s) => s.issuesByProvinceKey)
   const displayModeOverrides = useDisplayModeConfigStore((s) => s.overrides)
   const displayMode = useCoreSelector(selectDisplayMode)
@@ -167,9 +178,37 @@ const MapViewportPane = memo(function MapViewportPane({
     selectColorMap(state, effectiveProvinceTargets.byColor, displayModeOverrides, displayModeContext)
   )
 
-  const onColorPicked = useCallback((r: number, g: number, b: number, additive: boolean) => {
+  const onMapClick = useCallback((r: number, g: number, b: number, additive: boolean) => {
     const draft = query.getDraftProvinceByColor(packColor(r, g, b))
     if (!draft) return
+    if (activeTool === 'eyedrop') {
+      if (!isEditableDisplayMode(displayMode)) return
+      const sample = sampleDisplayModeValue(displayMode, draft)
+      if (!sample) return
+      if (sample.mode === 'continent') {
+        if (!sample.value) return
+      } else if (sample.value === undefined) {
+        return
+      }
+      setSampledValue(sample)
+      setActiveTool('bucket')
+      return
+    }
+    if (activeTool === 'bucket') {
+      if (!sampledValue || sampledValue.mode !== displayMode || !isEditableDisplayMode(displayMode)) return
+      if (draft.provinceId !== null) {
+        if (sampledValue.mode === 'type') editProvince(draft.provinceId, { type: sampledValue.value })
+        if (sampledValue.mode === 'terrain') editProvince(draft.provinceId, { terrain: sampledValue.value })
+        if (sampledValue.mode === 'coastal') editProvince(draft.provinceId, { isCoastal: sampledValue.value })
+        if (sampledValue.mode === 'continent') editProvince(draft.provinceId, { continent: sampledValue.value })
+      } else if (draft.bmpGuid) {
+        if (sampledValue.mode === 'type') editBmpOnlyProvince(draft.bmpGuid, { type: sampledValue.value })
+        if (sampledValue.mode === 'terrain') editBmpOnlyProvince(draft.bmpGuid, { terrain: sampledValue.value })
+        if (sampledValue.mode === 'coastal') editBmpOnlyProvince(draft.bmpGuid, { isCoastal: sampledValue.value })
+        if (sampledValue.mode === 'continent') editBmpOnlyProvince(draft.bmpGuid, { continent: sampledValue.value })
+      }
+      return
+    }
     if (draft.provinceId !== null) {
       if (additive) {
         extendSelection([draft.provinceId])
@@ -185,7 +224,37 @@ const MapViewportPane = memo(function MapViewportPane({
     } else {
       setSelectedBmpGuids([draft.bmpGuid])
     }
-  }, [setSelectedBmpGuids, setSelection, extendSelection, query, toggleBmpGuid])
+  }, [
+    activeTool,
+    displayMode,
+    editBmpOnlyProvince,
+    editProvince,
+    extendSelection,
+    query,
+    sampledValue,
+    setSelectedBmpGuids,
+    setSelection,
+    toggleBmpGuid
+  ])
+
+  const sampledValuePresentation = useMemo(() => {
+    if (!sampledValue || sampledValue.mode !== displayMode || !isEditableDisplayMode(displayMode)) return null
+    const label = sampledValue.mode === 'coastal'
+      ? sampledValue.value === undefined
+        ? t('mapValue.none')
+        : t(sampledValue.value ? 'mapValue.coastal' : 'mapValue.inland')
+      : sampledValue.value || t('mapValue.none')
+    return {
+      label,
+      color: `#${getDisplayModeSampleColor(sampledValue, displayModeOverrides, displayModeContext).toString(16).padStart(6, '0')}`
+    }
+  }, [displayMode, displayModeContext, displayModeOverrides, sampledValue, t])
+
+  const onDisplayModeChange = useCallback((mode: typeof displayMode) => {
+    setSampledValue(null)
+    setActiveTool('select')
+    api.dispatch(mapCommands.setDisplayMode(mode))
+  }, [api])
 
   const onHoverColorChange = useCallback((color: { r: number; g: number; b: number; x: number; y: number } | null) => {
     if (!color) {
@@ -210,6 +279,16 @@ const MapViewportPane = memo(function MapViewportPane({
     )
   }, [displayMode, displayModeContext, hoveredProvince, query, t])
 
+  useEffect(() => {
+    if (previousDisplayModeRef.current === displayMode) return
+    previousDisplayModeRef.current = displayMode
+    setSampledValue(null)
+    setActiveTool('select')
+  }, [displayMode])
+
+  const eyedropEnabled = isEditableDisplayMode(displayMode)
+  const bucketEnabled = isEditableDisplayMode(displayMode) && sampledValue !== null && sampledValue.mode === displayMode
+
   return (
     <div className={className}>
       <MapCanvas
@@ -219,14 +298,24 @@ const MapViewportPane = memo(function MapViewportPane({
         validationWarningColors={validationHighlightColors.warningColors}
         validationErrorColors={validationHighlightColors.errorColors}
         colorMap={colorMap}
-        onColorPicked={onColorPicked}
+        activeTool={activeTool}
+        eyedropEnabled={eyedropEnabled}
+        bucketEnabled={bucketEnabled}
+        sampledValueColor={sampledValuePresentation?.color ?? null}
+        sampledValueLabel={sampledValuePresentation?.label ?? null}
+        onActiveToolChange={(tool) => {
+          if (tool === 'eyedrop' && !eyedropEnabled) return
+          if (tool === 'bucket' && !bucketEnabled) return
+          setActiveTool(tool)
+        }}
+        onMapClick={onMapClick}
         hoverTooltipPosition={hoveredProvince ? { x: hoveredProvince.x, y: hoveredProvince.y } : null}
         hoverTooltip={resolvedHoverTooltip}
         onHoverColorChange={onHoverColorChange}
         topRightContent={(
           <DisplayModeControl
             mode={displayMode}
-            onModeChange={(mode) => api.dispatch(mapCommands.setDisplayMode(mode))}
+            onModeChange={onDisplayModeChange}
             valuesByMode={modeValuesByMode}
           />
         )}

@@ -101,6 +101,8 @@ export const frMessages: Record<MessageKey, string> = {
   'map.hover.state': 'Etat',
   'map.hover.strategicRegion': 'Region strategique',
   'mapCanvas.pickColor': 'Prelever une couleur',
+  'mapCanvas.eyedrop': 'Prelever la valeur',
+  'mapCanvas.bucket': 'Appliquer la valeur prelevee',
   'mapCanvas.loading': 'Chargement de la carte',
   'mapCanvas.centerOnProvince': 'Centrer sur la province',
   'mapCanvas.fitToView': "Ajuster a la vue",
