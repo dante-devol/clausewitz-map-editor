@@ -61,11 +61,10 @@ export function selectHighlightColors(
 }
 
 export function selectValidationHighlightColors(
-  selectedProvinceIds: number[],
+  _selectedProvinceIds: number[],
   provinceCatalog: readonly ProvinceCatalogEntry[],
   issuesByProvinceKey: ReadonlyMap<string, ProvinceValidationIssue[]>
 ): { warningColors: number[]; errorColors: number[] } {
-  const selectedIds = new Set(selectedProvinceIds)
   const warningColors: number[] = []
   const errorColors: number[] = []
 
@@ -73,7 +72,6 @@ export function selectValidationHighlightColors(
     const issues = issuesByProvinceKey.get(province.key as ProvinceCatalogEntryKey)
     if (!issues || issues.length === 0) continue
     if (province.color === null) continue
-    if (province.id !== null && selectedIds.has(province.id)) continue
 
     const highestSeverity = resolveHighestSeverity(issues)
     if (highestSeverity === 'error') errorColors.push(province.color)

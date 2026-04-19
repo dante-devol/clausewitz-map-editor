@@ -25,7 +25,10 @@ import { useProjectStore } from '../../infra/store/projectStore'
 import { useOverlayAssets } from '../hooks/useOverlayAssets'
 import { packColor } from '../../../../shared/mapDataTypes'
 import { useProvinceValidationStore } from '../../infra/store/provinceValidationStore'
-import { selectProvinceDraftTargetMaps } from '../../infra/store/provinceEditSelectors'
+import {
+  selectEffectiveProvinceCatalog,
+  selectProvinceDraftTargetMaps
+} from '../../infra/store/provinceEditSelectors'
 
 const useStyles = makeStyles({
   root: {
@@ -133,6 +136,18 @@ const MapViewportPane = memo(function MapViewportPane({
     ),
     [originalDefinitions, pendingEdits, pendingBmpOnlyEdits, bmpReplacements, pendingNewProvinces, bmpOnlyEntries]
   )
+  const effectiveProvinceCatalog = useMemo(
+    () => selectEffectiveProvinceCatalog(
+      originalDefinitions,
+      pendingEdits,
+      pendingBmpOnlyEdits,
+      bmpReplacements,
+      pendingNewProvinces,
+      bmpOnlyEntries,
+      provinceCatalog
+    ),
+    [originalDefinitions, pendingEdits, pendingBmpOnlyEdits, bmpReplacements, pendingNewProvinces, bmpOnlyEntries, provinceCatalog]
+  )
   const modeValuesByMode = useMemo(
     () => selectModeValuesByMode(effectiveProvinceTargets.byColor, displayModeOverrides, displayModeContext),
     [effectiveProvinceTargets, displayModeOverrides, displayModeContext]
@@ -144,8 +159,8 @@ const MapViewportPane = memo(function MapViewportPane({
   )
 
   const validationHighlightColors = useMemo(
-    () => selectValidationHighlightColors(selectedProvinceIds, provinceCatalog, issuesByProvinceKey),
-    [selectedProvinceIds, provinceCatalog, issuesByProvinceKey]
+    () => selectValidationHighlightColors(selectedProvinceIds, effectiveProvinceCatalog, issuesByProvinceKey),
+    [selectedProvinceIds, effectiveProvinceCatalog, issuesByProvinceKey]
   )
 
   const colorMap = useCoreSelector((state) =>
