@@ -17,6 +17,7 @@ export const provinceValidators: readonly ProvinceValidator[] = [
         if (province.id === null) {
           return [issue('province.missing-id', 'warning', province, 'Province has no ID.')]
         }
+        if (province.id === 0) return []
         if (!Number.isInteger(province.id) || province.id <= 0) {
           return [issue('province.invalid-id', 'error', province, 'Province ID must be a positive integer.')]
         }
@@ -53,6 +54,7 @@ export const provinceValidators: readonly ProvinceValidator[] = [
     phase: 'metadata',
     validate(snapshot) {
       return snapshot.catalog.flatMap((province) => {
+        if (province.id === 0) return []
         if (province.color === null) {
           return [issue('province.missing-color', 'warning', province, 'Province color is missing.')]
         }
@@ -92,6 +94,7 @@ export const provinceValidators: readonly ProvinceValidator[] = [
     phase: 'full',
     validate(snapshot) {
       return snapshot.catalog.flatMap((province) => {
+        if (province.id === 0) return []
         if (province.color === null) return []
         if (province.sources.includes('bmp-color')) return []
         if (province.mapPresence === 'missing') {
