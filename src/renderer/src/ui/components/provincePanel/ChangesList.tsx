@@ -324,6 +324,6 @@ function kindClass(change: PendingChange, styles: ReturnType<typeof useStyles>):
 
 function kindLabel(change: PendingChange): string {
   if (change.kind === 'field-edit') return 'edit'
-  if (change.kind === 'bmp-replacement') return 'bmp'
+  if (change.kind === 'bmp-replacement') return 'assign'
   return 'new'
 }

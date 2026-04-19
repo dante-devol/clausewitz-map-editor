@@ -336,14 +336,34 @@ const useStyles = makeStyles({
     whiteSpace: 'normal',
     color: tokens.colorNeutralForeground1
   },
+  swatchGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '3px',
+    flexShrink: 0,
+    marginRight: tokens.spacingHorizontalXS
+  },
   swatch: {
     width: '12px',
     height: '12px',
     borderRadius: tokens.borderRadiusCircular,
     ...shorthands.borderColor('rgba(255,255,255,0.35)'),
     flexShrink: 0,
-    marginRight: tokens.spacingHorizontalXS,
     boxShadow: `0 0 0 1px ${tokens.colorNeutralBackground4}`
+  },
+  swatchOrig: {
+    width: '8px',
+    height: '8px',
+    borderRadius: tokens.borderRadiusCircular,
+    ...shorthands.borderColor('rgba(255,255,255,0.2)'),
+    flexShrink: 0,
+    opacity: 0.5,
+    boxShadow: `0 0 0 1px ${tokens.colorNeutralBackground4}`
+  },
+  swatchArrow: {
+    fontSize: '9px',
+    color: tokens.colorNeutralForeground3,
+    lineHeight: '1'
   },
   id: {
     fontFamily: 'monospace',
@@ -421,6 +441,12 @@ export function CanonicalProvinceList({
   const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
   const pendingEdits = useMapDataStore((s) => s.pendingEdits)
   const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
+  const bmpOnlyEntries = useMapDataStore((s) => s.bmpOnlyEntries)
+
+  const bmpOnlyByGuid = useMemo(
+    () => new Map(bmpOnlyEntries.map((e) => [e.guid, e])),
+    [bmpOnlyEntries]
+  )
   const issuesByProvinceKey = useProvinceValidationStore((s) => s.issuesByProvinceKey)
   const [filters, setFilters] = useState<ProvinceListFilters>(EMPTY_FILTERS)
   const [filterQuery, setFilterQuery] = useState('')
@@ -616,10 +642,17 @@ export function CanonicalProvinceList({
                   const isCrossSelected = p.id !== null && p.id === crossSelectedId && !isSelected
                   const isEdited = p.id !== null && (pendingEdits.has(p.id) || bmpReplacements.has(p.id))
 
-                  // Display values always come from the original frozen definitions
-                  const display = p.id !== null ? (originalDefinitions.get(p.id) ?? p) : p
-                  const color = display.color ?? p.color ?? 0
+                  // Compute effective values: original + field patch + BMP replacement color
+                  const originalDef = p.id !== null ? originalDefinitions.get(p.id) : undefined
+                  const patch = p.id !== null ? (pendingEdits.get(p.id) ?? {}) : {}
+                  const replacingGuid = p.id !== null ? bmpReplacements.get(p.id) : undefined
+                  const bmpEntry = replacingGuid ? bmpOnlyByGuid.get(replacingGuid) : undefined
+                  const baseDef = originalDef ?? p
+                  const display = { ...baseDef, ...patch, ...(bmpEntry ? { color: bmpEntry.color } : {}) }
+                  const color = display.color ?? 0
                   const { r, g, b } = unpackColor(color)
+                  const colorReplaced = bmpEntry !== undefined
+                  const origColor = colorReplaced ? unpackColor(baseDef.color ?? 0) : null
                   const terrainColor = display.terrain ? terrains.get(display.terrain)?.color : undefined
                   const terrainChipStyle = terrainColor !== undefined
                     ? makePackedChipStyle(terrainColor)
@@ -700,22 +733,33 @@ export function CanonicalProvinceList({
                           </Popover>
                         )}
                       </div>
-                      <div
-                        className={styles.swatch}
-                        style={{ backgroundColor: `rgb(${r},${g},${b})` }}
-                      />
+                      <div className={styles.swatchGroup}>
+                        {colorReplaced && origColor && (
+                          <>
+                            <div
+                              className={styles.swatchOrig}
+                              style={{ backgroundColor: `rgb(${origColor.r},${origColor.g},${origColor.b})` }}
+                            />
+                            <span className={styles.swatchArrow}>→</span>
+                          </>
+                        )}
+                        <div
+                          className={styles.swatch}
+                          style={{ backgroundColor: `rgb(${r},${g},${b})` }}
+                        />
+                      </div>
                       <Text size={100} className={styles.id}>
                         {p.id !== null ? String(p.id) : '—'}
                       </Text>
-                      <Text size={100} className={styles.type} style={typeChipStyle(display.type ?? p.type)}>
-                        {display.type ?? p.type ?? '—'}
+                      <Text size={100} className={styles.type} style={typeChipStyle(display.type)}>
+                        {display.type ?? '—'}
                       </Text>
                       <Text
                         size={100}
                         className={mergeClasses(styles.chip, styles.terrain)}
                         style={terrainChipStyle}
                       >
-                        {display.terrain ?? p.terrain ?? '—'}
+                        {display.terrain ?? '—'}
                       </Text>
                       {continent && (
                         <Text
