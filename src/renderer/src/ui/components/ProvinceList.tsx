@@ -69,15 +69,15 @@ const useStyles = makeStyles({
     transitionTimingFunction: tokens.curveEasyEase,
     '&:hover': {
       backgroundColor: tokens.colorNeutralBackground2,
-      borderColor: tokens.colorNeutralStroke2,
+      border: `1px solid ${tokens.colorNeutralStroke2}`,
       transform: 'translateY(-1px)'
     },
     '&::before': {
       content: '""',
       position: 'absolute',
       left: 0,
-      top: 7,
-      bottom: 7,
+      top: '7px',
+      bottom: '7px',
       width: '2px',
       borderRadius: tokens.borderRadiusCircular,
       backgroundColor: 'transparent'
@@ -85,11 +85,11 @@ const useStyles = makeStyles({
   },
   rowSelected: {
     backgroundColor: tokens.colorBrandBackground2,
-    borderColor: tokens.colorBrandStroke1,
+    border: `1px solid ${tokens.colorBrandStroke1}`,
     boxShadow: tokens.shadow4,
     '&:hover': {
       backgroundColor: tokens.colorBrandBackground2Hover,
-      borderColor: tokens.colorBrandStroke1
+      border: `1px solid ${tokens.colorBrandStroke1}`
     },
     '&::before': {
       backgroundColor: tokens.colorBrandForeground1

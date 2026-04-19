@@ -104,7 +104,7 @@ const MapViewportPane = memo(function MapViewportPane({
       setHoveredProvince(null)
       return
     }
-    const province = query.getProvinceByColor(packColor(color.r, g, color.b))
+    const province = query.getProvinceByColor(packColor(color.r, color.g, color.b))
     if (!province) {
       setHoveredProvince(null)
       return

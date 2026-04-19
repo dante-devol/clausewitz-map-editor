@@ -13,7 +13,8 @@ import {
   DialogBody,
   DialogContent,
   DialogActions,
-  DialogTrigger
+  DialogTrigger,
+  shorthands
 } from '@fluentui/react-components'
 import {
   FolderOpenRegular,
@@ -51,7 +52,7 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground2
   },
   gameChipError: {
-    borderColor: tokens.colorPaletteRedBorder2,
+    ...shorthands.borderColor(tokens.colorPaletteRedBorder2),
     backgroundColor: tokens.colorPaletteRedBackground1
   },
   gameChipIcon: {

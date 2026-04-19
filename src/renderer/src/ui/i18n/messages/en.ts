@@ -56,7 +56,6 @@ export const enMessages = {
   'overlay.visible': 'Visible',
   'overlay.opacity': 'Opacity',
   'overlay.hidden': 'Hidden',
-  'overlay.placeholderBody': 'Overlay-specific options will be added here.',
   'overlay.filterRules': 'Filter Rules',
   'overlay.addRule': 'Add Rule',
   'overlay.addBehavior': 'Add Rule',

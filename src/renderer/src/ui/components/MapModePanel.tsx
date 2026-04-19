@@ -24,11 +24,11 @@ import {
   Tooltip,
   makeStyles,
   mergeClasses,
-  tokens
+  tokens,
+  shorthands
 } from '@fluentui/react-components'
 import {
   Add12Regular,
-  AddRegular,
   CheckmarkCircleRegular,
   ColorRegular,
   DismissRegular,
@@ -141,7 +141,7 @@ const useStyles = makeStyles({
     cursor: 'pointer'
   },
   valueRowSelected: {
-    borderColor: tokens.colorBrandStroke1,
+    ...shorthands.borderColor(tokens.colorBrandStroke1),
     backgroundColor: tokens.colorBrandBackground2
   },
   swatch: {
@@ -249,7 +249,7 @@ const useStyles = makeStyles({
     opacity: 0.5
   },
   overlayCardDropTarget: {
-    borderColor: tokens.colorBrandStroke1
+    ...shorthands.borderColor(tokens.colorBrandStroke1)
   },
   overlayTitleRow: {
     display: 'flex',
@@ -465,7 +465,7 @@ const useStyles = makeStyles({
   },
   overlayRuleTokenActive: {
     color: tokens.colorNeutralForeground1,
-    borderColor: tokens.colorBrandStroke1,
+    ...shorthands.borderColor(tokens.colorBrandStroke1),
     backgroundColor: tokens.colorBrandBackground2
   },
   overlayRuleOverrideControl: {
@@ -628,7 +628,6 @@ export function MapModePanel({
 
         {activeTab === 'display' ? (
           <div className={styles.section}>
-            <Text size={200} weight="semibold" className={styles.label}>{t('mapMode.title')}</Text>
             <RadioGroup
               value={mode}
               layout="vertical"
@@ -662,7 +661,6 @@ export function MapModePanel({
           </div>
         ) : (
           <div className={styles.section}>
-            <Text size={200} weight="semibold" className={styles.label}>{t('overlay.title')}</Text>
             <div className={styles.overlayList}>
               {overlays.map((overlay) => {
                 return (
@@ -776,7 +774,6 @@ function OverlayOptionsDialog({
           </DialogTitle>
           <DialogContent>
             <div className={styles.section}>
-              <Text>{t('overlay.placeholderBody')}</Text>
               {overlay && (
                 <>
                   <div className={styles.overlayDialogMeta}>

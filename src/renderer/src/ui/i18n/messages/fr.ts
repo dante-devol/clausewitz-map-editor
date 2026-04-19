@@ -58,7 +58,6 @@ export const frMessages: Record<MessageKey, string> = {
   'overlay.visible': 'Visible',
   'overlay.opacity': 'Opacite',
   'overlay.hidden': 'Masque',
-  'overlay.placeholderBody': 'Les options specifiques aux superpositions seront ajoutees ici.',
   'overlay.filterRules': 'Regles de filtre',
   'overlay.addRule': 'Ajouter une regle',
   'overlay.addBehavior': 'Ajouter une regle',

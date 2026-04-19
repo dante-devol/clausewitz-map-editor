@@ -10,7 +10,8 @@ import {
   DialogTitle,
   DialogBody,
   DialogContent,
-  DialogActions
+  DialogActions,
+  shorthands
 } from '@fluentui/react-components'
 import { DismissRegular, FolderRegular } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
@@ -28,7 +29,7 @@ const useStyles = makeStyles({
     transition: 'background 0.1s, border-color 0.1s',
     ':hover': {
       backgroundColor: tokens.colorNeutralBackground2Hover,
-      borderColor: tokens.colorNeutralStroke1Hover
+      ...shorthands.borderColor(tokens.colorNeutralStroke1Hover)
     },
     ':active': {
       backgroundColor: tokens.colorNeutralBackground2Pressed

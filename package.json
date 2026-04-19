@@ -42,6 +42,7 @@
     "@fluentui/react-components": "^9.73.7",
     "@fluentui/react-icons": "^2.0.324",
     "@tanstack/react-virtual": "^3.13.24",
+    "gl-matrix": "^3.4.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^5.0.12"

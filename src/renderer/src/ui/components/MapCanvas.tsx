@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { animateValue, easeOutCubic, lerpVec2 } from '../lib/animateValue'
+import { vec2 } from 'gl-matrix'
 import { makeStyles, mergeClasses, tokens, Button, Spinner, Text, Tooltip, Skeleton, SkeletonItem } from '@fluentui/react-components'
 import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, LocationTargetSquareRegular } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
 import { MapRenderer } from '../../infra/lib/MapRenderer'
+import { BmpProvinceMapSource } from '../../infra/lib/BmpProvinceMapSource'
 import type { CanvasOverlay } from '../contracts/CanvasOverlay'
 import type { OverlayFilterRule } from '../../core/contracts/MapOverlay'
 
@@ -71,21 +74,6 @@ const useStyles = makeStyles({
     boxShadow: tokens.shadow8
   },
   canvasHidden: { visibility: 'hidden' },
-  // mix-blend-mode:difference means drawing white = |255 - background| per channel.
-  // pointer-events:none keeps clicks and gl.readPixels on the WebGL canvas unaffected.
-  overlay: {
-    display: 'block',
-    position: 'absolute',
-    inset: 0,
-    pointerEvents: 'none',
-    mixBlendMode: 'difference'
-  },
-  imageOverlay: {
-    display: 'block',
-    position: 'absolute',
-    inset: 0,
-    pointerEvents: 'none'
-  },
   controls: {
     position: 'absolute',
     bottom: tokens.spacingVerticalM,
@@ -168,8 +156,6 @@ export function MapCanvas({
   const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
-  const imageOverlayRef = useRef<HTMLCanvasElement>(null)
-  const overlayRef   = useRef<HTMLCanvasElement>(null)
   const rendererRef  = useRef<MapRenderer | null>(null)
   const canvasOverlaysRef = useRef<CanvasOverlay[]>([])
   const overlayBitmapsRef = useRef(new Map<string, OverlayBitmapEntry>())
@@ -178,6 +164,7 @@ export function MapCanvas({
   const colorMapRef       = useRef<Map<number, number> | null | undefined>(null)
   const alphaRef          = useRef(1)
   const animFrameRef = useRef<number | null>(null)
+  const cancelPanRef = useRef<(() => void) | null>(null)
   const dragRef      = useRef<{ startX: number; startY: number; startTX: number; startTY: number } | null>(null)
   const [dragging, setDragging] = useState(false)
   const [displayScale, setDisplayScale] = useState(1)
@@ -189,89 +176,24 @@ export function MapCanvas({
 
   const isCanvasLoading = baseImageLoading || overlaysLoadingCount > 0
 
-  const drawCanvasOverlays = useCallback(() => {
-    const canvas = imageOverlayRef.current
-    if (!canvas) return
-
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-    const { x: tx, y: ty, scale } = transformRef.current
-    ctx.imageSmoothingEnabled = scale < 1
-
+  const syncOverlaysToRenderer = useCallback(() => {
+    const renderer = rendererRef.current
+    if (!renderer) return
+    const entries: { id: string; source: ImageBitmap | OffscreenCanvas; opacity: number }[] = []
     for (const overlay of canvasOverlaysRef.current) {
       if (!overlay.visible) continue
       const entry = overlayBitmapsRef.current.get(overlay.id)
       if (!entry) continue
-      ctx.globalAlpha = overlay.opacity
-      const source = getOverlayRenderSource(entry, overlay)
-      ctx.drawImage(
-        source,
-        tx,
-        ty,
-        entry.width * scale,
-        entry.height * scale
-      )
+      entries.push({ id: overlay.id, source: getOverlayRenderSource(entry, overlay), opacity: overlay.opacity })
     }
-
-    ctx.globalAlpha = 1
-  }, [])
-
-  // Draws the per-pixel province edge at whatever alphaRef.current is.
-  // Called from the RAF animation loop and imperatively on transform/resize.
-  const drawOverlay = useCallback(() => {
-    const canvas = overlayRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')!
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-    const hc = highlightColorRef.current
-    if (hc === null) return
-    const edgeMask = rendererRef.current?.computeEdgeMask(hc)
-    if (!edgeMask) return
-
-    const { x: tx, y: ty, scale } = transformRef.current
-    const { width: iw, height: ih } = rendererRef.current!.imageSize
-    const a = alphaRef.current
-
-    // Boost blur for provinces that appear small on screen so they stay visible
-    // when zoomed out. screenArea < THRESHOLD → boost up to MAX_BOOST×.
-    const provincePixels = rendererRef.current!.edgeMaskProvincePixels
-    const screenArea = Math.max(1, provincePixels * scale * scale)
-    const THRESHOLD = 8_000
-    const MAX_BOOST = 6
-    const t = Math.max(0, 1 - screenArea / THRESHOLD)
-    const boost = 1 + (MAX_BOOST - 1) * Math.sqrt(t)
-
-    // Wide outer halo.
-    ctx.filter = `blur(${Math.round(12 * boost)}px)`
-    ctx.globalAlpha = a * 0.55
-    ctx.imageSmoothingEnabled = true
-    ctx.drawImage(edgeMask, tx, ty, iw * scale, ih * scale)
-
-    // Mid glow.
-    ctx.filter = `blur(${Math.round(4 * boost)}px)`
-    ctx.globalAlpha = a * 0.75
-    ctx.drawImage(edgeMask, tx, ty, iw * scale, ih * scale)
-
-    // Sharp core.
-    ctx.filter = 'none'
-    ctx.globalAlpha = a
-    ctx.imageSmoothingEnabled = scale < 1
-    ctx.drawImage(edgeMask, tx, ty, iw * scale, ih * scale)
-
-    ctx.globalAlpha = 1
+    renderer.setOverlayTextures(entries)
   }, [])
 
   const applyTransform = useCallback((next: Transform) => {
     transformRef.current = next
     setDisplayScale(next.scale)
-    rendererRef.current?.render(next.x, next.y, next.scale)
-    drawCanvasOverlays()
-    drawOverlay()
-  }, [drawCanvasOverlays, drawOverlay])
+    rendererRef.current?.render(next.x, next.y, next.scale, alphaRef.current)
+  }, [])
 
   const fit = useCallback(() => {
     const renderer = rendererRef.current
@@ -289,14 +211,13 @@ export function MapCanvas({
   // Create renderer on mount; cancel any pending RAF and dispose on unmount.
   useEffect(() => {
     const canvas    = canvasRef.current!
-    const imageOverlay = imageOverlayRef.current!
-    const overlay   = overlayRef.current!
     const container = containerRef.current!
-    canvas.width = imageOverlay.width = overlay.width = container.clientWidth
-    canvas.height = imageOverlay.height = overlay.height = container.clientHeight
+    canvas.width = container.clientWidth
+    canvas.height = container.clientHeight
     rendererRef.current = new MapRenderer(canvas)
     return () => {
       if (animFrameRef.current !== null) cancelAnimationFrame(animFrameRef.current)
+      cancelPanRef.current?.()
       for (const entry of overlayBitmapsRef.current.values()) entry.bitmap.close()
       overlayBitmapsRef.current.clear()
       rendererRef.current?.dispose()
@@ -314,7 +235,10 @@ export function MapCanvas({
     setImageLoaded(false)
     setBaseImageLoading(true)
     let cancelled = false
-    rendererRef.current?.loadImage(src).then(() => {
+    BmpProvinceMapSource.load(src).then(async (source) => {
+      if (cancelled) { source.dispose(); return }
+      await rendererRef.current?.loadImage(source)
+      source.dispose()
       if (cancelled) return
       const cm = colorMapRef.current
       if (cm && cm.size > 0) rendererRef.current?.recolorTexture(cm)
@@ -342,9 +266,8 @@ export function MapCanvas({
       renderer.restoreOriginalTexture()
     }
     const t = transformRef.current
-    renderer.render(t.x, t.y, t.scale)
-    drawCanvasOverlays()
-  }, [colorMap, drawCanvasOverlays])
+    renderer.render(t.x, t.y, t.scale, alphaRef.current)
+  }, [colorMap])
 
   useEffect(() => {
     canvasOverlaysRef.current = overlays
@@ -401,7 +324,9 @@ export function MapCanvas({
       }
 
       setOverlaysLoadingCount(0)
-      drawCanvasOverlays()
+      syncOverlaysToRenderer()
+      const { x: tx, y: ty, scale } = transformRef.current
+      rendererRef.current?.render(tx, ty, scale, alphaRef.current)
     }
 
     void loadOverlays().catch(() => {
@@ -410,35 +335,39 @@ export function MapCanvas({
 
     if (overlays.length === 0) {
       setOverlaysLoadingCount(0)
-      drawCanvasOverlays()
+      syncOverlaysToRenderer()
+      const { x: tx, y: ty, scale } = transformRef.current
+      rendererRef.current?.render(tx, ty, scale, alphaRef.current)
     }
 
     return () => {
       cancelled = true
       setOverlaysLoadingCount(0)
     }
-  }, [overlays, drawCanvasOverlays])
+  }, [overlays, syncOverlaysToRenderer])
 
   // Compute edge mask and manage the pulse animation loop.
   useEffect(() => {
     highlightColorRef.current = highlightColor
+    rendererRef.current?.setHighlightColor(highlightColor)
 
-    // Always cancel the previous loop before deciding whether to start a new one.
     if (animFrameRef.current !== null) {
       cancelAnimationFrame(animFrameRef.current)
       animFrameRef.current = null
     }
 
     if (highlightColor === null) {
-      alphaRef.current = 1
-      drawOverlay()   // clears the overlay
+      alphaRef.current = 0
+      const { x: tx, y: ty, scale } = transformRef.current
+      rendererRef.current?.render(tx, ty, scale, 0)
       return
     }
 
     const loop = (time: number) => {
-      const raw = Math.sin(time * PULSE_SPEED) * 0.5 + 0.5  // 0→1 sine
-      alphaRef.current = raw * raw                            // ease-in: flash bright, linger dark
-      drawOverlay()
+      const raw = Math.sin(time * PULSE_SPEED) * 0.5 + 0.5
+      alphaRef.current = raw * raw
+      const { x: tx, y: ty, scale } = transformRef.current
+      rendererRef.current?.render(tx, ty, scale, alphaRef.current)
       animFrameRef.current = requestAnimationFrame(loop)
     }
     animFrameRef.current = requestAnimationFrame(loop)
@@ -449,30 +378,28 @@ export function MapCanvas({
         animFrameRef.current = null
       }
     }
-  }, [highlightColor, drawOverlay])
+  }, [highlightColor])
 
   useEffect(() => {
     const container = containerRef.current
     const canvas    = canvasRef.current
-    const imageOverlay = imageOverlayRef.current
-    const overlay   = overlayRef.current
-    if (!container || !canvas || !imageOverlay || !overlay) return
+    if (!container || !canvas) return
     const observer = new ResizeObserver(() => {
-      canvas.width = imageOverlay.width = overlay.width = container.clientWidth
-      canvas.height = imageOverlay.height = overlay.height = container.clientHeight
+      canvas.width = container.clientWidth
+      canvas.height = container.clientHeight
       const t = transformRef.current
-      rendererRef.current?.render(t.x, t.y, t.scale)
-      drawCanvasOverlays()
-      drawOverlay()
+      rendererRef.current?.render(t.x, t.y, t.scale, alphaRef.current)
     })
     observer.observe(container)
     return () => observer.disconnect()
-  }, [drawCanvasOverlays, drawOverlay])
+  }, [])
 
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
     const handler = (e: WheelEvent) => {
+      cancelPanRef.current?.()
+      cancelPanRef.current = null
       e.preventDefault()
       const canvas = canvasRef.current
       if (!canvas) return
@@ -490,6 +417,8 @@ export function MapCanvas({
   }, [applyTransform])
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
+    cancelPanRef.current?.()
+    cancelPanRef.current = null
     if (e.button === 1) {
       e.preventDefault()
       const t = transformRef.current
@@ -546,11 +475,24 @@ export function MapCanvas({
     if (!renderer || !canvas) return
     const centroid = renderer.edgeMaskCentroid
     if (!centroid) return
+
     const { scale } = transformRef.current
-    applyTransform({
-      scale,
-      x: canvas.width  / 2 - centroid.x * scale,
-      y: canvas.height / 2 - centroid.y * scale,
+    const from = transformRef.current
+    const toX = canvas.width  / 2 - centroid.x * scale
+    const toY = canvas.height / 2 - centroid.y * scale
+
+    // Skip animation if already within 1px of target.
+    if (Math.abs(from.x - toX) < 1 && Math.abs(from.y - toY) < 1) return
+
+    cancelPanRef.current?.()
+
+    const fromPos = vec2.fromValues(from.x, from.y)
+    const toPos   = vec2.fromValues(toX, toY)
+    const scratch = vec2.create()
+
+    cancelPanRef.current = animateValue(450, easeOutCubic, (t) => {
+      lerpVec2(scratch, fromPos, toPos, t)
+      applyTransform({ scale, x: scratch[0], y: scratch[1] })
     })
   }, [applyTransform])
 
@@ -582,8 +524,6 @@ export function MapCanvas({
       }}
     >
       <canvas ref={canvasRef}  className={mergeClasses(styles.canvas,  !imageLoaded && styles.canvasHidden)} />
-      <canvas ref={imageOverlayRef} className={mergeClasses(styles.imageOverlay, !imageLoaded && styles.canvasHidden)} />
-      <canvas ref={overlayRef} className={mergeClasses(styles.overlay, !imageLoaded && styles.canvasHidden)} />
       {!imageLoaded && (
         <div className={styles.skeleton}>
           <Skeleton style={{ width: '100%', height: '100%' }}>
