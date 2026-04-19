@@ -1,4 +1,5 @@
-import type { Continent, Province, TerrainCategory } from '../../../../shared/mapDataTypes'
+import type { Continent, TerrainCategory } from '../../../../shared/mapDataTypes'
+import type { ProvinceDraftTarget } from '../../../../shared/provinceEditing'
 import type { DisplayModeOverrides } from '../store/displayModeConfigStore'
 
 export type DisplayMode =
@@ -23,6 +24,11 @@ export interface DisplayModeContext {
   stateProvinceToStateId: ReadonlyMap<number, number>
   strategicRegionProvinceToRegionId: ReadonlyMap<number, number>
 }
+
+export type DisplayModeProvince = Pick<
+  ProvinceDraftTarget,
+  'provinceId' | 'color' | 'type' | 'terrain' | 'isCoastal' | 'continent'
+>
 
 export const DISPLAY_MODES: DisplayMode[] = [
   'provinces',
@@ -98,14 +104,19 @@ function hashedGroupColor(id: number, variant: 'state' | 'strategicRegion'): num
   return (r << 16) | (g << 8) | b
 }
 
-export function getModeValueKey(mode: DisplayMode, province: Province, context: DisplayModeContext): string | null {
+export function getModeValueKey(
+  mode: DisplayMode,
+  province: DisplayModeProvince,
+  context: DisplayModeContext
+): string | null {
   if (mode === 'provinces') return null
   if (mode === 'type') return province.type ?? 'none'
   if (mode === 'terrain') return province.terrain ?? 'none'
   if (mode === 'coastal') return province.isCoastal === undefined ? 'none' : province.isCoastal ? 'coastal' : 'inland'
   if (mode === 'continent') return province.continent || 'none'
-  if (mode === 'state') return context.stateProvinceToStateId.get(province.id)?.toString() ?? 'none'
-  return context.strategicRegionProvinceToRegionId.get(province.id)?.toString() ?? 'none'
+  if (province.provinceId === null) return 'none'
+  if (mode === 'state') return context.stateProvinceToStateId.get(province.provinceId)?.toString() ?? 'none'
+  return context.strategicRegionProvinceToRegionId.get(province.provinceId)?.toString() ?? 'none'
 }
 
 export function getModeValueLabel(mode: DisplayMode, valueKey: string): string {
@@ -151,7 +162,7 @@ export function getResolvedModeValueColor(
 
 export function listModeValues(
   mode: DisplayMode,
-  provinces: ReadonlyMap<number, Province>,
+  provinces: ReadonlyMap<number, DisplayModeProvince>,
   overrides: DisplayModeOverrides,
   context: DisplayModeContext
 ): DisplayModeValueDescriptor[] {

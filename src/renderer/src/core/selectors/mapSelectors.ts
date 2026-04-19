@@ -1,4 +1,3 @@
-import type { Province } from '../../../../shared/mapDataTypes'
 import type { ProvinceCatalogEntry, ProvinceCatalogEntryKey } from '../../../../shared/provinceCatalog'
 import type { BmpOnlyEntry, ProvinceDraftTarget } from '../../../../shared/provinceEditing'
 import type { CoreState } from '../contracts/CoreState'
@@ -7,7 +6,8 @@ import {
   getResolvedModeValueColor,
   listModeValues,
   type ConfigurableDisplayMode,
-  type DisplayModeContext
+  type DisplayModeContext,
+  type DisplayModeProvince
 } from '../../infra/config/displayModes'
 import type { DisplayModeOverrides } from '../../infra/store/displayModeConfigStore'
 import type { ProvinceValidationIssue } from '../../../../shared/provinceValidation'
@@ -18,7 +18,7 @@ export const selectMapOverlays = (state: CoreState) => state.map.overlays
 export function selectHighlightColors(
   selectedProvinceIds: number[],
   selectedBmpGuids: string[],
-  provinces: ReadonlyMap<number, Province>,
+  provinces: ReadonlyMap<number, DisplayModeProvince>,
   bmpOnlyEntries: BmpOnlyEntry[],
   bmpReplacements: ReadonlyMap<number, string>
 ): number[] {
@@ -85,7 +85,7 @@ export function selectValidationHighlightColors(
 
 export function selectColorMap(
   state: CoreState,
-  provinces: ReadonlyMap<number, Province>,
+  provinces: ReadonlyMap<number, DisplayModeProvince>,
   overrides: DisplayModeOverrides,
   context: DisplayModeContext
 ): Map<number, number> | null {
@@ -103,7 +103,7 @@ export function selectColorMap(
 }
 
 export function selectModeValuesByMode(
-  provinces: ReadonlyMap<number, Province>,
+  provinces: ReadonlyMap<number, DisplayModeProvince>,
   overrides: DisplayModeOverrides,
   context: DisplayModeContext
 ): Partial<Record<ConfigurableDisplayMode, ReturnType<typeof listModeValues>>> {

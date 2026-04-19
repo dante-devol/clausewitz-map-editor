@@ -25,6 +25,7 @@ import { useProjectStore } from '../../infra/store/projectStore'
 import { useOverlayAssets } from '../hooks/useOverlayAssets'
 import { packColor } from '../../../../shared/mapDataTypes'
 import { useProvinceValidationStore } from '../../infra/store/provinceValidationStore'
+import { selectProvinceDraftTargetMaps } from '../../infra/store/provinceEditSelectors'
 
 const useStyles = makeStyles({
   root: {
@@ -95,6 +96,9 @@ const MapViewportPane = memo(function MapViewportPane({
 
   const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
   const provinces = useMapDataStore((s) => s.provinces)
+  const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
+  const pendingEdits = useMapDataStore((s) => s.pendingEdits)
+  const pendingBmpOnlyEdits = useMapDataStore((s) => s.pendingBmpOnlyEdits)
   const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
   const terrains = useMapDataStore((s) => s.terrains)
   const continents = useMapDataStore((s) => s.continents)
@@ -104,6 +108,7 @@ const MapViewportPane = memo(function MapViewportPane({
   const selectedBmpGuids = useMapDataStore((s) => s.selectedBmpGuids)
   const bmpOnlyEntries = useMapDataStore((s) => s.bmpOnlyEntries)
   const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
+  const pendingNewProvinces = useMapDataStore((s) => s.pendingNewProvinces)
   const setSelection = useMapDataStore((s) => s.setSelection)
   const extendSelection = useMapDataStore((s) => s.extendSelection)
   const setSelectedBmpGuids = useMapDataStore((s) => s.setSelectedBmpGuids)
@@ -117,9 +122,20 @@ const MapViewportPane = memo(function MapViewportPane({
     () => ({ terrains, continents, stateProvinceToStateId, strategicRegionProvinceToRegionId }),
     [terrains, continents, stateProvinceToStateId, strategicRegionProvinceToRegionId]
   )
+  const effectiveProvinceTargets = useMemo(
+    () => selectProvinceDraftTargetMaps(
+      originalDefinitions,
+      pendingEdits,
+      pendingBmpOnlyEdits,
+      bmpReplacements,
+      pendingNewProvinces,
+      bmpOnlyEntries
+    ),
+    [originalDefinitions, pendingEdits, pendingBmpOnlyEdits, bmpReplacements, pendingNewProvinces, bmpOnlyEntries]
+  )
   const modeValuesByMode = useMemo(
-    () => selectModeValuesByMode(provinces, displayModeOverrides, displayModeContext),
-    [provinces, displayModeOverrides, displayModeContext]
+    () => selectModeValuesByMode(effectiveProvinceTargets.byColor, displayModeOverrides, displayModeContext),
+    [effectiveProvinceTargets, displayModeOverrides, displayModeContext]
   )
 
   const highlightColors = useMemo(
@@ -132,7 +148,9 @@ const MapViewportPane = memo(function MapViewportPane({
     [selectedProvinceIds, provinceCatalog, issuesByProvinceKey]
   )
 
-  const colorMap = useCoreSelector((state) => selectColorMap(state, provinces, displayModeOverrides, displayModeContext))
+  const colorMap = useCoreSelector((state) =>
+    selectColorMap(state, effectiveProvinceTargets.byColor, displayModeOverrides, displayModeContext)
+  )
 
   const onColorPicked = useCallback((r: number, g: number, b: number, additive: boolean) => {
     const draft = query.getDraftProvinceByColor(packColor(r, g, b))
