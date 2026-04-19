@@ -13,10 +13,6 @@ const ZOOM_STEP = 1.25
 const ZOOM_MIN = 0.02
 const ZOOM_MAX = 32
 
-// Glow pulse: ~2 s period, full 0→1 range with a quadratic ease that spends
-// most of the cycle near-zero and snaps to bright — flash rather than fade.
-const PULSE_SPEED = 0.003
-
 interface Transform { x: number; y: number; scale: number }
 interface SampledColor { r: number; g: number; b: number }
 interface HoveredColor extends SampledColor { x: number; y: number }
@@ -134,9 +130,9 @@ const useStyles = makeStyles({
 interface Props {
   src: string | null
   overlays?: CanvasOverlay[]
-  highlightColor: number | null
+  highlightColors: number[]
   colorMap?: Map<number, number> | null
-  onColorPicked?: (r: number, g: number, b: number) => void
+  onColorPicked?: (r: number, g: number, b: number, additive: boolean) => void
   hoverTooltipPosition?: HoverTooltipPosition | null
   hoverTooltip?: { label: string; value: string } | null
   onHoverColorChange?: (color: HoveredColor | null) => void
@@ -145,7 +141,7 @@ interface Props {
 export function MapCanvas({
   src,
   overlays = [],
-  highlightColor,
+  highlightColors,
   colorMap,
   onColorPicked,
   hoverTooltipPosition,
@@ -160,10 +156,8 @@ export function MapCanvas({
   const canvasOverlaysRef = useRef<CanvasOverlay[]>([])
   const overlayBitmapsRef = useRef(new Map<string, OverlayBitmapEntry>())
   const transformRef      = useRef<Transform>({ x: 0, y: 0, scale: 1 })
-  const highlightColorRef = useRef<number | null>(null)
-  const colorMapRef       = useRef<Map<number, number> | null | undefined>(null)
-  const alphaRef          = useRef(1)
-  const animFrameRef = useRef<number | null>(null)
+  const highlightColorsRef = useRef<number[]>([])
+  const colorMapRef        = useRef<Map<number, number> | null | undefined>(null)
   const cancelPanRef = useRef<(() => void) | null>(null)
   const dragRef      = useRef<{ startX: number; startY: number; startTX: number; startTY: number } | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -192,7 +186,7 @@ export function MapCanvas({
   const applyTransform = useCallback((next: Transform) => {
     transformRef.current = next
     setDisplayScale(next.scale)
-    rendererRef.current?.render(next.x, next.y, next.scale, alphaRef.current)
+    rendererRef.current?.render(next.x, next.y, next.scale)
   }, [])
 
   const fit = useCallback(() => {
@@ -216,7 +210,6 @@ export function MapCanvas({
     canvas.height = container.clientHeight
     rendererRef.current = new MapRenderer(canvas)
     return () => {
-      if (animFrameRef.current !== null) cancelAnimationFrame(animFrameRef.current)
       cancelPanRef.current?.()
       for (const entry of overlayBitmapsRef.current.values()) entry.bitmap.close()
       overlayBitmapsRef.current.clear()
@@ -266,7 +259,7 @@ export function MapCanvas({
       renderer.restoreOriginalTexture()
     }
     const t = transformRef.current
-    renderer.render(t.x, t.y, t.scale, alphaRef.current)
+    renderer.render(t.x, t.y, t.scale)
   }, [colorMap])
 
   useEffect(() => {
@@ -326,7 +319,7 @@ export function MapCanvas({
       setOverlaysLoadingCount(0)
       syncOverlaysToRenderer()
       const { x: tx, y: ty, scale } = transformRef.current
-      rendererRef.current?.render(tx, ty, scale, alphaRef.current)
+      rendererRef.current?.render(tx, ty, scale)
     }
 
     void loadOverlays().catch(() => {
@@ -337,7 +330,7 @@ export function MapCanvas({
       setOverlaysLoadingCount(0)
       syncOverlaysToRenderer()
       const { x: tx, y: ty, scale } = transformRef.current
-      rendererRef.current?.render(tx, ty, scale, alphaRef.current)
+      rendererRef.current?.render(tx, ty, scale)
     }
 
     return () => {
@@ -346,39 +339,12 @@ export function MapCanvas({
     }
   }, [overlays, syncOverlaysToRenderer])
 
-  // Compute edge mask and manage the pulse animation loop.
   useEffect(() => {
-    highlightColorRef.current = highlightColor
-    rendererRef.current?.setHighlightColor(highlightColor)
-
-    if (animFrameRef.current !== null) {
-      cancelAnimationFrame(animFrameRef.current)
-      animFrameRef.current = null
-    }
-
-    if (highlightColor === null) {
-      alphaRef.current = 0
-      const { x: tx, y: ty, scale } = transformRef.current
-      rendererRef.current?.render(tx, ty, scale, 0)
-      return
-    }
-
-    const loop = (time: number) => {
-      const raw = Math.sin(time * PULSE_SPEED) * 0.5 + 0.5
-      alphaRef.current = raw * raw
-      const { x: tx, y: ty, scale } = transformRef.current
-      rendererRef.current?.render(tx, ty, scale, alphaRef.current)
-      animFrameRef.current = requestAnimationFrame(loop)
-    }
-    animFrameRef.current = requestAnimationFrame(loop)
-
-    return () => {
-      if (animFrameRef.current !== null) {
-        cancelAnimationFrame(animFrameRef.current)
-        animFrameRef.current = null
-      }
-    }
-  }, [highlightColor])
+    highlightColorsRef.current = highlightColors
+    rendererRef.current?.setHighlightColors(highlightColors)
+    const { x: tx, y: ty, scale } = transformRef.current
+    rendererRef.current?.render(tx, ty, scale)
+  }, [highlightColors])
 
   useEffect(() => {
     const container = containerRef.current
@@ -388,7 +354,7 @@ export function MapCanvas({
       canvas.width = container.clientWidth
       canvas.height = container.clientHeight
       const t = transformRef.current
-      rendererRef.current?.render(t.x, t.y, t.scale, alphaRef.current)
+      rendererRef.current?.render(t.x, t.y, t.scale)
     })
     observer.observe(container)
     return () => observer.disconnect()
@@ -436,7 +402,7 @@ export function MapCanvas({
       const { x: tx, y: ty, scale } = transformRef.current
       const color = rendererRef.current?.readOriginalPixel(cx, cy, tx, ty, scale)
       setSampledColor(color ?? null)
-      if (color) onColorPicked?.(color.r, color.g, color.b)
+      if (color) onColorPicked?.(color.r, color.g, color.b, e.shiftKey)
       return
     }
     const t = transformRef.current
@@ -473,7 +439,7 @@ export function MapCanvas({
     const renderer = rendererRef.current
     const canvas   = canvasRef.current
     if (!renderer || !canvas) return
-    const centroid = renderer.edgeMaskCentroid
+    const centroid = renderer.provinceCentroid
     if (!centroid) return
 
     const { scale } = transformRef.current

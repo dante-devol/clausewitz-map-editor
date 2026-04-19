@@ -44,6 +44,7 @@ import type { MessageKey } from '../i18n/messages/en'
 import type { OverlayFilterRule, OverlayId } from '../../core/contracts/MapOverlay'
 import { useDisplayModeConfigStore } from '../../infra/store/displayModeConfigStore'
 import type { OverlayPanelItem } from '../hooks/useOverlayAssets'
+import type { OverlayFilterRuleTemplate } from '../contracts/OverlayConfiguration'
 import {
   type ConfigurableDisplayMode,
   type DisplayMode,
@@ -610,9 +611,29 @@ export function MapModePanel({
   const [overlayDialogId, setOverlayDialogId] = useState<OverlayId | null>(null)
   const [draggedOverlayId, setDraggedOverlayId] = useState<OverlayId | null>(null)
   const [dropTargetOverlayId, setDropTargetOverlayId] = useState<OverlayId | null>(null)
+  const [initializedOverlayDefaults, setInitializedOverlayDefaults] = useState<OverlayId[]>([])
 
   const activeValues = dialogMode ? (valuesByMode[dialogMode] ?? []) : []
   const selectedOverlay = overlays.find((overlay) => overlay.id === overlayDialogId) ?? null
+
+  function openOverlayDialog(overlay: OverlayPanelItem) {
+    const hasDefaults = (overlay.configuration.defaultFilterRules?.length ?? 0) > 0
+    const alreadyInitialized = initializedOverlayDefaults.includes(overlay.id)
+
+    if (!alreadyInitialized) {
+      setInitializedOverlayDefaults((current) => (
+        current.includes(overlay.id) ? current : [...current, overlay.id]
+      ))
+    }
+
+    if (!alreadyInitialized && overlay.filterRules.length === 0 && hasDefaults) {
+      onOverlayFilterRulesChange(overlay.id, createOverlayFilterRulesFromTemplates(
+        overlay.configuration.defaultFilterRules ?? []
+      ))
+    }
+
+    setOverlayDialogId(overlay.id)
+  }
 
   return (
     <>
@@ -722,7 +743,7 @@ export function MapModePanel({
                         size="small"
                         icon={<SettingsRegular />}
                         aria-label={t('overlay.options')}
-                        onClick={() => setOverlayDialogId(overlay.id)}
+                        onClick={() => openOverlayDialog(overlay)}
                       />
                     </div>
                   </div>
@@ -937,6 +958,24 @@ function createDefaultOverlayFilterRule(overlay: OverlayPanelItem): OverlayFilte
     opacity: 100,
     color: null
   }
+}
+
+function createOverlayFilterRulesFromTemplates(templates: OverlayFilterRuleTemplate[]): OverlayFilterRule[] {
+  return templates.map((template) => ({
+    id: crypto.randomUUID(),
+    target: template.target.kind === 'group'
+      ? {
+        kind: 'group',
+        groupId: template.target.groupId
+      }
+      : {
+        kind: 'custom',
+        colors: [...template.target.colors]
+      },
+    visible: template.visible ?? true,
+    opacity: template.opacity ?? 100,
+    color: template.color ?? null
+  }))
 }
 
 function formatPathChipValue(path: string): string {

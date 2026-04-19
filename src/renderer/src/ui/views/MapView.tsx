@@ -10,11 +10,11 @@ import { mapCommands } from '../../core/commands/mapCommands'
 import {
   selectColorMap,
   selectDisplayMode,
-  selectHighlightColor,
+  selectHighlightColors,
   selectHoverTooltip,
   selectMapOverlays,
   selectModeValuesByMode,
-  selectSelectedProvinceId
+  selectSelectedProvinceIds
 } from '../../core/selectors/mapSelectors'
 import { useI18n } from '../i18n/I18nProvider'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
@@ -91,12 +91,16 @@ const MapViewportPane = memo(function MapViewportPane({
   const src = provincesImageB64 ? `data:image/bmp;base64,${provincesImageB64}` : null
   const displayModeContext = useMemo(() => ({ terrains, continents }), [terrains, continents])
 
-  const highlightColor = useCoreSelector((state) => selectHighlightColor(state, provinces))
+  const highlightColors = useCoreSelector((state) => selectHighlightColors(state, provinces))
   const colorMap = useCoreSelector((state) => selectColorMap(state, provinces, displayModeOverrides, displayModeContext))
 
-  const onColorPicked = useCallback((r: number, g: number, b: number) => {
+  const onColorPicked = useCallback((r: number, g: number, b: number, additive: boolean) => {
     const province = query.getProvinceByColor(packColor(r, g, b))
-    if (province) api.dispatch(mapCommands.selectProvince(province.id))
+    if (!province) return
+    api.dispatch(additive
+      ? mapCommands.toggleProvinceSelection(province.id)
+      : mapCommands.setSelection([province.id])
+    )
   }, [api, query])
 
   const onHoverColorChange = useCallback((color: { r: number; g: number; b: number; x: number; y: number } | null) => {
@@ -126,7 +130,7 @@ const MapViewportPane = memo(function MapViewportPane({
       <MapCanvas
         src={src}
         overlays={canvasOverlays}
-        highlightColor={highlightColor}
+        highlightColors={highlightColors}
         colorMap={colorMap}
         onColorPicked={onColorPicked}
         hoverTooltipPosition={hoveredProvince ? { x: hoveredProvince.x, y: hoveredProvince.y } : null}
@@ -176,13 +180,13 @@ const MapSidebarTop = memo(function MapSidebarTop({
 const ProvinceListPane = memo(function ProvinceListPane() {
   const api = useCoreApi()
   const provinces = useMapDataStore((s) => s.provinces)
-  const selectedProvinceId = useCoreSelector(selectSelectedProvinceId)
+  const selectedProvinceIds = useCoreSelector(selectSelectedProvinceIds)
 
   return (
     <ProvinceList
       provinces={provinces}
-      selectedId={selectedProvinceId}
-      onSelect={(provinceId) => api.dispatch(mapCommands.selectProvince(provinceId))}
+      selectedIds={selectedProvinceIds}
+      onSelect={(provinceId) => api.dispatch(mapCommands.setSelection([provinceId]))}
     />
   )
 })

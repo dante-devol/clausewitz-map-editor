@@ -17,5 +17,5 @@ export type CoreCommand =
   | { type: 'map/setOverlayOpacity'; overlayId: OverlayId; opacity: number }
   | { type: 'map/setOverlayFilterRules'; overlayId: OverlayId; rules: OverlayFilterRule[] }
   | { type: 'map/moveOverlay'; overlayId: OverlayId; targetOverlayId: OverlayId }
-  | { type: 'map/selectProvince'; provinceId: number }
-  | { type: 'map/clearSelection' }
+  | { type: 'map/setSelection'; provinceIds: number[] }
+  | { type: 'map/toggleProvinceSelection'; provinceId: number }

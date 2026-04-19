@@ -155,11 +155,11 @@ const useStyles = makeStyles({
 
 interface Props {
   provinces: ReadonlyMap<number, Province>
-  selectedId: number | null
+  selectedIds: number[]
   onSelect?: (id: number) => void
 }
 
-export function ProvinceList({ provinces, selectedId, onSelect }: Props): JSX.Element {
+export function ProvinceList({ provinces, selectedIds, onSelect }: Props): JSX.Element {
   const styles = useStyles()
   const { t, formatNumber } = useI18n()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -178,18 +178,23 @@ export function ProvinceList({ provinces, selectedId, onSelect }: Props): JSX.El
     overscan: 12
   })
 
+  // Set for O(1) per-row lookup.
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
+
+  // Scroll to the last touched province (tail of the array) after each selection change.
+  const scrollTargetId = selectedIds.length > 0 ? selectedIds[selectedIds.length - 1] : null
   const selectedIndex = useMemo(() => {
-    if (selectedId === null) return -1
+    if (scrollTargetId === null) return -1
     let lo = 0, hi = sortedProvinces.length - 1
     while (lo <= hi) {
       const mid = (lo + hi) >> 1
       const id = sortedProvinces[mid].id
-      if (id === selectedId) return mid
-      if (id < selectedId) lo = mid + 1
+      if (id === scrollTargetId) return mid
+      if (id < scrollTargetId) lo = mid + 1
       else hi = mid - 1
     }
     return -1
-  }, [selectedId, sortedProvinces])
+  }, [scrollTargetId, sortedProvinces])
 
   useEffect(() => {
     if (selectedIndex < 0) return
@@ -222,7 +227,7 @@ export function ProvinceList({ provinces, selectedId, onSelect }: Props): JSX.El
               {rowVirtualizer.getVirtualItems().map((item) => {
                 const p = sortedProvinces[item.index]
                 const { r, g, b } = unpackColor(p.color)
-                const isSelected = p.id === selectedId
+                const isSelected = selectedIdSet.has(p.id)
                 const terrainColor = terrains.get(p.terrain)?.color
                 const terrainChipStyle = terrainColor !== undefined
                   ? makePackedChipStyle(terrainColor)

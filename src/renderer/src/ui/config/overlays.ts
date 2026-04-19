@@ -22,6 +22,29 @@ export const OVERLAY_META: Record<OverlayId, OverlayMeta> = {
           label: 'River',
           colors: ['#00ff00', '#ff0000', '#fffc00', '#00e1ff', '#00c8ff', '#0096ff', '#0064ff', '#0000ff', '#0000e1', '#0000c8', '#000096', '#000064']
         }
+      ],
+      defaultFilterRules: [
+        {
+          target: {
+            kind: 'group',
+            groupId: 'sea'
+          },
+          visible: false
+        },
+        {
+          target: {
+            kind: 'group',
+            groupId: 'land'
+          },
+          visible: false
+        },
+        {
+          target: {
+            kind: 'group',
+            groupId: 'river'
+          },
+          color: '#ffffff'
+        }
       ]
     }
   }

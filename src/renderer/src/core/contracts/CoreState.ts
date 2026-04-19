@@ -5,10 +5,6 @@ import type { SessionLifecycle } from './SessionLifecycle'
 export type Theme = 'dark' | 'light'
 export type View = 'map' | 'provinces' | 'settings'
 
-export type MapSelection =
-  | { kind: 'none' }
-  | { kind: 'province'; provinceId: number }
-
 export interface CoreState {
   app: {
     theme: Theme
@@ -18,7 +14,7 @@ export interface CoreState {
   map: {
     displayMode: DisplayMode
     overlays: MapOverlayState[]
-    selection: MapSelection
+    selectedProvinceIds: number[]
   }
 }
 
@@ -36,6 +32,6 @@ export const INITIAL_CORE_STATE: CoreState = {
   map: {
     displayMode: 'provinces',
     overlays: INITIAL_MAP_OVERLAYS,
-    selection: { kind: 'none' }
+    selectedProvinceIds: []
   }
 }

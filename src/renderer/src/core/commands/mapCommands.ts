@@ -15,6 +15,6 @@ export const mapCommands = {
   moveOverlay: (overlayId: OverlayId, targetOverlayId: OverlayId) => (
     { type: 'map/moveOverlay' as const, overlayId, targetOverlayId }
   ),
-  selectProvince: (provinceId: number) => ({ type: 'map/selectProvince' as const, provinceId }),
-  clearSelection: () => ({ type: 'map/clearSelection' as const })
+  setSelection: (provinceIds: number[]) => ({ type: 'map/setSelection' as const, provinceIds }),
+  toggleProvinceSelection: (provinceId: number) => ({ type: 'map/toggleProvinceSelection' as const, provinceId }),
 }

@@ -1,6 +1,6 @@
-import { buildProvinceIndex, computeEdgeMask } from './provinceAnalysis'
+import { buildProvinceIndex } from './provinceAnalysis'
 import type { ProvinceMapSource } from './ProvinceMapSource'
-import type { EdgeMaskResult, ProvinceIndex } from './provinceAnalysis'
+import type { ProvinceIndex } from './provinceAnalysis'
 
 // Vertex shader: maps [0,1]×[0,1] unit quad to clip space via a mat3.
 // UV passes straight through — texImage2D row 0 (top) is at V=0, matching quad Y.
@@ -49,60 +49,47 @@ void main() {
 }
 `
 
-// Fullscreen vertex shader for FBO-to-FBO blur passes and the final composite.
-// Maps [0,1]×[0,1] quad to clip space with no transform — fills the screen.
-const VERT_FULLSCREEN = `#version 300 es
+// Province outline: for each fragment, looks up whether the province at that UV
+// is selected (via a dedicated selection texture, same 256-column layout as the
+// palette). Checks 4 screen-pixel-offset neighbours; if any differ in selection
+// state this is a border pixel → white (inverted by ONE_MINUS_DST_COLOR blend).
+const FRAG_OUTLINE = `#version 300 es
+precision highp float;
+uniform sampler2D u_id_tex;
+uniform sampler2D u_sel_tex;
+uniform int u_sel_height;
+uniform vec2 u_poff;
+in vec2 v_uv;
+out vec4 fragColor;
+bool isSel(vec2 uv) {
+  vec4 p = texture(u_id_tex, clamp(uv, vec2(0.0), vec2(1.0)));
+  float pu = (p.r * 255.0 + 0.5) / 256.0;
+  float pv = (p.g * 255.0 + 0.5) / float(u_sel_height);
+  return texture(u_sel_tex, vec2(pu, pv)).r > 0.5;
+}
+void main() {
+  bool c = isSel(v_uv);
+  if (isSel(v_uv + vec2( u_poff.x, 0.0)) == c &&
+      isSel(v_uv + vec2(-u_poff.x, 0.0)) == c &&
+      isSel(v_uv + vec2(0.0,  u_poff.y)) == c &&
+      isSel(v_uv + vec2(0.0, -u_poff.y)) == c) discard;
+  fragColor = vec4(1.0);
+}
+`
+
+// Bounding-box outline: vertices arrive pre-computed in NDC.
+const VERT_NDC = `#version 300 es
 in vec2 a_pos;
-out vec2 v_uv;
 void main() {
-  gl_Position = vec4(a_pos * 2.0 - 1.0, 0.0, 1.0);
-  v_uv = a_pos;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
 }
 `
 
-// Simple RGBA passthrough — used to blit the edge mask into the edgeFBO.
-const FRAG_EDGE = `#version 300 es
+const FRAG_WHITE = `#version 300 es
 precision mediump float;
-uniform sampler2D u_tex;
-in vec2 v_uv;
 out vec4 fragColor;
 void main() {
-  fragColor = texture(u_tex, v_uv);
-}
-`
-
-// Separable 13-tap Gaussian blur. u_direction carries the per-axis texel step
-// already scaled by the adaptive blur radius:
-//   horizontal pass: vec2(blurRadius / screenW, 0)
-//   vertical pass:   vec2(0, blurRadius / screenH)
-const FRAG_BLUR = `#version 300 es
-precision mediump float;
-uniform sampler2D u_tex;
-uniform vec2 u_direction;
-in vec2 v_uv;
-out vec4 fragColor;
-void main() {
-  float w[7] = float[7](0.1847, 0.1623, 0.1113, 0.0596, 0.0249, 0.0081, 0.0020);
-  vec4 result = texture(u_tex, v_uv) * w[0];
-  for (int i = 1; i < 7; i++) {
-    vec2 off = u_direction * float(i);
-    result += texture(u_tex, v_uv + off) * w[i];
-    result += texture(u_tex, v_uv - off) * w[i];
-  }
-  fragColor = result;
-}
-`
-
-// Glow composite — blits the blurred glow texture additively scaled by u_glow_alpha.
-const FRAG_GLOW = `#version 300 es
-precision mediump float;
-uniform sampler2D u_tex;
-uniform float u_glow_alpha;
-in vec2 v_uv;
-out vec4 fragColor;
-void main() {
-  vec4 color = texture(u_tex, v_uv);
-  fragColor = vec4(color.rgb, color.a * u_glow_alpha);
+  fragColor = vec4(1.0);
 }
 `
 
@@ -137,40 +124,37 @@ export class MapRenderer {
   private readonly overlayOpacityLoc: WebGLUniformLocation
   private overlayEntries: { id: string; texture: WebGLTexture; opacity: number }[] = []
 
-  // --- Glow / edge-mask pipeline ---
-  private edgeMaskTexture: WebGLTexture | null = null
+  // --- Province outline pipeline ---
+  private readonly outlineProgram: WebGLProgram
+  private readonly outlinePosLoc: number
+  private readonly outlineMatrixLoc: WebGLUniformLocation
+  private readonly outlineIdTexLoc: WebGLUniformLocation
+  private readonly outlineSelTexLoc: WebGLUniformLocation
+  private readonly outlineSelHeightLoc: WebGLUniformLocation
+  private readonly outlinePoffLoc: WebGLUniformLocation
 
-  // Screen-space FBOs for Gaussian blur passes.
-  private edgeFBO:  { fbo: WebGLFramebuffer; tex: WebGLTexture } | null = null
-  private blurHFBO: { fbo: WebGLFramebuffer; tex: WebGLTexture } | null = null
-  private blurVFBO: { fbo: WebGLFramebuffer; tex: WebGLTexture } | null = null
-  private fboWidth  = 0
-  private fboHeight = 0
+  // Selection texture: 256×paletteHeight R8 (stored as RGBA8, R channel = 1 if selected).
+  // Same UV indexing as the palette texture — cell (id%256, id/256) = 1 when id is selected.
+  private selectionTexture: WebGLTexture | null = null
+  private selectionData: Uint8Array | null = null  // CPU mirror for partial updates
 
-  // Edge blit program (base VERT + FRAG_EDGE): draws edge mask to edgeFBO using map transform.
-  private readonly edgeBlitProgram: WebGLProgram
-  private readonly edgeBlitPosLoc: number
-  private readonly edgeBlitMatrixLoc: WebGLUniformLocation
-  private readonly edgeBlitTexLoc: WebGLUniformLocation
+  // Bounding-box outline: 4 thin screen-space quads per contiguous selection group.
+  private readonly bboxProgram: WebGLProgram
+  private readonly bboxPosLoc: number
+  private readonly bboxDynBuffer: WebGLBuffer
 
-  // Gaussian blur program (VERT_FULLSCREEN + FRAG_BLUR): shared for H and V passes.
-  private readonly blurProgram: WebGLProgram
-  private readonly blurPosLoc: number
-  private readonly blurTexLoc: WebGLUniformLocation
-  private readonly blurDirectionLoc: WebGLUniformLocation
+  // Contiguous groups of the current selection; one bbox per group.
+  private selectionBboxGroups: Array<{ minX: number; minY: number; maxX: number; maxY: number }> = []
 
-  // Glow composite program (VERT_FULLSCREEN + FRAG_GLOW): blends blurred glow over scene.
-  private readonly glowCompProgram: WebGLProgram
-  private readonly glowCompPosLoc: number
-  private readonly glowCompTexLoc: WebGLUniformLocation
-  private readonly glowCompAlphaLoc: WebGLUniformLocation
+  // Public — read by MapCanvas for viewport centering (center of union of all selected bboxes).
+  provinceCentroid: { x: number; y: number } | null = null
 
   // Pre-allocated; avoids GC pressure on every render call.
   private readonly matrixData = new Float32Array(9)
 
   private idTexture: WebGLTexture | null = null
   private paletteTexture: WebGLTexture | null = null
-  // CPU-side original pixel data — kept for readOriginalPixel and computeEdgeMask.
+  // CPU-side pixel data — kept for readOriginalPixel.
   private pixelData: Uint8ClampedArray | null = null
   private pixelDataWidth = 0
   private provinceIndex: ProvinceIndex | null = null
@@ -178,14 +162,6 @@ export class MapRenderer {
   private paletteData: Uint8Array | null = null
 
   private _imageSize = { width: 0, height: 0 }
-
-  // Cached edge mask for the current selection.
-  private cachedEdgeMask: EdgeMaskResult | null = null
-  private edgeMaskColor = -1
-
-  // Public — read by MapCanvas for adaptive glow sizing and viewport centering.
-  edgeMaskProvincePixels = 0
-  edgeMaskCentroid: { x: number; y: number } | null = null
 
   get imageSize() { return this._imageSize }
 
@@ -234,66 +210,51 @@ export class MapRenderer {
     this.overlayTexLoc    = gl.getUniformLocation(overlayProgram, 'u_tex')!
     this.overlayOpacityLoc = gl.getUniformLocation(overlayProgram, 'u_opacity')!
 
-    // Edge blit program: reuses the base VERT, simple RGBA passthrough frag.
-    const edgeBlitVert = compileShader(gl, gl.VERTEX_SHADER, VERT)
-    const edgeBlitFrag = compileShader(gl, gl.FRAGMENT_SHADER, FRAG_EDGE)
-    const edgeBlitProg = gl.createProgram()!
-    gl.attachShader(edgeBlitProg, edgeBlitVert)
-    gl.attachShader(edgeBlitProg, edgeBlitFrag)
-    gl.linkProgram(edgeBlitProg)
-    if (!gl.getProgramParameter(edgeBlitProg, gl.LINK_STATUS))
-      throw new Error(`Edge blit shader link error: ${gl.getProgramInfoLog(edgeBlitProg)}`)
-    gl.deleteShader(edgeBlitVert)
-    gl.deleteShader(edgeBlitFrag)
-    this.edgeBlitProgram   = edgeBlitProg
-    this.edgeBlitPosLoc    = gl.getAttribLocation(edgeBlitProg, 'a_pos')
-    this.edgeBlitMatrixLoc = gl.getUniformLocation(edgeBlitProg, 'u_matrix')!
-    this.edgeBlitTexLoc    = gl.getUniformLocation(edgeBlitProg, 'u_tex')!
+    // Province outline program: reuses VERT (map transform) + ID-texture neighbour check.
+    const outlineVert = compileShader(gl, gl.VERTEX_SHADER, VERT)
+    const outlineFrag = compileShader(gl, gl.FRAGMENT_SHADER, FRAG_OUTLINE)
+    const outlineProg = gl.createProgram()!
+    gl.attachShader(outlineProg, outlineVert)
+    gl.attachShader(outlineProg, outlineFrag)
+    gl.linkProgram(outlineProg)
+    if (!gl.getProgramParameter(outlineProg, gl.LINK_STATUS))
+      throw new Error(`Outline shader link error: ${gl.getProgramInfoLog(outlineProg)}`)
+    gl.deleteShader(outlineVert)
+    gl.deleteShader(outlineFrag)
+    this.outlineProgram      = outlineProg
+    this.outlinePosLoc       = gl.getAttribLocation(outlineProg, 'a_pos')
+    this.outlineMatrixLoc    = gl.getUniformLocation(outlineProg, 'u_matrix')!
+    this.outlineIdTexLoc     = gl.getUniformLocation(outlineProg, 'u_id_tex')!
+    this.outlineSelTexLoc    = gl.getUniformLocation(outlineProg, 'u_sel_tex')!
+    this.outlineSelHeightLoc = gl.getUniformLocation(outlineProg, 'u_sel_height')!
+    this.outlinePoffLoc      = gl.getUniformLocation(outlineProg, 'u_poff')!
 
-    // Gaussian blur program.
-    const blurVert = compileShader(gl, gl.VERTEX_SHADER, VERT_FULLSCREEN)
-    const blurFrag = compileShader(gl, gl.FRAGMENT_SHADER, FRAG_BLUR)
-    const blurProg = gl.createProgram()!
-    gl.attachShader(blurProg, blurVert)
-    gl.attachShader(blurProg, blurFrag)
-    gl.linkProgram(blurProg)
-    if (!gl.getProgramParameter(blurProg, gl.LINK_STATUS))
-      throw new Error(`Blur shader link error: ${gl.getProgramInfoLog(blurProg)}`)
-    gl.deleteShader(blurVert)
-    gl.deleteShader(blurFrag)
-    this.blurProgram      = blurProg
-    this.blurPosLoc       = gl.getAttribLocation(blurProg, 'a_pos')
-    this.blurTexLoc       = gl.getUniformLocation(blurProg, 'u_tex')!
-    this.blurDirectionLoc = gl.getUniformLocation(blurProg, 'u_direction')!
-
-    // Glow composite program.
-    const glowVert = compileShader(gl, gl.VERTEX_SHADER, VERT_FULLSCREEN)
-    const glowFrag = compileShader(gl, gl.FRAGMENT_SHADER, FRAG_GLOW)
-    const glowProg = gl.createProgram()!
-    gl.attachShader(glowProg, glowVert)
-    gl.attachShader(glowProg, glowFrag)
-    gl.linkProgram(glowProg)
-    if (!gl.getProgramParameter(glowProg, gl.LINK_STATUS))
-      throw new Error(`Glow composite shader link error: ${gl.getProgramInfoLog(glowProg)}`)
-    gl.deleteShader(glowVert)
-    gl.deleteShader(glowFrag)
-    this.glowCompProgram  = glowProg
-    this.glowCompPosLoc   = gl.getAttribLocation(glowProg, 'a_pos')
-    this.glowCompTexLoc   = gl.getUniformLocation(glowProg, 'u_tex')!
-    this.glowCompAlphaLoc = gl.getUniformLocation(glowProg, 'u_glow_alpha')!
+    // Bounding-box program: NDC positions + solid magenta.
+    const bboxVert = compileShader(gl, gl.VERTEX_SHADER, VERT_NDC)
+    const bboxFrag = compileShader(gl, gl.FRAGMENT_SHADER, FRAG_WHITE)
+    const bboxProg = gl.createProgram()!
+    gl.attachShader(bboxProg, bboxVert)
+    gl.attachShader(bboxProg, bboxFrag)
+    gl.linkProgram(bboxProg)
+    if (!gl.getProgramParameter(bboxProg, gl.LINK_STATUS))
+      throw new Error(`BBox shader link error: ${gl.getProgramInfoLog(bboxProg)}`)
+    gl.deleteShader(bboxVert)
+    gl.deleteShader(bboxFrag)
+    this.bboxProgram = bboxProg
+    this.bboxPosLoc  = gl.getAttribLocation(bboxProg, 'a_pos')
+    this.bboxDynBuffer = gl.createBuffer()!
   }
 
   async loadImage(source: ProvinceMapSource): Promise<void> {
     const { gl } = this
     const { width, height, pixelData, imageBitmap } = source
 
-    this._imageSize   = { width, height }
-    this.pixelData    = pixelData
+    this._imageSize     = { width, height }
+    this.pixelData      = pixelData
     this.pixelDataWidth = width
-    this.edgeMaskColor  = -1
-    this.cachedEdgeMask = null
-    this.edgeMaskCentroid = null
-    this.edgeMaskProvincePixels = 0
+    this.selectedLoHi   = null
+    this.provinceBbox   = null
+    this.provinceCentroid = null
 
     // Build province index (one O(W×H) pass; never repeated for this image).
     const index = buildProvinceIndex({ data: pixelData, width, height })
@@ -348,10 +309,23 @@ export class MapRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 
-    // Upload the original image as a display reference (not used for color lookup anymore,
-    // but we still need imageBitmap closed — the source caller owns that lifecycle).
-    // No additional RGBA texture needed — color comes fully from palette.
     void imageBitmap
+
+    // Selection texture — same 256×paletteHeight layout as palette.
+    // R channel = 1.0 (255) for selected province IDs, 0 otherwise.
+    // Starts fully cleared; updated by setHighlightColors.
+    if (this.selectionTexture) gl.deleteTexture(this.selectionTexture)
+    this.selectionData = new Uint8Array(256 * paletteHeight * 4)
+    this.selectionTexture = gl.createTexture()!
+    gl.bindTexture(gl.TEXTURE_2D, this.selectionTexture)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, paletteHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.selectionData)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+
+    this.selectionBboxGroups = []
+    this.provinceCentroid = null
   }
 
   setOverlayTextures(
@@ -374,53 +348,100 @@ export class MapRenderer {
     }
   }
 
-  // Computes the edge mask for the given province color and uploads it as a WebGL
-  // texture for the GPU glow pipeline. Pass null to clear the glow.
-  setHighlightColor(packedColor: number | null): void {
+  // Updates the multi-selection. packedColors is an array of province RGB values to highlight.
+  // Computes contiguous groups via adjacency BFS for bounding-box rendering.
+  setHighlightColors(packedColors: number[]): void {
     const { gl } = this
-    if (packedColor === null) {
-      if (this.edgeMaskTexture) { gl.deleteTexture(this.edgeMaskTexture); this.edgeMaskTexture = null }
-      return
+    const index = this.provinceIndex
+    const sel = this.selectionData
+    if (!index || !sel || !this.selectionTexture) return
+
+    // Clear existing selection bits.
+    sel.fill(0)
+
+    // Resolve packed colors → sequential IDs; mark selected in texture data.
+    const selectedIds = new Set<number>()
+    for (const packed of packedColors) {
+      const id = index.colorToId.get(packed)
+      if (id === undefined) continue
+      selectedIds.add(id)
+      sel[id * 4] = 255  // R channel = selected
     }
-    const mask = this.computeEdgeMask(packedColor)
-    if (!mask) return
-    if (!this.edgeMaskTexture) this.edgeMaskTexture = gl.createTexture()!
-    gl.bindTexture(gl.TEXTURE_2D, this.edgeMaskTexture)
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mask)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+
+    gl.bindTexture(gl.TEXTURE_2D, this.selectionTexture)
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, this.paletteHeight, gl.RGBA, gl.UNSIGNED_BYTE, sel)
+
+    // BFS over adjacency to find contiguous groups; union their bboxes.
+    this.selectionBboxGroups = []
+    const visited = new Set<number>()
+    let unionMinX = Infinity, unionMinY = Infinity, unionMaxX = -Infinity, unionMaxY = -Infinity
+
+    for (const startId of selectedIds) {
+      if (visited.has(startId)) continue
+      visited.add(startId)
+      const queue: number[] = [startId]
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+
+      while (queue.length > 0) {
+        const cur = queue.pop()!
+        const bb = index.bboxes.get(cur)
+        if (bb) {
+          if (bb.minX < minX) minX = bb.minX
+          if (bb.minY < minY) minY = bb.minY
+          if (bb.maxX > maxX) maxX = bb.maxX
+          if (bb.maxY > maxY) maxY = bb.maxY
+        }
+        const adj = index.adjacency.get(cur)
+        if (adj) {
+          for (const neighbor of adj) {
+            if (!selectedIds.has(neighbor) || visited.has(neighbor)) continue
+            visited.add(neighbor)
+            queue.push(neighbor)
+          }
+        }
+      }
+
+      if (minX !== Infinity) {
+        this.selectionBboxGroups.push({ minX, minY, maxX, maxY })
+        if (minX < unionMinX) unionMinX = minX
+        if (minY < unionMinY) unionMinY = minY
+        if (maxX > unionMaxX) unionMaxX = maxX
+        if (maxY > unionMaxY) unionMaxY = maxY
+      }
+    }
+
+    this.provinceCentroid = unionMinX !== Infinity
+      ? { x: (unionMinX + unionMaxX) / 2, y: (unionMinY + unionMaxY) / 2 }
+      : null
   }
 
-  render(tx: number, ty: number, scale: number, glowAlpha = 0): void {
+  render(tx: number, ty: number, scale: number): void {
     const { gl } = this
     if (!this.idTexture || !this.paletteTexture || this._imageSize.width === 0) return
 
-    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
-    gl.clear(gl.COLOR_BUFFER_BIT)
-    gl.useProgram(this.program)
+    const matrix = this.buildMatrix(tx, ty, scale)
+    const w = gl.drawingBufferWidth
+    const h = gl.drawingBufferHeight
 
+    gl.viewport(0, 0, w, h)
+    gl.clear(gl.COLOR_BUFFER_BIT)
+
+    // --- Base map ---
+    gl.useProgram(this.program)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer)
     gl.enableVertexAttribArray(this.posLoc)
     gl.vertexAttribPointer(this.posLoc, 2, gl.FLOAT, false, 0, 0)
-
-    gl.uniformMatrix3fv(this.matrixLoc, false, this.buildMatrix(tx, ty, scale))
-
-    // Texture unit 0 — province ID texture (integer).
+    gl.uniformMatrix3fv(this.matrixLoc, false, matrix)
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, this.idTexture)
     gl.uniform1i(this.idTexLoc, 0)
-
-    // Texture unit 1 — palette texture (float RGBA).
     gl.activeTexture(gl.TEXTURE1)
     gl.bindTexture(gl.TEXTURE_2D, this.paletteTexture)
     gl.uniform1i(this.paletteTexLoc, 1)
-
     gl.uniform1i(this.paletteHeightLoc, this.paletteHeight)
-
     gl.drawArrays(gl.TRIANGLES, 0, 6)
 
+    // --- Overlays ---
     if (this.overlayEntries.length > 0) {
       gl.enable(gl.BLEND)
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
@@ -428,7 +449,7 @@ export class MapRenderer {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer)
       gl.enableVertexAttribArray(this.overlayPosLoc)
       gl.vertexAttribPointer(this.overlayPosLoc, 2, gl.FLOAT, false, 0, 0)
-      gl.uniformMatrix3fv(this.overlayMatrixLoc, false, this.buildMatrix(tx, ty, scale))
+      gl.uniformMatrix3fv(this.overlayMatrixLoc, false, matrix)
       gl.uniform1i(this.overlayTexLoc, 0)
       gl.activeTexture(gl.TEXTURE0)
       for (const entry of this.overlayEntries) {
@@ -439,93 +460,61 @@ export class MapRenderer {
       gl.disable(gl.BLEND)
     }
 
-    // Glow pipeline: runs only when a province is selected and alpha is non-zero.
-    if (this.edgeMaskTexture && glowAlpha > 0) {
-      this.ensureFbos()
-      if (!this.edgeFBO || !this.blurHFBO || !this.blurVFBO) return
-
-      const w = gl.drawingBufferWidth
-      const h = gl.drawingBufferHeight
-
-      // Adaptive blur radius — small provinces get boosted so they stay visible
-      // when zoomed out (matches the boost logic previously in MapCanvas drawOverlay).
-      const screenArea = Math.max(1, this.edgeMaskProvincePixels * scale * scale)
-      const t = Math.max(0, 1 - screenArea / 8_000)
-      const boost = 1 + 5 * Math.sqrt(t)
-      const blurRadius = 12 * boost
-
-      // Pass 1: Blit edge mask texture into edgeFBO using the map transform.
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this.edgeFBO.fbo)
-      gl.viewport(0, 0, w, h)
-      gl.clear(gl.COLOR_BUFFER_BIT)
-      gl.useProgram(this.edgeBlitProgram)
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer)
-      gl.enableVertexAttribArray(this.edgeBlitPosLoc)
-      gl.vertexAttribPointer(this.edgeBlitPosLoc, 2, gl.FLOAT, false, 0, 0)
-      gl.uniformMatrix3fv(this.edgeBlitMatrixLoc, false, this.buildMatrix(tx, ty, scale))
-      gl.activeTexture(gl.TEXTURE0)
-      gl.bindTexture(gl.TEXTURE_2D, this.edgeMaskTexture)
-      gl.uniform1i(this.edgeBlitTexLoc, 0)
-      gl.drawArrays(gl.TRIANGLES, 0, 6)
-
-      // Pass 2: Horizontal Gaussian blur (edgeFBO → blurHFBO).
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this.blurHFBO.fbo)
-      gl.clear(gl.COLOR_BUFFER_BIT)
-      gl.useProgram(this.blurProgram)
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer)
-      gl.enableVertexAttribArray(this.blurPosLoc)
-      gl.vertexAttribPointer(this.blurPosLoc, 2, gl.FLOAT, false, 0, 0)
-      gl.activeTexture(gl.TEXTURE0)
-      gl.bindTexture(gl.TEXTURE_2D, this.edgeFBO.tex)
-      gl.uniform1i(this.blurTexLoc, 0)
-      gl.uniform2f(this.blurDirectionLoc, blurRadius / w, 0)
-      gl.drawArrays(gl.TRIANGLES, 0, 6)
-
-      // Pass 3: Vertical Gaussian blur (blurHFBO → blurVFBO).
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this.blurVFBO.fbo)
-      gl.clear(gl.COLOR_BUFFER_BIT)
-      gl.bindTexture(gl.TEXTURE_2D, this.blurHFBO.tex)
-      gl.uniform2f(this.blurDirectionLoc, 0, blurRadius / h)
-      gl.drawArrays(gl.TRIANGLES, 0, 6)
-
-      // Pass 4: Composite blurred glow over the scene with additive blending.
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-      gl.viewport(0, 0, w, h)
+    // --- Province outline + bounding boxes ---
+    if (this.selectionBboxGroups.length > 0 && this.selectionTexture) {
+      const { width: iw, height: ih } = this._imageSize
+      // ONE_MINUS_DST_COLOR: white fragments invert the destination exactly.
       gl.enable(gl.BLEND)
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE)
-      gl.useProgram(this.glowCompProgram)
+      gl.blendFunc(gl.ONE_MINUS_DST_COLOR, gl.ZERO)
+
+      // Outline: single draw over the map quad; selection texture gives O(1) per-fragment lookup.
+      gl.useProgram(this.outlineProgram)
       gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer)
-      gl.enableVertexAttribArray(this.glowCompPosLoc)
-      gl.vertexAttribPointer(this.glowCompPosLoc, 2, gl.FLOAT, false, 0, 0)
+      gl.enableVertexAttribArray(this.outlinePosLoc)
+      gl.vertexAttribPointer(this.outlinePosLoc, 2, gl.FLOAT, false, 0, 0)
+      gl.uniformMatrix3fv(this.outlineMatrixLoc, false, matrix)
       gl.activeTexture(gl.TEXTURE0)
-      gl.bindTexture(gl.TEXTURE_2D, this.blurVFBO.tex)
-      gl.uniform1i(this.glowCompTexLoc, 0)
-      gl.uniform1f(this.glowCompAlphaLoc, glowAlpha)
+      gl.bindTexture(gl.TEXTURE_2D, this.idTexture)
+      gl.uniform1i(this.outlineIdTexLoc, 0)
+      gl.activeTexture(gl.TEXTURE1)
+      gl.bindTexture(gl.TEXTURE_2D, this.selectionTexture)
+      gl.uniform1i(this.outlineSelTexLoc, 1)
+      gl.uniform1i(this.outlineSelHeightLoc, this.paletteHeight)
+      gl.uniform2f(this.outlinePoffLoc, 1 / (iw * scale), 1 / (ih * scale))
       gl.drawArrays(gl.TRIANGLES, 0, 6)
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+
+      // Bounding-box: one rect per contiguous selection group.
+      gl.useProgram(this.bboxProgram)
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.bboxDynBuffer)
+      gl.enableVertexAttribArray(this.bboxPosLoc)
+      for (const bbox of this.selectionBboxGroups) {
+        const verts = this.buildBboxVerts(bbox, tx, ty, scale, w, h)
+        gl.bufferData(gl.ARRAY_BUFFER, verts, gl.DYNAMIC_DRAW)
+        gl.vertexAttribPointer(this.bboxPosLoc, 2, gl.FLOAT, false, 0, 0)
+        gl.drawArrays(gl.TRIANGLES, 0, verts.length / 2)
+      }
+
       gl.disable(gl.BLEND)
     }
 
     gl.bindTexture(gl.TEXTURE_2D, null)
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
   }
 
   clearImage(): void {
     const { gl } = this
-    if (this.idTexture)      { gl.deleteTexture(this.idTexture);      this.idTexture = null }
-    if (this.paletteTexture) { gl.deleteTexture(this.paletteTexture); this.paletteTexture = null }
-    this._imageSize             = { width: 0, height: 0 }
-    this.pixelData              = null
-    this.pixelDataWidth         = 0
-    this.provinceIndex          = null
-    this.paletteData            = null
-    this.edgeMaskColor          = -1
-    this.cachedEdgeMask         = null
-    this.edgeMaskCentroid       = null
-    this.edgeMaskProvincePixels = 0
+    if (this.idTexture)       { gl.deleteTexture(this.idTexture);       this.idTexture = null }
+    if (this.paletteTexture)  { gl.deleteTexture(this.paletteTexture);  this.paletteTexture = null }
+    if (this.selectionTexture){ gl.deleteTexture(this.selectionTexture); this.selectionTexture = null }
+    this._imageSize         = { width: 0, height: 0 }
+    this.pixelData          = null
+    this.pixelDataWidth     = 0
+    this.provinceIndex      = null
+    this.paletteData        = null
+    this.selectionData      = null
+    this.selectionBboxGroups = []
+    this.provinceCentroid   = null
     for (const entry of this.overlayEntries) this.gl.deleteTexture(entry.texture)
     this.overlayEntries = []
-    if (this.edgeMaskTexture) { gl.deleteTexture(this.edgeMaskTexture); this.edgeMaskTexture = null }
     gl.clear(gl.COLOR_BUFFER_BIT)
   }
 
@@ -555,26 +544,6 @@ export class MapRenderer {
     const i = (imgY * tw + imgX) * 4
     if (pixels[i + 3] === 0) return null
     return { r: pixels[i], g: pixels[i + 1], b: pixels[i + 2] }
-  }
-
-  // Returns a cached edge mask for the given packed province color.
-  // Delegates computation to provinceAnalysis; only one mask is kept at a time.
-  computeEdgeMask(packedColor: number): OffscreenCanvas | null {
-    if (this.edgeMaskColor === packedColor && this.cachedEdgeMask) {
-      return this.cachedEdgeMask.canvas
-    }
-    const pixels = this.pixelData
-    if (!pixels) return null
-
-    const result = computeEdgeMask(
-      { data: pixels, width: this.pixelDataWidth, height: this._imageSize.height },
-      packedColor
-    )
-    this.cachedEdgeMask         = result
-    this.edgeMaskColor          = packedColor
-    this.edgeMaskProvincePixels = result.provincePixels
-    this.edgeMaskCentroid       = result.centroid
-    return result.canvas
   }
 
   // Remaps province display colors. Only updates the palette texture —
@@ -619,56 +588,48 @@ export class MapRenderer {
 
   dispose(): void {
     const { gl } = this
-    if (this.idTexture)      gl.deleteTexture(this.idTexture)
-    if (this.paletteTexture) gl.deleteTexture(this.paletteTexture)
+    if (this.idTexture)        gl.deleteTexture(this.idTexture)
+    if (this.paletteTexture)   gl.deleteTexture(this.paletteTexture)
+    if (this.selectionTexture) gl.deleteTexture(this.selectionTexture)
     for (const entry of this.overlayEntries) gl.deleteTexture(entry.texture)
-    gl.deleteProgram(this.overlayProgram)
     gl.deleteBuffer(this.quadBuffer)
+    gl.deleteBuffer(this.bboxDynBuffer)
     gl.deleteProgram(this.program)
-    if (this.edgeMaskTexture) gl.deleteTexture(this.edgeMaskTexture)
-    this.disposeFbos()
-    gl.deleteProgram(this.edgeBlitProgram)
-    gl.deleteProgram(this.blurProgram)
-    gl.deleteProgram(this.glowCompProgram)
+    gl.deleteProgram(this.overlayProgram)
+    gl.deleteProgram(this.outlineProgram)
+    gl.deleteProgram(this.bboxProgram)
   }
 
-  private createFbo(w: number, h: number): { fbo: WebGLFramebuffer; tex: WebGLTexture } {
-    const { gl } = this
-    const tex = gl.createTexture()!
-    gl.bindTexture(gl.TEXTURE_2D, tex)
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-    const fbo = gl.createFramebuffer()!
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0)
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-    return { fbo, tex }
-  }
-
-  private disposeFbos(): void {
-    const { gl } = this
-    for (const entry of [this.edgeFBO, this.blurHFBO, this.blurVFBO]) {
-      if (!entry) continue
-      gl.deleteTexture(entry.tex)
-      gl.deleteFramebuffer(entry.fbo)
-    }
-    this.edgeFBO = this.blurHFBO = this.blurVFBO = null
-  }
-
-  // Lazily creates or recreates FBO textures when the drawing buffer dimensions change.
-  private ensureFbos(): void {
-    const w = this.gl.drawingBufferWidth
-    const h = this.gl.drawingBufferHeight
-    if (this.fboWidth === w && this.fboHeight === h) return
-    this.disposeFbos()
-    this.fboWidth  = w
-    this.fboHeight = h
-    this.edgeFBO  = this.createFbo(w, h)
-    this.blurHFBO = this.createFbo(w, h)
-    this.blurVFBO = this.createFbo(w, h)
+  // Builds 4 thin screen-space quads (1px thick) for a bounding-box outline in NDC.
+  private buildBboxVerts(
+    b: { minX: number; minY: number; maxX: number; maxY: number },
+    tx: number, ty: number, scale: number, cw: number, ch: number
+  ): Float32Array {
+    // Map bbox pixel corners to screen space (+1 pixel outset to clear the image edge).
+    const sx0 = b.minX * scale + tx - 1
+    const sy0 = b.minY * scale + ty - 1
+    const sx1 = (b.maxX + 1) * scale + tx + 1
+    const sy1 = (b.maxY + 1) * scale + ty + 1
+    // Screen → NDC: x: [0,cw]→[-1,1], y: [0,ch]→[1,-1] (WebGL Y is up).
+    const nx0 = sx0 / cw * 2 - 1, nx1 = sx1 / cw * 2 - 1
+    const ny0 = 1 - sy0 / ch * 2, ny1 = 1 - sy1 / ch * 2
+    // 1px thickness in NDC.
+    const tx2 = 2 / cw, ty2 = 2 / ch
+    // 4 edges as 2 triangles each (24 vertices × 2 components = 48 floats).
+    return new Float32Array([
+      // Top
+      nx0, ny0,       nx1, ny0,       nx0, ny0 - ty2,
+      nx1, ny0,       nx1, ny0 - ty2, nx0, ny0 - ty2,
+      // Bottom
+      nx0, ny1 + ty2, nx1, ny1 + ty2, nx0, ny1,
+      nx1, ny1 + ty2, nx1, ny1,       nx0, ny1,
+      // Left (between inner top/bottom)
+      nx0, ny0 - ty2, nx0 + tx2, ny0 - ty2, nx0, ny1 + ty2,
+      nx0 + tx2, ny0 - ty2, nx0 + tx2, ny1 + ty2, nx0, ny1 + ty2,
+      // Right
+      nx1 - tx2, ny0 - ty2, nx1, ny0 - ty2, nx1 - tx2, ny1 + ty2,
+      nx1, ny0 - ty2, nx1, ny1 + ty2, nx1 - tx2, ny1 + ty2,
+    ])
   }
 
   // Builds the column-major mat3 mapping [0,1]×[0,1] to clip space.

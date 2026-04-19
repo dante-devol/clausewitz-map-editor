@@ -12,16 +12,19 @@ import type { DisplayModeOverrides } from '../../infra/store/displayModeConfigSt
 export const selectDisplayMode = (state: CoreState) => state.map.displayMode
 export const selectMapOverlays = (state: CoreState) => state.map.overlays
 
-export function selectSelectedProvinceId(state: CoreState): number | null {
-  return state.map.selection.kind === 'province' ? state.map.selection.provinceId : null
+export function selectSelectedProvinceIds(state: CoreState): number[] {
+  return state.map.selectedProvinceIds
 }
 
-export function selectHighlightColor(
+export function selectHighlightColors(
   state: CoreState,
   provinces: ReadonlyMap<number, Province>
-): number | null {
-  const provinceId = selectSelectedProvinceId(state)
-  return provinceId === null ? null : (provinces.get(provinceId)?.color ?? null)
+): number[] {
+  return state.map.selectedProvinceIds.reduce<number[]>((acc, id) => {
+    const color = provinces.get(id)?.color
+    if (color !== undefined) acc.push(color)
+    return acc
+  }, [])
 }
 
 export function selectColorMap(
