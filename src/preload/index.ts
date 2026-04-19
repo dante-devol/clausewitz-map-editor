@@ -34,6 +34,8 @@ const api: ApiContract = {
   },
   map: {
     load: (projectId) => ipcRenderer.invoke(channels.map.load, projectId),
+    loadStates: (projectId) => ipcRenderer.invoke(channels.map.loadStates, projectId),
+    loadStrategicRegions: (projectId) => ipcRenderer.invoke(channels.map.loadStrategicRegions, projectId),
     onChanged: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on(channels.map.changed, listener)

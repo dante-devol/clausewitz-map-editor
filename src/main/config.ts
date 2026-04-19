@@ -10,11 +10,14 @@ export interface Config extends AppConfig {}
 export const DEFAULT_CONFIG: Config = {
   locale: null,
   paths: {
+    descriptor: '/descriptor.mod',
     defaultMap: '/map/default.map',
     definitions: '/map/definition.csv',
     provinces: '/map/provinces.bmp',
     continent: '/map/continent.txt',
     provinceTerrain: '/common/terrain',
+    states: '/history/states',
+    strategicRegions: '/map/strategicregions',
     rivers: '/map/rivers.bmp'
   },
   displayModeOverrides: {}

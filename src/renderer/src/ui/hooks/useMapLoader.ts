@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useCoreApi } from '../../bridge/CoreProvider'
 import { sessionCommands } from '../../core/commands/sessionCommands'
 import { useCoreSelector } from '../../bridge/useCoreSelector'
+import { selectDisplayMode } from '../../core/selectors/mapSelectors'
 import { selectCurrentProjectId } from '../../core/selectors/sessionSelectors'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
 import {
@@ -9,6 +10,7 @@ import {
   reconcileProvinceCatalogWithBitmap,
   type ProvinceBitmapFacts
 } from '../../../../shared/provinceCatalog'
+import type { StateDatasetUpdate, StrategicRegionDatasetUpdate } from '../../../../shared/contract/api'
 import { BmpProvinceMapSource } from '../../infra/lib/BmpProvinceMapSource'
 import { analyzeProvinceBitmapFacts } from '../../infra/lib/provinceBitmapFacts'
 import { useProjectStore } from '../../infra/store/projectStore'
@@ -19,13 +21,22 @@ const provinceBitmapFactsCache = new Map<string, ProvinceBitmapFacts>()
 export function useMapLoader(): void {
   const api = useCoreApi()
   const projectId = useCoreSelector(selectCurrentProjectId)
+  const displayMode = useCoreSelector(selectDisplayMode)
   const resolvedPaths = useProjectStore((s) => s.resolvedPaths)
   const loadContinents = useMapDataStore((s) => s.loadContinents)
   const loadProvinces = useMapDataStore((s) => s.loadProvinces)
   const loadProvinceCatalog = useMapDataStore((s) => s.loadProvinceCatalog)
   const setProvinceCatalog = useMapDataStore((s) => s.setProvinceCatalog)
   const loadTerrains = useMapDataStore((s) => s.loadTerrains)
+  const replaceStates = useMapDataStore((s) => s.replaceStates)
+  const appendStates = useMapDataStore((s) => s.appendStates)
+  const replaceStrategicRegions = useMapDataStore((s) => s.replaceStrategicRegions)
+  const appendStrategicRegions = useMapDataStore((s) => s.appendStrategicRegions)
   const loadProvincesImage = useMapDataStore((s) => s.loadProvincesImage)
+  const setStatesStatus = useMapDataStore((s) => s.setStatesStatus)
+  const setStrategicRegionsStatus = useMapDataStore((s) => s.setStrategicRegionsStatus)
+  const statesStatus = useMapDataStore((s) => s.statesStatus)
+  const strategicRegionsStatus = useMapDataStore((s) => s.strategicRegionsStatus)
   const setProvinceBitmapStatus = useMapDataStore((s) => s.setProvinceBitmapStatus)
   const baseProvinceCatalog = useMapDataStore((s) => s.baseProvinceCatalog)
   const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
@@ -46,6 +57,8 @@ export function useMapLoader(): void {
         loadProvincesImage(snapshot.provincesImageB64)
         loadProvinces(snapshot.provinces)
         loadProvinceCatalog(snapshot.provinceCatalog)
+        setStatesStatus('idle')
+        setStrategicRegionsStatus('idle')
         setProvinceBitmapStatus('idle')
         api.dispatch(sessionCommands.mapReady())
       } catch (error) {
@@ -66,6 +79,16 @@ export function useMapLoader(): void {
         setProvinceBitmapStatus('idle')
       }
       else if (event.type === 'terrain') loadTerrains(event.data as import('../../../../shared/mapDataTypes').TerrainCategory[])
+      else if (event.type === 'states') {
+        const update = event.data as StateDatasetUpdate
+        if (update.op === 'replace') replaceStates(update.items)
+        else appendStates(update.items)
+      }
+      else if (event.type === 'strategicRegions') {
+        const update = event.data as StrategicRegionDatasetUpdate
+        if (update.op === 'replace') replaceStrategicRegions(update.items)
+        else appendStrategicRegions(update.items)
+      }
       else if (event.type === 'image') {
         loadProvincesImage(event.data as string)
         setProvinceBitmapStatus('idle')
@@ -78,7 +101,73 @@ export function useMapLoader(): void {
       api.dispatch(sessionCommands.cleared())
       clear()
     }
-  }, [api, clear, loadContinents, loadProvinceCatalog, loadProvinces, loadProvincesImage, loadTerrains, projectId, setProvinceBitmapStatus])
+  }, [
+    api,
+    clear,
+    loadContinents,
+    loadProvinceCatalog,
+    loadProvinces,
+    loadProvincesImage,
+    replaceStates,
+    appendStates,
+    replaceStrategicRegions,
+    appendStrategicRegions,
+    loadTerrains,
+    projectId,
+    setProvinceBitmapStatus,
+    setStatesStatus,
+    setStrategicRegionsStatus
+  ])
+
+  useEffect(() => {
+    if (!projectId) return
+    if (displayMode !== 'state' || statesStatus !== 'idle') return
+
+    let cancelled = false
+    setStatesStatus('loading')
+    replaceStates([])
+
+    void window.api.map.loadStates(projectId)
+      .then(() => {
+        if (cancelled) return
+        setStatesStatus('ready')
+      })
+      .catch(() => {
+        if (!cancelled) setStatesStatus('error')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [displayMode, projectId, replaceStates, setStatesStatus, statesStatus])
+
+  useEffect(() => {
+    if (!projectId) return
+    if (displayMode !== 'strategicRegion' || strategicRegionsStatus !== 'idle') return
+
+    let cancelled = false
+    setStrategicRegionsStatus('loading')
+    replaceStrategicRegions([])
+
+    void window.api.map.loadStrategicRegions(projectId)
+      .then(() => {
+        if (cancelled) return
+        setStrategicRegionsStatus('ready')
+      })
+      .catch(() => {
+        if (!cancelled) setStrategicRegionsStatus('error')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    displayMode,
+    projectId,
+    replaceStrategicRegions,
+    setStrategicRegionsStatus,
+    strategicRegionsStatus
+  ])
 
   useEffect(() => {
     const provincesPath = resolvedPaths?.provinces

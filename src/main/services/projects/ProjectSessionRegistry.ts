@@ -33,4 +33,20 @@ export class ProjectSessionRegistry {
     }
     return session.loadSnapshot()
   }
+
+  loadStatesForWindow(window: BrowserWindow, projectId: string) {
+    const session = this.forWindow(window)
+    if (session.projectId !== projectId) {
+      throw new Error('Project session mismatch')
+    }
+    return session.loadStates()
+  }
+
+  loadStrategicRegionsForWindow(window: BrowserWindow, projectId: string) {
+    const session = this.forWindow(window)
+    if (session.projectId !== projectId) {
+      throw new Error('Project session mismatch')
+    }
+    return session.loadStrategicRegions()
+  }
 }

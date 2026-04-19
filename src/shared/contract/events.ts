@@ -26,6 +26,8 @@ export const channels = {
   },
   map: {
     load: 'map:load',
+    loadStates: 'map:loadStates',
+    loadStrategicRegions: 'map:loadStrategicRegions',
     changed: 'map:changed'
   },
   settings: {

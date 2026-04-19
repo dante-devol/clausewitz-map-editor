@@ -114,11 +114,14 @@ interface ProjectSelectionViewProps {
 }
 
 const PATH_LABEL_KEYS: Record<string, MessageKey> = {
+  descriptor: 'path.descriptor',
   defaultMap: 'path.defaultMap',
   definitions: 'path.definitions',
   provinces: 'path.provinces',
   continent: 'path.continent',
-  provinceTerrain: 'path.provinceTerrain'
+  provinceTerrain: 'path.provinceTerrain',
+  states: 'path.states',
+  strategicRegions: 'path.strategicRegions'
 }
 
 export function ProjectSelectionView({

@@ -63,7 +63,7 @@ export function selectColorMap(
 
   const colorMap = new Map<number, number>()
   for (const province of provinces.values()) {
-    const valueKey = getModeValueKey(displayMode, province)
+    const valueKey = getModeValueKey(displayMode, province, context)
     if (!valueKey) continue
     colorMap.set(province.color, getResolvedModeValueColor(displayMode, valueKey, overrides, context))
   }
@@ -89,6 +89,7 @@ export function selectModeValuesByMode(
 export function selectHoverTooltip(
   displayMode: CoreState['map']['displayMode'],
   province: Province | undefined,
+  context: DisplayModeContext,
   t: (key: string) => string
 ): { label: string; value: string } | null {
   if (!province) return null
@@ -106,6 +107,18 @@ export function selectHoverTooltip(
     return {
       label: t('map.hover.coastal'),
       value: t(province.isCoastal ? 'mapValue.coastal' : 'mapValue.inland')
+    }
+  }
+  if (displayMode === 'state') {
+    return {
+      label: t('map.hover.state'),
+      value: context.stateProvinceToStateId.get(province.id)?.toString() ?? t('mapValue.none')
+    }
+  }
+  if (displayMode === 'strategicRegion') {
+    return {
+      label: t('map.hover.strategicRegion'),
+      value: context.strategicRegionProvinceToRegionId.get(province.id)?.toString() ?? t('mapValue.none')
     }
   }
 

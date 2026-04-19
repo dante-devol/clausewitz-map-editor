@@ -88,6 +88,7 @@ const useStyles = makeStyles({
 })
 
 const ROW_CAP = 500
+const PROVINCE_ID_PREVIEW_CAP = 24
 
 function Swatch({ color }: { color: number }) {
   const { r, g, b } = unpackColor(color)
@@ -226,6 +227,88 @@ function ContinentsTab() {
   )
 }
 
+function StatesTab() {
+  const styles = useStyles()
+  const { t, formatNumber } = useI18n()
+  const states = useMapDataStore((s) => s.states)
+  const status = useMapDataStore((s) => s.statesStatus)
+  const rows = states.slice(0, ROW_CAP)
+
+  return (
+    <>
+      <div className={styles.summary}>
+        <Badge appearance="filled" color={statusToBadgeColor(status)}>{formatNumber(states.length)}</Badge>
+        <Text size={200}>{t('debug.statesLoaded', { count: formatNumber(states.length) })}</Text>
+        <Text size={200} className={styles.statusText}>
+          {t('debug.datasetStatus', { status: t(`debug.datasetState.${status}`) })}
+        </Text>
+        {states.length > ROW_CAP && <Text className={styles.cap}>{t('debug.showingFirst', { count: formatNumber(ROW_CAP) })}</Text>}
+      </div>
+      <div className={styles.tableWrap}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th className={styles.th}>{t('debug.column.id')}</th>
+              <th className={styles.th}>{t('debug.column.provinceCount')}</th>
+              <th className={styles.th}>{t('debug.column.provinces')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((state, i) => (
+              <tr key={state.id} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
+                <td className={styles.td}>{state.id}</td>
+                <td className={styles.td}>{formatNumber(state.provinceIds.length)}</td>
+                <td className={styles.td}>{formatProvincePreview(state.provinceIds)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+function StrategicRegionsTab() {
+  const styles = useStyles()
+  const { t, formatNumber } = useI18n()
+  const strategicRegions = useMapDataStore((s) => s.strategicRegions)
+  const status = useMapDataStore((s) => s.strategicRegionsStatus)
+  const rows = strategicRegions.slice(0, ROW_CAP)
+
+  return (
+    <>
+      <div className={styles.summary}>
+        <Badge appearance="filled" color={statusToBadgeColor(status)}>{formatNumber(strategicRegions.length)}</Badge>
+        <Text size={200}>{t('debug.strategicRegionsLoaded', { count: formatNumber(strategicRegions.length) })}</Text>
+        <Text size={200} className={styles.statusText}>
+          {t('debug.datasetStatus', { status: t(`debug.datasetState.${status}`) })}
+        </Text>
+        {strategicRegions.length > ROW_CAP && <Text className={styles.cap}>{t('debug.showingFirst', { count: formatNumber(ROW_CAP) })}</Text>}
+      </div>
+      <div className={styles.tableWrap}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th className={styles.th}>{t('debug.column.id')}</th>
+              <th className={styles.th}>{t('debug.column.provinceCount')}</th>
+              <th className={styles.th}>{t('debug.column.provinces')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((region, i) => (
+              <tr key={region.id} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
+                <td className={styles.td}>{region.id}</td>
+                <td className={styles.td}>{formatNumber(region.provinceIds.length)}</td>
+                <td className={styles.td}>{formatProvincePreview(region.provinceIds)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
 function ValidationTab() {
   const styles = useStyles()
   const { t, formatNumber } = useI18n()
@@ -276,7 +359,7 @@ function ValidationTab() {
   )
 }
 
-type TabId = 'provinces' | 'terrain' | 'continents' | 'validation'
+type TabId = 'provinces' | 'terrain' | 'continents' | 'states' | 'strategicRegions' | 'validation'
 
 interface DebugPanelProps {
   open: boolean
@@ -291,6 +374,8 @@ export function DebugPanel({ open, onClose }: DebugPanelProps) {
   const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
   const terrains = useMapDataStore((s) => s.terrains)
   const continents = useMapDataStore((s) => s.continents)
+  const states = useMapDataStore((s) => s.states)
+  const strategicRegions = useMapDataStore((s) => s.strategicRegions)
   const validationSummary = useProvinceValidationStore((s) => s.summary)
 
   return (
@@ -311,6 +396,12 @@ export function DebugPanel({ open, onClose }: DebugPanelProps) {
             <Tab value="continents">
               {t('debug.tab.continents')} <Badge appearance="tint">{formatNumber(continents.size)}</Badge>
             </Tab>
+            <Tab value="states">
+              {t('debug.tab.states')} <Badge appearance="tint">{formatNumber(states.length)}</Badge>
+            </Tab>
+            <Tab value="strategicRegions">
+              {t('debug.tab.strategicRegions')} <Badge appearance="tint">{formatNumber(strategicRegions.length)}</Badge>
+            </Tab>
             <Tab value="validation">
               {t('debug.tab.validation')} <Badge appearance="tint">{formatNumber(validationSummary.errorCount + validationSummary.warningCount + validationSummary.infoCount)}</Badge>
             </Tab>
@@ -319,10 +410,27 @@ export function DebugPanel({ open, onClose }: DebugPanelProps) {
             {tab === 'provinces'  && <ProvincesTab />}
             {tab === 'terrain'    && <TerrainsTab />}
             {tab === 'continents' && <ContinentsTab />}
+            {tab === 'states' && <StatesTab />}
+            {tab === 'strategicRegions' && <StrategicRegionsTab />}
             {tab === 'validation' && <ValidationTab />}
           </DialogContent>
         </DialogBody>
       </DialogSurface>
     </Dialog>
   )
+}
+
+function formatProvincePreview(provinceIds: number[]): string {
+  if (provinceIds.length === 0) return '—'
+  const preview = provinceIds.slice(0, PROVINCE_ID_PREVIEW_CAP).join(', ')
+  return provinceIds.length > PROVINCE_ID_PREVIEW_CAP
+    ? `${preview} …`
+    : preview
+}
+
+function statusToBadgeColor(status: 'idle' | 'loading' | 'ready' | 'error'): 'informative' | 'important' | 'success' | 'danger' {
+  if (status === 'idle') return 'important'
+  if (status === 'loading') return 'informative'
+  if (status === 'ready') return 'success'
+  return 'danger'
 }

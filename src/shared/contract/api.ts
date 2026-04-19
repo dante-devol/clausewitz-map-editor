@@ -1,4 +1,10 @@
-import type { Continent, Province, TerrainCategory } from '../mapDataTypes'
+import type {
+  Continent,
+  Province,
+  StateDefinition,
+  StrategicRegionDefinition,
+  TerrainCategory
+} from '../mapDataTypes'
 import type { ProvinceCatalogEntry } from '../provinceCatalog'
 import type { GameVerificationResult, ModVerificationResult, ResolvedPaths } from '../pathTypes'
 import type { AppLocale } from '../i18n'
@@ -6,11 +12,14 @@ import type { AppLocale } from '../i18n'
 export interface AppConfig {
   locale: AppLocale | null
   paths: {
+    descriptor: string
     defaultMap: string
     definitions: string
     provinces: string
     continent: string
     provinceTerrain: string
+    states: string
+    strategicRegions: string
     rivers: string
   }
   displayModeOverrides: Partial<Record<string, Partial<Record<string, string>>>>
@@ -47,8 +56,24 @@ export interface ProjectOpenResult {
 
 export interface MapChangedEvent {
   projectId: string
-  type: 'continents' | 'definitions' | 'terrain' | 'image'
-  data: Continent[] | Province[] | TerrainCategory[] | string
+  type: 'continents' | 'definitions' | 'terrain' | 'image' | 'states' | 'strategicRegions'
+  data:
+    | Continent[]
+    | Province[]
+    | TerrainCategory[]
+    | StateDatasetUpdate
+    | StrategicRegionDatasetUpdate
+    | string
+}
+
+export interface StateDatasetUpdate {
+  op: 'replace' | 'append'
+  items: StateDefinition[]
+}
+
+export interface StrategicRegionDatasetUpdate {
+  op: 'replace' | 'append'
+  items: StrategicRegionDefinition[]
 }
 
 export interface ApiContract {
@@ -79,6 +104,8 @@ export interface ApiContract {
   }
   map: {
     load: (projectId: string) => Promise<MapDataSnapshot>
+    loadStates: (projectId: string) => Promise<void>
+    loadStrategicRegions: (projectId: string) => Promise<void>
     onChanged: (callback: (event: MapChangedEvent) => void) => () => void
   }
   settings: {

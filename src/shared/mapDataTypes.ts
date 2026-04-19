@@ -29,6 +29,16 @@ export interface Province {
   continent: string // Continent.codeName — empty string for provinces with no continent (sea, lake)
 }
 
+export interface StateDefinition {
+  id: number
+  provinceIds: number[]
+}
+
+export interface StrategicRegionDefinition {
+  id: number
+  provinceIds: number[]
+}
+
 export interface TerrainCategory {
   codeName: string
   color: Color

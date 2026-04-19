@@ -41,7 +41,14 @@ export class DefinitionsCsv {
       const type: ProvinceType = VALID_TYPES.has(rawType) ? (rawType as ProvinceType) : 'land'
       const continent = continentById.get(continentPosition) ?? ''
 
-      provinces.push({ id, color: packColor(r, g, b), type, isCoastal, terrain, continent })
+      provinces.push({
+        id,
+        color: packColor(r, g, b),
+        type,
+        isCoastal,
+        terrain,
+        continent
+      })
     }
 
     return provinces

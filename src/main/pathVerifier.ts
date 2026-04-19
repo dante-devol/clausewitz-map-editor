@@ -7,10 +7,14 @@ function pathEntries(): [PathKey, string][] {
   return Object.entries(getConfig().paths) as [PathKey, string][]
 }
 
+function gamePathEntries(): [PathKey, string][] {
+  return pathEntries().filter(([key]) => key !== 'descriptor')
+}
+
 // All configured paths must exist under the game directory.
 export function verifyGamePaths(gamePath: string): GameVerificationResult {
   const missingPaths: PathKey[] = []
-  for (const [key, rel] of pathEntries()) {
+  for (const [key, rel] of gamePathEntries()) {
     if (!existsSync(join(gamePath, rel))) missingPaths.push(key)
   }
   return { valid: missingPaths.length === 0, missingPaths }

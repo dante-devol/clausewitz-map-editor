@@ -21,10 +21,12 @@ import {
 } from '@fluentui/react-components'
 import {
   BuildingLighthouseFilled,
+  BuildingPeopleFilled,
   EarthFilled,
   PuzzlePieceFilled,
   SettingsRegular,
   TreeEvergreenFilled,
+  VehicleShipFilled,
   WaterFilled
 } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
@@ -44,7 +46,9 @@ const MODE_LABEL_KEYS: Record<DisplayMode, MessageKey> = {
   type: 'mapMode.type',
   terrain: 'mapMode.terrain',
   coastal: 'mapMode.coastal',
-  continent: 'mapMode.continent'
+  continent: 'mapMode.continent',
+  state: 'mapMode.state',
+  strategicRegion: 'mapMode.strategicRegion'
 }
 
 const MODE_ICONS: Record<DisplayMode, JSX.Element> = {
@@ -52,7 +56,9 @@ const MODE_ICONS: Record<DisplayMode, JSX.Element> = {
   type: <WaterFilled />,
   terrain: <TreeEvergreenFilled />,
   coastal: <BuildingLighthouseFilled />,
-  continent: <EarthFilled />
+  continent: <EarthFilled />,
+  state: <BuildingPeopleFilled />,
+  strategicRegion: <VehicleShipFilled />
 }
 
 const useStyles = makeStyles({

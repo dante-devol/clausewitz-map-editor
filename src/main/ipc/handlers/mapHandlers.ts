@@ -7,4 +7,14 @@ export function registerMapHandlers(context: IpcContext): void {
     const window = getEventWindow(event)
     return context.sessions.loadForWindow(window, projectId)
   })
+
+  ipcMain.handle(channels.map.loadStates, (event, projectId: string) => {
+    const window = getEventWindow(event)
+    return context.sessions.loadStatesForWindow(window, projectId)
+  })
+
+  ipcMain.handle(channels.map.loadStrategicRegions, (event, projectId: string) => {
+    const window = getEventWindow(event)
+    return context.sessions.loadStrategicRegionsForWindow(window, projectId)
+  })
 }

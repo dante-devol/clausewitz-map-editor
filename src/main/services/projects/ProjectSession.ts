@@ -1,7 +1,7 @@
 import { readFileSync, watch, type FSWatcher } from 'fs'
 import type { BrowserWindow } from 'electron'
 import { channels } from '../../../shared/contract/events'
-import type { Continent } from '../../../shared/mapDataTypes'
+import type { Continent, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
 import type { LoadedProject, ProjectLoader } from './ProjectLoader'
 
 interface WatchEntry {
@@ -13,6 +13,10 @@ export class ProjectSession {
   private readonly watchers = new Map<string, WatchEntry>()
   private project: LoadedProject | null = null
   private continents: Continent[] = []
+  private statesLoaded = false
+  private strategicRegionsLoaded = false
+  private statesLoadPromise: Promise<void> | null = null
+  private strategicRegionsLoadPromise: Promise<void> | null = null
 
   constructor(
     private readonly window: BrowserWindow,
@@ -23,6 +27,10 @@ export class ProjectSession {
     this.disposeWatchers()
     this.project = project
     this.continents = []
+    this.statesLoaded = false
+    this.strategicRegionsLoaded = false
+    this.statesLoadPromise = null
+    this.strategicRegionsLoadPromise = null
     return project
   }
 
@@ -35,11 +43,51 @@ export class ProjectSession {
 
     const snapshot = this.loader.loadSnapshot(this.project)
     this.continents = snapshot.continents
-    this.watchProjectFiles()
+    this.watchCoreProjectFiles()
     return snapshot
   }
 
-  private watchProjectFiles(): void {
+  loadStates(): Promise<void> {
+    if (!this.project) throw new Error('Project not open')
+    this.watchStateFiles()
+    if (this.statesLoadPromise) return this.statesLoadPromise
+    if (this.statesLoaded) return Promise.resolve()
+
+    this.emit('states', { op: 'replace', items: [] })
+    this.statesLoadPromise = this.loader.loadStatesProgressive(this.project, (items) => {
+      this.emit('states', { op: 'append', items })
+    }).then(() => {
+      this.statesLoaded = true
+      this.statesLoadPromise = null
+    }).catch((error) => {
+      this.statesLoadPromise = null
+      throw error
+    })
+
+    return this.statesLoadPromise
+  }
+
+  loadStrategicRegions(): Promise<void> {
+    if (!this.project) throw new Error('Project not open')
+    this.watchStrategicRegionFiles()
+    if (this.strategicRegionsLoadPromise) return this.strategicRegionsLoadPromise
+    if (this.strategicRegionsLoaded) return Promise.resolve()
+
+    this.emit('strategicRegions', { op: 'replace', items: [] })
+    this.strategicRegionsLoadPromise = this.loader.loadStrategicRegionsProgressive(this.project, (items) => {
+      this.emit('strategicRegions', { op: 'append', items })
+    }).then(() => {
+      this.strategicRegionsLoaded = true
+      this.strategicRegionsLoadPromise = null
+    }).catch((error) => {
+      this.strategicRegionsLoadPromise = null
+      throw error
+    })
+
+    return this.strategicRegionsLoadPromise
+  }
+
+  private watchCoreProjectFiles(): void {
     if (!this.project) return
 
     this.watch(this.project.resolvedPaths.continent, () => {
@@ -68,6 +116,34 @@ export class ProjectSession {
     })
   }
 
+  private watchStateFiles(): void {
+    if (!this.project) return
+
+    for (const filePath of this.project.resolvedPaths.states) {
+      this.watch(filePath, () => {
+        if (!this.project) return
+        if (!this.statesLoaded) return
+        this.statesLoaded = false
+        this.statesLoadPromise = null
+        void this.loadStates()
+      })
+    }
+  }
+
+  private watchStrategicRegionFiles(): void {
+    if (!this.project) return
+
+    for (const filePath of this.project.resolvedPaths.strategicRegions) {
+      this.watch(filePath, () => {
+        if (!this.project) return
+        if (!this.strategicRegionsLoaded) return
+        this.strategicRegionsLoaded = false
+        this.strategicRegionsLoadPromise = null
+        void this.loadStrategicRegions()
+      })
+    }
+  }
+
   private watch(path: string, onChanged: () => void): void {
     if (this.watchers.has(path)) return
 
@@ -87,7 +163,10 @@ export class ProjectSession {
     this.watchers.set(path, entry)
   }
 
-  private emit(type: 'continents' | 'definitions' | 'terrain' | 'image', data: unknown): void {
+  private emit(
+    type: 'continents' | 'definitions' | 'terrain' | 'image' | 'states' | 'strategicRegions',
+    data: unknown
+  ): void {
     if (!this.project) return
     this.window.webContents.send(channels.map.changed, {
       projectId: this.project.projectId,
@@ -100,6 +179,10 @@ export class ProjectSession {
     this.disposeWatchers()
     this.project = null
     this.continents = []
+    this.statesLoaded = false
+    this.strategicRegionsLoaded = false
+    this.statesLoadPromise = null
+    this.strategicRegionsLoadPromise = null
   }
 
   private disposeWatchers(): void {

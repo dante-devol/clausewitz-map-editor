@@ -1,8 +1,15 @@
 import type { Continent, Province, TerrainCategory } from '../../../../shared/mapDataTypes'
 import type { DisplayModeOverrides } from '../store/displayModeConfigStore'
 
-export type DisplayMode = 'provinces' | 'type' | 'terrain' | 'coastal' | 'continent'
-export type ConfigurableDisplayMode = Exclude<DisplayMode, 'provinces'>
+export type DisplayMode =
+  | 'provinces'
+  | 'type'
+  | 'terrain'
+  | 'coastal'
+  | 'continent'
+  | 'state'
+  | 'strategicRegion'
+export type ConfigurableDisplayMode = Exclude<DisplayMode, 'provinces' | 'state' | 'strategicRegion'>
 
 export interface DisplayModeValueDescriptor {
   key: string
@@ -13,9 +20,19 @@ export interface DisplayModeValueDescriptor {
 export interface DisplayModeContext {
   terrains: ReadonlyMap<string, TerrainCategory>
   continents: ReadonlyMap<string, Continent>
+  stateProvinceToStateId: ReadonlyMap<number, number>
+  strategicRegionProvinceToRegionId: ReadonlyMap<number, number>
 }
 
-export const DISPLAY_MODES: DisplayMode[] = ['provinces', 'type', 'terrain', 'coastal', 'continent']
+export const DISPLAY_MODES: DisplayMode[] = [
+  'provinces',
+  'type',
+  'terrain',
+  'coastal',
+  'continent',
+  'state',
+  'strategicRegion'
+]
 
 export const TYPE_COLORS: Record<string, string> = {
   land: '#5a7c52',
@@ -63,15 +80,32 @@ export function continentColor(position: number): number {
 }
 
 export function isConfigurableDisplayMode(mode: DisplayMode): mode is ConfigurableDisplayMode {
-  return mode !== 'provinces'
+  return mode === 'type' || mode === 'terrain' || mode === 'coastal' || mode === 'continent'
 }
 
-export function getModeValueKey(mode: DisplayMode, province: Province): string | null {
+function hashedGroupColor(id: number, variant: 'state' | 'strategicRegion'): number {
+  const prime = variant === 'state' ? 1103515245 : 214013
+  const offset = variant === 'state' ? 12345 : 2531011
+  const seed = Math.abs((id * prime + offset) >>> 0)
+  const hue = (seed % 360 + (variant === 'state' ? 0 : 23)) % 360
+  const saturation = variant === 'state'
+    ? 0.54 + ((seed >> 9) % 18) / 100
+    : 0.66 + ((seed >> 9) % 12) / 100
+  const lightness = variant === 'state'
+    ? 0.44 + ((seed >> 17) % 12) / 100
+    : 0.50 + ((seed >> 17) % 10) / 100
+  const { r, g, b } = hslToRgb(hue, saturation, lightness)
+  return (r << 16) | (g << 8) | b
+}
+
+export function getModeValueKey(mode: DisplayMode, province: Province, context: DisplayModeContext): string | null {
   if (mode === 'provinces') return null
   if (mode === 'type') return province.type
   if (mode === 'terrain') return province.terrain
   if (mode === 'coastal') return province.isCoastal ? 'coastal' : 'inland'
-  return province.continent || 'none'
+  if (mode === 'continent') return province.continent || 'none'
+  if (mode === 'state') return context.stateProvinceToStateId.get(province.id)?.toString() ?? 'none'
+  return context.strategicRegionProvinceToRegionId.get(province.id)?.toString() ?? 'none'
 }
 
 export function getModeValueLabel(mode: DisplayMode, valueKey: string): string {
@@ -92,6 +126,12 @@ export function getModeValueColor(mode: DisplayMode, valueKey: string, context: 
     return valueKey === 'none'
       ? 0x303030
       : continentColor(context.continents.get(valueKey)?.position ?? 0)
+  }
+  if (mode === 'state') {
+    return valueKey === 'none' ? 0x303030 : hashedGroupColor(parseInt(valueKey, 10) || 0, 'state')
+  }
+  if (mode === 'strategicRegion') {
+    return valueKey === 'none' ? 0x303030 : hashedGroupColor(parseInt(valueKey, 10) || 0, 'strategicRegion')
   }
   return 0
 }
@@ -119,7 +159,7 @@ export function listModeValues(
 
   const keys = new Set<string>()
   for (const province of provinces.values()) {
-    const valueKey = getModeValueKey(mode, province)
+    const valueKey = getModeValueKey(mode, province, context)
     if (valueKey) keys.add(valueKey)
   }
   for (const valueKey of Object.keys(overrides[mode] ?? {})) {

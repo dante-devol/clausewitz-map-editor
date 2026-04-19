@@ -99,12 +99,17 @@ const MapViewportPane = memo(function MapViewportPane({
   const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
   const terrains = useMapDataStore((s) => s.terrains)
   const continents = useMapDataStore((s) => s.continents)
+  const stateProvinceToStateId = useMapDataStore((s) => s.stateProvinceToStateId)
+  const strategicRegionProvinceToRegionId = useMapDataStore((s) => s.strategicRegionProvinceToRegionId)
   const issuesByProvinceKey = useProvinceValidationStore((s) => s.issuesByProvinceKey)
   const displayModeOverrides = useDisplayModeConfigStore((s) => s.overrides)
   const displayMode = useCoreSelector(selectDisplayMode)
 
   const src = provincesImageB64 ? `data:image/bmp;base64,${provincesImageB64}` : null
-  const displayModeContext = useMemo(() => ({ terrains, continents }), [terrains, continents])
+  const displayModeContext = useMemo(
+    () => ({ terrains, continents, stateProvinceToStateId, strategicRegionProvinceToRegionId }),
+    [terrains, continents, stateProvinceToStateId, strategicRegionProvinceToRegionId]
+  )
   const modeValuesByMode = useMemo(
     () => selectModeValuesByMode(provinces, displayModeOverrides, displayModeContext),
     [provinces, displayModeOverrides, displayModeContext]
@@ -143,9 +148,10 @@ const MapViewportPane = memo(function MapViewportPane({
     return selectHoverTooltip(
       displayMode,
       query.getProvinceById(hoveredProvince.id),
+      displayModeContext,
       t as (key: string) => string
     )
-  }, [displayMode, hoveredProvince, query, t])
+  }, [displayMode, displayModeContext, hoveredProvince, query, t])
 
   return (
     <div className={className}>
