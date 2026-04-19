@@ -14,6 +14,7 @@ export function useProvinceValidation(): void {
   const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
   const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
   const pendingEdits = useMapDataStore((s) => s.pendingEdits)
+  const pendingBmpOnlyEdits = useMapDataStore((s) => s.pendingBmpOnlyEdits)
   const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
   const pendingNewProvinces = useMapDataStore((s) => s.pendingNewProvinces)
   const bmpOnlyEntries = useMapDataStore((s) => s.bmpOnlyEntries)
@@ -33,12 +34,13 @@ export function useProvinceValidation(): void {
     () => selectEffectiveProvinceCatalog(
       originalDefinitions,
       pendingEdits,
+      pendingBmpOnlyEdits,
       bmpReplacements,
       pendingNewProvinces,
       bmpOnlyEntries,
       provinceCatalog
     ),
-    [originalDefinitions, pendingEdits, bmpReplacements, pendingNewProvinces, bmpOnlyEntries, provinceCatalog]
+    [originalDefinitions, pendingEdits, pendingBmpOnlyEdits, bmpReplacements, pendingNewProvinces, bmpOnlyEntries, provinceCatalog]
   )
 
   const snapshot = useMemo<ProvinceValidationSnapshot>(() => ({

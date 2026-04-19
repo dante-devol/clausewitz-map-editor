@@ -1,13 +1,11 @@
 import { useMemo, useState } from 'react'
 import {
   Button,
-  Checkbox,
   Divider,
   Select,
   Tab,
   TabList,
   makeStyles,
-  mergeClasses,
   tokens,
   Text,
   shorthands
@@ -15,8 +13,14 @@ import {
 import { unpackColor } from '../../../../shared/mapDataTypes'
 import type { Province } from '../../../../shared/mapDataTypes'
 import type { ProvinceCatalogEntry } from '../../../../shared/provinceCatalog'
+import type { ProvinceDraftFields, ProvinceDraftTarget } from '../../../../shared/provinceEditing'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
+import { selectProvinceDraftTargetMaps } from '../../infra/store/provinceEditSelectors'
 import { useI18n } from '../i18n/I18nProvider'
+
+const UNSET = '__unset__'
+const COASTAL_TRUE = '__true__'
+const COASTAL_FALSE = '__false__'
 
 const useStyles = makeStyles({
   root: {
@@ -27,17 +31,6 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: tokens.spacingVerticalS
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: tokens.spacingHorizontalXS
-  },
-  count: {
-    color: tokens.colorNeutralForeground3,
-    padding: `0 ${tokens.spacingHorizontalXS}`,
-    borderRadius: tokens.borderRadiusCircular,
-    backgroundColor: tokens.colorNeutralBackground3
   },
   tabStripRow: {
     display: 'flex',
@@ -136,11 +129,6 @@ const useStyles = makeStyles({
     fontSize: tokens.fontSizeBase100,
     textAlign: 'center',
     padding: `${tokens.spacingVerticalS} 0`
-  },
-  bmpInfo: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: tokens.spacingVerticalXXS
   }
 })
 
@@ -152,305 +140,221 @@ interface Props {
   provinceCatalog: readonly ProvinceCatalogEntry[]
 }
 
-export function ProvinceDetailPanel({ selectedProvinceIds, selectedBmpGuids, provinceCatalog }: Props): JSX.Element {
+export function ProvinceDetailPanel({ selectedProvinceIds, selectedBmpGuids }: Props): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
 
+  const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
+  const pendingEdits = useMapDataStore((s) => s.pendingEdits)
+  const pendingBmpOnlyEdits = useMapDataStore((s) => s.pendingBmpOnlyEdits)
   const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
+  const pendingNewProvinces = useMapDataStore((s) => s.pendingNewProvinces)
   const bmpOnlyEntries = useMapDataStore((s) => s.bmpOnlyEntries)
 
-  // Build catalog lookup by id
-  const catalogById = useMemo(() => {
-    const map = new Map<number, ProvinceCatalogEntry>()
-    for (const p of provinceCatalog) {
-      if (p.id !== null) map.set(p.id, p)
-    }
-    return map
-  }, [provinceCatalog])
+  const targetMaps = useMemo(
+    () => selectProvinceDraftTargetMaps(
+      originalDefinitions,
+      pendingEdits,
+      pendingBmpOnlyEdits,
+      bmpReplacements,
+      pendingNewProvinces,
+      bmpOnlyEntries
+    ),
+    [originalDefinitions, pendingEdits, pendingBmpOnlyEdits, bmpReplacements, pendingNewProvinces, bmpOnlyEntries]
+  )
 
-  // Reverse lookup: guid -> canonical province id (via bmpReplacements)
-  const guidToProvinceId = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const [provinceId, guid] of bmpReplacements) {
-      map.set(guid, provinceId)
-    }
-    return map
-  }, [bmpReplacements])
-
-  // Compute the effective list of items to display:
-  // - canonical selected province ids (directly)
-  // - BMP guids that resolved to a canonical province (via bmpReplacements)
-  // - BMP guids with no canonical assignment (unregistered)
-  interface DisplayItem {
-    kind: 'canonical'
-    provinceId: number
-    label: string
-  }
-  interface DisplayBmpItem {
-    kind: 'bmp-unassigned'
-    guid: string
-    label: string
-  }
-  type TabItem = DisplayItem | DisplayBmpItem
-
-  const tabItems = useMemo<TabItem[]>(() => {
-    const items: TabItem[] = []
-    const seenProvinceIds = new Set<number>()
+  const tabItems = useMemo(() => {
+    const items: Array<{ key: string; label: string; target: ProvinceDraftTarget }> = []
+    const seen = new Set<string>()
 
     for (const id of selectedProvinceIds) {
-      if (!seenProvinceIds.has(id)) {
-        seenProvinceIds.add(id)
-        items.push({ kind: 'canonical', provinceId: id, label: String(id) })
-      }
+      const target = targetMaps.byProvinceId.get(id)
+      if (!target) continue
+      const key = `p:${id}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      items.push({ key, label: String(id), target })
     }
 
     for (const guid of selectedBmpGuids) {
-      const provinceId = guidToProvinceId.get(guid)
-      if (provinceId !== undefined) {
-        // Resolved to canonical — show as canonical if not already shown
-        if (!seenProvinceIds.has(provinceId)) {
-          seenProvinceIds.add(provinceId)
-          items.push({ kind: 'canonical', provinceId, label: String(provinceId) })
-        }
-      } else {
-        // Unassigned BMP
-        items.push({ kind: 'bmp-unassigned', guid, label: guid })
-      }
+      const target = targetMaps.byBmpGuid.get(guid)
+      if (!target) continue
+      const key = target.provinceId !== null ? `p:${target.provinceId}` : `b:${guid}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      items.push({ key, label: target.provinceId !== null ? String(target.provinceId) : guid, target })
     }
 
     return items
-  }, [selectedProvinceIds, selectedBmpGuids, guidToProvinceId])
+  }, [selectedProvinceIds, selectedBmpGuids, targetMaps])
 
   const [selectedTabKey, setSelectedTabKey] = useState<string | null>(null)
 
-  const tabKey = (item: TabItem) =>
-    item.kind === 'canonical' ? `p:${item.provinceId}` : `b:${item.guid}`
-
   const effectiveKey = useMemo(() => {
     if (tabItems.length === 0) return null
-    const firstKey = tabKey(tabItems[0])
+    const firstKey = tabItems[0].key
     if (selectedTabKey === null) return firstKey
-    return tabItems.some((i) => tabKey(i) === selectedTabKey) ? selectedTabKey : firstKey
-  }, [tabItems, selectedTabKey])
+    return tabItems.some((item) => item.key === selectedTabKey) ? selectedTabKey : firstKey
+  }, [selectedTabKey, tabItems])
 
-  const focusedItem = useMemo(
-    () => tabItems.find((i) => tabKey(i) === effectiveKey),
-    [tabItems, effectiveKey]
+  const focusedTarget = useMemo(
+    () => tabItems.find((item) => item.key === effectiveKey)?.target,
+    [effectiveKey, tabItems]
   )
 
-  const totalCount = tabItems.length
-  const showTabs = totalCount > 1
-  const visibleTabs = tabItems.slice(0, TAB_SHOW_LIMIT)
-  const overflowCount = tabItems.length - TAB_SHOW_LIMIT
-
-  // BMP entry lookup
-  const bmpEntryByGuid = useMemo(
-    () => new Map(bmpOnlyEntries.map((e) => [e.guid, e])),
-    [bmpOnlyEntries]
-  )
+  if (tabItems.length === 0) {
+    return <div className={styles.root}><Text className={styles.empty}>{t('provinceDetail.empty')}</Text></div>
+  }
 
   return (
     <div className={styles.root}>
-      {showTabs && (
+      {tabItems.length > 1 && (
         <div className={styles.tabStripRow}>
           <TabList
             size="small"
             selectedValue={effectiveKey ?? undefined}
             onTabSelect={(_, data) => setSelectedTabKey(data.value as string)}
           >
-            {visibleTabs.map((item) => {
-              const key = tabKey(item)
-              return <Tab key={key} value={key}>{item.label}</Tab>
-            })}
+            {tabItems.slice(0, TAB_SHOW_LIMIT).map((item) => (
+              <Tab key={item.key} value={item.key}>{item.label}</Tab>
+            ))}
           </TabList>
-          {overflowCount > 0 && (
-            <Text size={100} className={styles.tabOverflow}>+{overflowCount}</Text>
+          {tabItems.length > TAB_SHOW_LIMIT && (
+            <Text size={100} className={styles.tabOverflow}>+{tabItems.length - TAB_SHOW_LIMIT}</Text>
           )}
         </div>
       )}
 
-      {totalCount === 0 && (
-        <Text className={styles.empty}>{t('provinceDetail.empty')}</Text>
-      )}
-
-      {totalCount >= 1 && focusedItem && (
-        <>
-          {focusedItem.kind === 'canonical' && totalCount === 1 && (
-            <SingleDetail provinceId={focusedItem.provinceId} />
-          )}
-          {focusedItem.kind === 'canonical' && totalCount > 1 && (
-            // When multiple: show single detail for the focused tab's province
-            <SingleDetail provinceId={focusedItem.provinceId} />
-          )}
-          {focusedItem.kind === 'bmp-unassigned' && (
-            <BmpUnassignedDetail guid={focusedItem.guid} bmpEntryByGuid={bmpEntryByGuid} />
-          )}
-        </>
-      )}
+      {focusedTarget && <SingleDetail target={focusedTarget} />}
     </div>
   )
 }
 
-function BmpUnassignedDetail({
-  guid,
-  bmpEntryByGuid
-}: {
-  guid: string
-  bmpEntryByGuid: Map<string, { guid: string; color: number }>
-}): JSX.Element {
-  const styles = useStyles()
-  const { t } = useI18n()
-  const entry = bmpEntryByGuid.get(guid)
-
-  return (
-    <div className={styles.bmpInfo}>
-      <div className={styles.grid}>
-        <span className={styles.label}>{t('provinceDetail.bmpGuid')}</span>
-        <span className={styles.idText}>{guid}</span>
-        {entry && (
-          <>
-            <span className={styles.label}>{t('provinceEdit.color.label')}</span>
-            <div className={styles.colorRow}>
-              <div
-                className={styles.swatch}
-                style={{
-                  backgroundColor: (() => {
-                    const { r, g, b } = unpackColor(entry.color)
-                    return `rgb(${r},${g},${b})`
-                  })()
-                }}
-              />
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function SingleDetail({ provinceId }: { provinceId: number }): JSX.Element {
+function SingleDetail({ target }: { target: ProvinceDraftTarget }): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
 
   const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
-  const pendingEdits = useMapDataStore((s) => s.pendingEdits)
   const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
-  const bmpOnlyEntries = useMapDataStore((s) => s.bmpOnlyEntries)
   const terrains = useMapDataStore((s) => s.terrains)
   const continents = useMapDataStore((s) => s.continents)
+  const pendingEdits = useMapDataStore((s) => s.pendingEdits)
+  const pendingBmpOnlyEdits = useMapDataStore((s) => s.pendingBmpOnlyEdits)
   const editProvince = useMapDataStore((s) => s.editProvince)
+  const editBmpOnlyProvince = useMapDataStore((s) => s.editBmpOnlyProvince)
   const revertEdit = useMapDataStore((s) => s.revertEdit)
+  const revertBmpOnlyEdit = useMapDataStore((s) => s.revertBmpOnlyEdit)
   const revertBmpReplacement = useMapDataStore((s) => s.revertBmpReplacement)
 
   const sortedTerrains = useMemo(() => [...terrains.keys()].sort(), [terrains])
   const sortedContinents = useMemo(() => [...continents.keys()].sort(), [continents])
-  const bmpOnlyByGuid = useMemo(
-    () => new Map(bmpOnlyEntries.map((e) => [e.guid, e])),
-    [bmpOnlyEntries]
-  )
+  const original = target.provinceId !== null ? originalDefinitions.get(target.provinceId) : undefined
+  const patch = target.provinceId !== null
+    ? pendingEdits.get(target.provinceId)
+    : (target.bmpGuid ? pendingBmpOnlyEdits.get(target.bmpGuid) : undefined)
 
-  const original = originalDefinitions.get(provinceId)
-  const patch = pendingEdits.get(provinceId) ?? {}
-  const replacingGuid = bmpReplacements.get(provinceId)
-  const bmpEntry = replacingGuid ? bmpOnlyByGuid.get(replacingGuid) : undefined
+  const hasPatch = patch !== undefined
+  const hasReplacement = target.provinceId !== null && bmpReplacements.has(target.provinceId)
+  const { r, g, b } = unpackColor(target.color)
+  const originalColor = original ? unpackColor(original.color) : null
 
-  if (!original) return <></>
-
-  const effective: Province = {
-    ...original,
-    ...patch,
-    ...(bmpEntry ? { color: bmpEntry.color } : {})
+  const setField = (field: keyof ProvinceDraftFields, value: ProvinceDraftFields[keyof ProvinceDraftFields]) => {
+    if (target.provinceId !== null) editProvince(target.provinceId, { [field]: value })
+    else if (target.bmpGuid) editBmpOnlyProvince(target.bmpGuid, { [field]: value })
   }
-
-  const hasPatch = Object.keys(patch).length > 0
-  const hasReplacement = bmpEntry !== undefined
-
-  const set = (field: keyof Omit<Province, 'id' | 'color'>, value: string | boolean) =>
-    editProvince(provinceId, { [field]: value })
-
-  const origColor = unpackColor(original.color)
-  const effColor = unpackColor(effective.color)
-
-  const hexColor = (c: ReturnType<typeof unpackColor>) =>
-    '#' + [c.r, c.g, c.b].map((v) => v.toString(16).padStart(2, '0')).join('')
 
   return (
     <>
       <div className={styles.grid}>
-        {/* ID */}
-        <span className={mergeClasses(styles.label)}>{t('provinceDetail.id')}</span>
-        <span className={styles.idText}>{provinceId}</span>
+        <span className={styles.label}>
+          {target.provinceId !== null ? t('provinceDetail.id') : t('provinceDetail.bmpGuid')}
+        </span>
+        <span className={styles.idText}>{target.provinceId !== null ? String(target.provinceId) : (target.bmpGuid ?? '—')}</span>
 
-        {/* Color */}
         <span className={styles.label}>{t('provinceEdit.color.label')}</span>
         <div className={styles.fieldCell}>
           <div className={styles.colorRow}>
-            {hasReplacement ? (
+            {hasReplacement && originalColor ? (
               <>
-                <div className={styles.swatchOrig} style={{ backgroundColor: `rgb(${origColor.r},${origColor.g},${origColor.b})` }} />
+                <div className={styles.swatchOrig} style={{ backgroundColor: `rgb(${originalColor.r},${originalColor.g},${originalColor.b})` }} />
                 <span className={styles.swatchArrow}>→</span>
-                <div className={styles.swatch} style={{ backgroundColor: `rgb(${effColor.r},${effColor.g},${effColor.b})` }} />
-                <Text size={100} className={styles.colorLabel}>{t('provinceEdit.color.bmpAssigned')}</Text>
               </>
-            ) : (
-              <>
-                <div className={styles.swatch} style={{ backgroundColor: `rgb(${effColor.r},${effColor.g},${effColor.b})` }} />
-                <Text size={100} className={styles.colorLabel}>{hexColor(effColor)}</Text>
-              </>
-            )}
+            ) : null}
+            <div className={styles.swatch} style={{ backgroundColor: `rgb(${r},${g},${b})` }} />
+            <Text size={100} className={styles.colorLabel}>
+              {hasReplacement ? t('provinceEdit.color.bmpAssigned') : formatHexColor(r, g, b)}
+            </Text>
           </div>
         </div>
 
-        {/* Type */}
         <span className={styles.label}>{t('provinceEdit.type.label')}</span>
         <div className={styles.fieldCell}>
-          <Select size="small" value={effective.type} onChange={(_, d) => set('type', d.value as Province['type'])}>
+          <Select
+            size="small"
+            value={target.type ?? UNSET}
+            onChange={(_, data) => setField('type', data.value === UNSET ? undefined : data.value as Province['type'])}
+          >
+            <option value={UNSET}>{t('provinceEdit.noneOption')}</option>
             <option value="land">land</option>
             <option value="sea">sea</option>
             <option value="lake">lake</option>
           </Select>
-          {patch.type !== undefined && patch.type !== original.type && (
-            <Text size={100} className={styles.original}>{t('provinceEdit.original', { value: original.type })}</Text>
+          {showOriginalValue(patch, 'type', original?.type) && (
+            <Text size={100} className={styles.original}>{t('provinceEdit.original', { value: original?.type ?? t('provinceEdit.noneOption') })}</Text>
           )}
         </div>
 
-        {/* Terrain */}
         <span className={styles.label}>{t('provinceEdit.terrain.label')}</span>
         <div className={styles.fieldCell}>
-          <Select size="small" value={effective.terrain} onChange={(_, d) => set('terrain', d.value)}>
+          <Select
+            size="small"
+            value={target.terrain ?? UNSET}
+            onChange={(_, data) => setField('terrain', data.value === UNSET ? undefined : data.value)}
+          >
+            <option value={UNSET}>{t('provinceEdit.noneOption')}</option>
             {sortedTerrains.map((name) => <option key={name} value={name}>{name}</option>)}
           </Select>
-          {patch.terrain !== undefined && patch.terrain !== original.terrain && (
-            <Text size={100} className={styles.original}>{t('provinceEdit.original', { value: original.terrain })}</Text>
+          {showOriginalValue(patch, 'terrain', original?.terrain) && (
+            <Text size={100} className={styles.original}>{t('provinceEdit.original', { value: original?.terrain ?? t('provinceEdit.noneOption') })}</Text>
           )}
         </div>
 
-        {/* Coastal */}
         <span className={styles.label}>{t('provinceEdit.coastal.label')}</span>
         <div className={styles.fieldCell}>
-          <Checkbox
-            checked={effective.isCoastal}
-            onChange={(_, d) => set('isCoastal', d.checked === true)}
-          />
-          {patch.isCoastal !== undefined && patch.isCoastal !== original.isCoastal && (
+          <Select
+            size="small"
+            value={serializeCoastal(target.isCoastal)}
+            onChange={(_, data) => setField('isCoastal', deserializeCoastal(data.value))}
+          >
+            <option value={UNSET}>{t('provinceEdit.noneOption')}</option>
+            <option value={COASTAL_TRUE}>{t('provinceEdit.coastal.yes')}</option>
+            <option value={COASTAL_FALSE}>{t('provinceEdit.coastal.no')}</option>
+          </Select>
+          {showOriginalValue(patch, 'isCoastal', original?.isCoastal) && (
             <Text size={100} className={styles.original}>
               {t('provinceEdit.original', {
-                value: original.isCoastal ? t('provinceEdit.coastal.yes') : t('provinceEdit.coastal.no')
+                value: original?.isCoastal === undefined
+                  ? t('provinceEdit.noneOption')
+                  : (original.isCoastal ? t('provinceEdit.coastal.yes') : t('provinceEdit.coastal.no'))
               })}
             </Text>
           )}
         </div>
 
-        {/* Continent */}
         <span className={styles.label}>{t('provinceEdit.continent.label')}</span>
         <div className={styles.fieldCell}>
-          <Select size="small" value={effective.continent} onChange={(_, d) => set('continent', d.value)}>
+          <Select
+            size="small"
+            value={target.continent ?? UNSET}
+            onChange={(_, data) => setField('continent', data.value === UNSET ? undefined : data.value)}
+          >
+            <option value={UNSET}>{t('provinceEdit.noneOption')}</option>
             <option value="">{t('provinceEdit.noneOption')}</option>
             {sortedContinents.map((name) => <option key={name} value={name}>{name}</option>)}
           </Select>
-          {patch.continent !== undefined && patch.continent !== original.continent && (
+          {showOriginalValue(patch, 'continent', original?.continent) && (
             <Text size={100} className={styles.original}>
-              {t('provinceEdit.original', { value: original.continent || t('provinceEdit.noneOption') })}
+              {t('provinceEdit.original', { value: original?.continent || t('provinceEdit.noneOption') })}
             </Text>
           )}
         </div>
@@ -461,12 +365,25 @@ function SingleDetail({ provinceId }: { provinceId: number }): JSX.Element {
           <Divider />
           <div className={styles.revertRow}>
             {hasPatch && (
-              <Button size="small" appearance="subtle" className={styles.revertButton} onClick={() => revertEdit(provinceId)}>
+              <Button
+                size="small"
+                appearance="subtle"
+                className={styles.revertButton}
+                onClick={() => {
+                  if (target.provinceId !== null) revertEdit(target.provinceId)
+                  else if (target.bmpGuid) revertBmpOnlyEdit(target.bmpGuid)
+                }}
+              >
                 {t('provinceEdit.revertFields')}
               </Button>
             )}
-            {hasReplacement && (
-              <Button size="small" appearance="subtle" className={styles.revertButton} onClick={() => revertBmpReplacement(provinceId)}>
+            {hasReplacement && target.provinceId !== null && (
+              <Button
+                size="small"
+                appearance="subtle"
+                className={styles.revertButton}
+                onClick={() => revertBmpReplacement(target.provinceId!)}
+              >
                 {t('provinceEdit.revertColor')}
               </Button>
             )}
@@ -477,20 +394,26 @@ function SingleDetail({ provinceId }: { provinceId: number }): JSX.Element {
   )
 }
 
-function formatIdRanges(ids: number[]): string {
-  if (ids.length === 0) return '—'
-  const sorted = [...ids].sort((a, b) => a - b)
-  const ranges: string[] = []
-  let start = sorted[0]
-  let end = sorted[0]
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i] === end + 1) {
-      end = sorted[i]
-    } else {
-      ranges.push(start === end ? `${start}` : `${start}–${end}`)
-      start = end = sorted[i]
-    }
-  }
-  ranges.push(start === end ? `${start}` : `${start}–${end}`)
-  return ranges.join(', ')
+function showOriginalValue(
+  patch: Partial<ProvinceDraftFields> | ProvinceDraftFields | undefined,
+  field: keyof ProvinceDraftFields,
+  originalValue: string | boolean | undefined
+): boolean {
+  return patch !== undefined
+    && Object.prototype.hasOwnProperty.call(patch, field)
+    && patch[field] !== originalValue
+}
+
+function formatHexColor(r: number, g: number, b: number): string {
+  return '#' + [r, g, b].map((value) => value.toString(16).padStart(2, '0')).join('')
+}
+
+function serializeCoastal(value: boolean | undefined): string {
+  if (value === undefined) return UNSET
+  return value ? COASTAL_TRUE : COASTAL_FALSE
+}
+
+function deserializeCoastal(value: string): boolean | undefined {
+  if (value === UNSET) return undefined
+  return value === COASTAL_TRUE
 }

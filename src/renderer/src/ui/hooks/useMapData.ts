@@ -25,11 +25,11 @@ export function useContinent(codeName: string): Continent | undefined {
 // Composite faces — resolve a province's refs in one call
 
 export function useProvinceTerrain(province: Province | undefined): TerrainCategory | undefined {
-  return useMapDataStore((s) => (province ? s.terrains.get(province.terrain) : undefined))
+  return useMapDataStore((s) => (province?.terrain ? s.terrains.get(province.terrain) : undefined))
 }
 
 export function useProvinceContinent(province: Province | undefined): Continent | undefined {
-  return useMapDataStore((s) => (province ? s.continents.get(province.continent) : undefined))
+  return useMapDataStore((s) => (province?.continent ? s.continents.get(province.continent) : undefined))
 }
 
 // ─── Plain accessor (non-React, e.g. parsers, workers, event handlers) ───────
@@ -51,8 +51,12 @@ export const mapData = {
     useMapDataStore.getState().continents.get(codeName),
 
   getProvinceTerrain: (province: Province): TerrainCategory | undefined =>
-    useMapDataStore.getState().terrains.get(province.terrain),
+    province.terrain
+      ? useMapDataStore.getState().terrains.get(province.terrain)
+      : undefined,
 
   getProvinceContinent: (province: Province): Continent | undefined =>
-    useMapDataStore.getState().continents.get(province.continent)
+    province.continent
+      ? useMapDataStore.getState().continents.get(province.continent)
+      : undefined
 }

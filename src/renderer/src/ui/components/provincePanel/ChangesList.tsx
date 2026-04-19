@@ -200,14 +200,14 @@ export function ChangesList({
       // Additive selection on shift+click
       if (change.kind === 'field-edit' || change.kind === 'bmp-replacement') {
         extendSelection([change.provinceId])
-      } else if (change.kind === 'new-province') {
+      } else if (change.kind === 'new-province' || change.kind === 'bmp-field-edit') {
         toggleBmpGuid(change.bmpGuid)
       }
     } else {
       // Regular click — replace selection
       if (change.kind === 'field-edit' || change.kind === 'bmp-replacement') {
         setSelection([change.provinceId])
-      } else if (change.kind === 'new-province') {
+      } else if (change.kind === 'new-province' || change.kind === 'bmp-field-edit') {
         setSelectedBmpGuids([change.bmpGuid])
       }
     }
@@ -256,6 +256,7 @@ export function ChangesList({
                     </Text>
 
                     {change.kind === 'field-edit' && <FieldEditRow change={change} styles={styles} t={t} />}
+                    {change.kind === 'bmp-field-edit' && <BmpFieldEditRow change={change} styles={styles} t={t} />}
                     {change.kind === 'bmp-replacement' && <BmpReplacementRow change={change} styles={styles} />}
                     {change.kind === 'new-province' && <NewProvinceRow change={change} styles={styles} />}
 
@@ -294,6 +295,28 @@ function FieldEditRow({
     <>
       <div className={styles.swatch} style={{ backgroundColor: `rgb(${r},${g},${b})` }} />
       <Text size={100} className={styles.label}>{change.provinceId}</Text>
+      <div className={styles.rowSpacer} />
+      <Text size={100} className={styles.fieldCount}>
+        {t('provincePanel.changes.fieldCount', { count: Object.keys(change.patch).length })}
+      </Text>
+    </>
+  )
+}
+
+function BmpFieldEditRow({
+  change,
+  styles,
+  t
+}: {
+  change: Extract<PendingChange, { kind: 'bmp-field-edit' }>
+  styles: ReturnType<typeof useStyles>
+  t: (key: string, params?: Record<string, string | number>) => string
+}) {
+  const { r, g, b } = unpackColor(change.bmpColor)
+  return (
+    <>
+      <div className={styles.swatch} style={{ backgroundColor: `rgb(${r},${g},${b})` }} />
+      <Text size={100} className={styles.label}>{change.bmpGuid}</Text>
       <div className={styles.rowSpacer} />
       <Text size={100} className={styles.fieldCount}>
         {t('provincePanel.changes.fieldCount', { count: Object.keys(change.patch).length })}
@@ -343,13 +366,13 @@ function NewProvinceRow({
 }
 
 function kindClass(change: PendingChange, styles: ReturnType<typeof useStyles>): string {
-  if (change.kind === 'field-edit') return styles.kindEdit
+  if (change.kind === 'field-edit' || change.kind === 'bmp-field-edit') return styles.kindEdit
   if (change.kind === 'bmp-replacement') return styles.kindBmp
   return styles.kindNew
 }
 
 function kindLabel(change: PendingChange): string {
-  if (change.kind === 'field-edit') return 'edit'
+  if (change.kind === 'field-edit' || change.kind === 'bmp-field-edit') return 'edit'
   if (change.kind === 'bmp-replacement') return 'assign'
   return 'new'
 }

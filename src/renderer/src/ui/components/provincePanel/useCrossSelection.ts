@@ -12,6 +12,7 @@ interface CrossSelectionResult {
 
 export function useCrossSelection(): CrossSelectionResult {
   const pendingEdits = useMapDataStore((s) => s.pendingEdits)
+  const pendingBmpOnlyEdits = useMapDataStore((s) => s.pendingBmpOnlyEdits)
   const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
   const pendingNewProvinces = useMapDataStore((s) => s.pendingNewProvinces)
   const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
@@ -20,8 +21,15 @@ export function useCrossSelection(): CrossSelectionResult {
   const selectedBmpGuids = useMapDataStore((s) => s.selectedBmpGuids)
 
   const changes = useMemo(
-    () => selectPendingChanges(pendingEdits, bmpReplacements, pendingNewProvinces, originalDefinitions, bmpOnlyEntries),
-    [pendingEdits, bmpReplacements, pendingNewProvinces, originalDefinitions, bmpOnlyEntries]
+    () => selectPendingChanges(
+      pendingEdits,
+      pendingBmpOnlyEdits,
+      bmpReplacements,
+      pendingNewProvinces,
+      originalDefinitions,
+      bmpOnlyEntries
+    ),
+    [pendingEdits, pendingBmpOnlyEdits, bmpReplacements, pendingNewProvinces, originalDefinitions, bmpOnlyEntries]
   )
 
   // crossSelectedBmpGuids = selectedBmpGuids UNION guids that are bmpReplacements for any selectedProvinceId
@@ -42,6 +50,7 @@ export function useCrossSelection(): CrossSelectionResult {
     const bmpGuidSet = new Set(selectedBmpGuids)
     const match = changes.find((c) => {
       if (c.kind === 'field-edit') return provinceIdSet.has(c.provinceId)
+      if (c.kind === 'bmp-field-edit') return bmpGuidSet.has(c.bmpGuid)
       if (c.kind === 'bmp-replacement') return provinceIdSet.has((c as BmpReplacement).provinceId)
       if (c.kind === 'new-province') return bmpGuidSet.has((c as NewProvince).bmpGuid)
       return false

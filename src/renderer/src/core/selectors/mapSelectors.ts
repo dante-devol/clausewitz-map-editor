@@ -1,6 +1,6 @@
 import type { Province } from '../../../../shared/mapDataTypes'
 import type { ProvinceCatalogEntry, ProvinceCatalogEntryKey } from '../../../../shared/provinceCatalog'
-import type { BmpOnlyEntry } from '../../../../shared/provinceEditing'
+import type { BmpOnlyEntry, ProvinceDraftTarget } from '../../../../shared/provinceEditing'
 import type { CoreState } from '../contracts/CoreState'
 import {
   getModeValueKey,
@@ -23,10 +23,14 @@ export function selectHighlightColors(
   bmpReplacements: ReadonlyMap<number, string>
 ): number[] {
   const colors: number[] = []
+  const bmpEntryByGuid = new Map(bmpOnlyEntries.map((e) => [e.guid, e]))
 
   // Colors from canonical province selections
   for (const id of selectedProvinceIds) {
-    const color = provinces.get(id)?.color
+    const replacingGuid = bmpReplacements.get(id)
+    const color = replacingGuid
+      ? bmpEntryByGuid.get(replacingGuid)?.color
+      : provinces.get(id)?.color
     if (color !== undefined) colors.push(color)
   }
 
@@ -34,7 +38,6 @@ export function selectHighlightColors(
   // For each selected BMP guid:
   //   - If it has a bmpReplacement (province assigned), show the province's original color (since after assignment the map shows that)
   //   - Otherwise show the direct BMP color from bmpOnlyEntries
-  const bmpEntryByGuid = new Map(bmpOnlyEntries.map((e) => [e.guid, e]))
   // Reverse lookup: bmp guid -> province id (if a replacement was assigned)
   const guidToProvinceId = new Map<string, number>()
   for (const [provinceId, guid] of bmpReplacements) {
@@ -116,37 +119,46 @@ export function selectModeValuesByMode(
 
 export function selectHoverTooltip(
   displayMode: CoreState['map']['displayMode'],
-  province: Province | undefined,
+  province: ProvinceDraftTarget | undefined,
   context: DisplayModeContext,
   t: (key: string) => string
 ): { label: string; value: string } | null {
   if (!province) return null
 
   if (displayMode === 'provinces') {
-    return { label: t('map.hover.provinceId'), value: province.id.toString() }
+    return province.provinceId !== null
+      ? { label: t('map.hover.provinceId'), value: province.provinceId.toString() }
+      : { label: t('map.hover.unregisteredProvince'), value: province.bmpGuid ?? t('mapValue.none') }
   }
   if (displayMode === 'type') {
-    return { label: t('map.hover.type'), value: province.type }
+    return { label: t('map.hover.type'), value: province.type ?? t('mapValue.none') }
   }
   if (displayMode === 'terrain') {
-    return { label: t('map.hover.terrain'), value: province.terrain }
+    return { label: t('map.hover.terrain'), value: province.terrain ?? t('mapValue.none') }
   }
   if (displayMode === 'coastal') {
+    const value = province.isCoastal === undefined
+      ? t('mapValue.none')
+      : t(province.isCoastal ? 'mapValue.coastal' : 'mapValue.inland')
     return {
       label: t('map.hover.coastal'),
-      value: t(province.isCoastal ? 'mapValue.coastal' : 'mapValue.inland')
+      value
     }
   }
   if (displayMode === 'state') {
     return {
       label: t('map.hover.state'),
-      value: context.stateProvinceToStateId.get(province.id)?.toString() ?? t('mapValue.none')
+      value: province.provinceId !== null
+        ? (context.stateProvinceToStateId.get(province.provinceId)?.toString() ?? t('mapValue.none'))
+        : t('mapValue.none')
     }
   }
   if (displayMode === 'strategicRegion') {
     return {
       label: t('map.hover.strategicRegion'),
-      value: context.strategicRegionProvinceToRegionId.get(province.id)?.toString() ?? t('mapValue.none')
+      value: province.provinceId !== null
+        ? (context.strategicRegionProvinceToRegionId.get(province.provinceId)?.toString() ?? t('mapValue.none'))
+        : t('mapValue.none')
     }
   }
 

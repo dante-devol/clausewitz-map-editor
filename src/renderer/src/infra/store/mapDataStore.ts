@@ -9,7 +9,8 @@ import type {
 import type { ProvinceCatalogEntry } from '../../../../shared/provinceCatalog'
 import type {
   BmpOnlyEntry,
-  BmpAssignmentAction
+  BmpAssignmentAction,
+  ProvinceDraftFields
 } from '../../../../shared/provinceEditing'
 
 interface MapDataState {
@@ -37,7 +38,8 @@ interface MapDataState {
   originalDefinitions: Map<number, Province>
   bmpOnlyEntries: BmpOnlyEntry[]
   bmpOnlyByColor: Map<number, string>           // color → guid
-  pendingEdits: Map<number, Partial<Province>>  // province id → field patch
+  pendingEdits: Map<number, Partial<ProvinceDraftFields>> // province id → field patch
+  pendingBmpOnlyEdits: Map<string, ProvinceDraftFields>   // bmp guid → draft field bag
   bmpReplacements: Map<number, string>          // canonical province id → bmp guid
   pendingNewProvinces: Map<string, number>      // bmp guid → assigned province id
 
@@ -62,11 +64,14 @@ interface MapDataState {
   // Editing actions
   loadOriginalDefinitions: (provinces: Province[]) => void
   syncBmpOnlyEntries: (colors: number[]) => void
-  editProvince: (id: number, patch: Partial<Province>) => void
+  editProvince: (id: number, patch: Partial<ProvinceDraftFields>) => void
+  editBmpOnlyProvince: (guid: string, patch: Partial<ProvinceDraftFields>) => void
   revertEdit: (id: number) => void
+  revertBmpOnlyEdit: (guid: string) => void
   assignBmpProvince: (guid: string, action: BmpAssignmentAction) => void
   revertBmpReplacement: (provinceId: number) => void
   revertNewProvince: (guid: string) => void
+  clearSavedChanges: () => void
   clearPendingChanges: () => void
   // Selection actions
   setSelection: (ids: number[]) => void
@@ -102,7 +107,8 @@ const EMPTY_STATE = {
   originalDefinitions: new Map<number, Province>(),
   bmpOnlyEntries: [] as BmpOnlyEntry[],
   bmpOnlyByColor: new Map<number, string>(),
-  pendingEdits: new Map<number, Partial<Province>>(),
+  pendingEdits: new Map<number, Partial<ProvinceDraftFields>>(),
+  pendingBmpOnlyEdits: new Map<string, ProvinceDraftFields>(),
   bmpReplacements: new Map<number, string>(),
   pendingNewProvinces: new Map<string, number>(),
   selectedProvinceIds: [] as number[],
@@ -183,15 +189,31 @@ export const useMapDataStore = create<MapDataState>((set) => ({
     return { pendingEdits }
   }),
 
+  editBmpOnlyProvince: (guid, patch) => set((state) => {
+    const pendingBmpOnlyEdits = new Map(state.pendingBmpOnlyEdits)
+    const existing = pendingBmpOnlyEdits.get(guid) ?? createEmptyDraftFields()
+    pendingBmpOnlyEdits.set(guid, { ...existing, ...patch })
+    return { pendingBmpOnlyEdits }
+  }),
+
   revertEdit: (id) => set((state) => {
     const pendingEdits = new Map(state.pendingEdits)
     pendingEdits.delete(id)
     return { pendingEdits }
   }),
 
+  revertBmpOnlyEdit: (guid) => set((state) => {
+    const pendingBmpOnlyEdits = new Map(state.pendingBmpOnlyEdits)
+    pendingBmpOnlyEdits.delete(guid)
+    return { pendingBmpOnlyEdits }
+  }),
+
   assignBmpProvince: (guid, action) => set((state) => {
     const bmpReplacements = new Map(state.bmpReplacements)
     const pendingNewProvinces = new Map(state.pendingNewProvinces)
+    const pendingBmpOnlyEdits = new Map(state.pendingBmpOnlyEdits)
+    const pendingEdits = new Map(state.pendingEdits)
+    const draft = pendingBmpOnlyEdits.get(guid) ?? createEmptyDraftFields()
 
     // Remove any prior assignment for this guid
     for (const [id, g] of bmpReplacements) {
@@ -201,11 +223,17 @@ export const useMapDataStore = create<MapDataState>((set) => ({
 
     if (action.type === 'replace') {
       bmpReplacements.set(action.targetId, guid)
+      const existing = pendingEdits.get(action.targetId) ?? {}
+      pendingEdits.set(action.targetId, { ...existing, ...draft })
     } else {
       pendingNewProvinces.set(guid, action.assignedId)
+      const existing = pendingEdits.get(action.assignedId) ?? {}
+      pendingEdits.set(action.assignedId, { ...existing, ...draft })
     }
 
-    return { bmpReplacements, pendingNewProvinces }
+    pendingBmpOnlyEdits.delete(guid)
+
+    return { bmpReplacements, pendingNewProvinces, pendingBmpOnlyEdits, pendingEdits }
   }),
 
   revertBmpReplacement: (provinceId) => set((state) => {
@@ -216,12 +244,22 @@ export const useMapDataStore = create<MapDataState>((set) => ({
 
   revertNewProvince: (guid) => set((state) => {
     const pendingNewProvinces = new Map(state.pendingNewProvinces)
+    const pendingEdits = new Map(state.pendingEdits)
+    const assignedId = pendingNewProvinces.get(guid)
+    if (assignedId !== undefined) pendingEdits.delete(assignedId)
     pendingNewProvinces.delete(guid)
-    return { pendingNewProvinces }
+    return { pendingNewProvinces, pendingEdits }
   }),
 
   clearPendingChanges: () => set({
-    pendingEdits: new Map<number, Partial<Province>>(),
+    pendingEdits: new Map<number, Partial<ProvinceDraftFields>>(),
+    pendingBmpOnlyEdits: new Map<string, ProvinceDraftFields>(),
+    bmpReplacements: new Map<number, string>(),
+    pendingNewProvinces: new Map<string, number>()
+  }),
+
+  clearSavedChanges: () => set({
+    pendingEdits: new Map<number, Partial<ProvinceDraftFields>>(),
     bmpReplacements: new Map<number, string>(),
     pendingNewProvinces: new Map<string, number>()
   }),
@@ -279,4 +317,13 @@ function buildStrategicRegionsSlice(strategicRegionsInput: StrategicRegionDefini
     for (const provinceId of region.provinceIds) strategicRegionProvinceToRegionId.set(provinceId, region.id)
   }
   return { strategicRegions, strategicRegionsById, strategicRegionProvinceToRegionId }
+}
+
+function createEmptyDraftFields(): ProvinceDraftFields {
+  return {
+    type: undefined,
+    isCoastal: undefined,
+    terrain: undefined,
+    continent: undefined
+  }
 }

@@ -23,10 +23,10 @@ export type ProvinceType = 'land' | 'sea' | 'lake'
 export interface Province {
   id: number
   color: ProvinceColor
-  type: ProvinceType
-  isCoastal: boolean
-  terrain: string   // TerrainCategory.codeName
-  continent: string // Continent.codeName — empty string for provinces with no continent (sea, lake)
+  type: ProvinceType | undefined
+  isCoastal: boolean | undefined
+  terrain: string | undefined   // TerrainCategory.codeName
+  continent: string | undefined // Continent.codeName — empty string for provinces with no continent (sea, lake)
 }
 
 export interface StateDefinition {

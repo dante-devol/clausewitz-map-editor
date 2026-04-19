@@ -100,9 +100,9 @@ function hashedGroupColor(id: number, variant: 'state' | 'strategicRegion'): num
 
 export function getModeValueKey(mode: DisplayMode, province: Province, context: DisplayModeContext): string | null {
   if (mode === 'provinces') return null
-  if (mode === 'type') return province.type
-  if (mode === 'terrain') return province.terrain
-  if (mode === 'coastal') return province.isCoastal ? 'coastal' : 'inland'
+  if (mode === 'type') return province.type ?? 'none'
+  if (mode === 'terrain') return province.terrain ?? 'none'
+  if (mode === 'coastal') return province.isCoastal === undefined ? 'none' : province.isCoastal ? 'coastal' : 'inland'
   if (mode === 'continent') return province.continent || 'none'
   if (mode === 'state') return context.stateProvinceToStateId.get(province.id)?.toString() ?? 'none'
   return context.strategicRegionProvinceToRegionId.get(province.id)?.toString() ?? 'none'

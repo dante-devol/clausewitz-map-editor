@@ -1,10 +1,15 @@
 import { createContext, useContext, useMemo } from 'react'
 import type { Continent, Province, TerrainCategory } from '../../../../shared/mapDataTypes'
+import type { ProvinceDraftTarget } from '../../../../shared/provinceEditing'
 import { useMapDataStore } from '../infra/store/mapDataStore'
+import { selectProvinceDraftTargetMaps } from '../infra/store/provinceEditSelectors'
 
 export interface MapQueryApi {
   getProvinceById(id: number): Province | undefined
   getProvinceByColor(color: number): Province | undefined
+  getDraftProvinceById(id: number): ProvinceDraftTarget | undefined
+  getDraftProvinceByGuid(guid: string): ProvinceDraftTarget | undefined
+  getDraftProvinceByColor(color: number): ProvinceDraftTarget | undefined
   getTerrain(codeName: string): TerrainCategory | undefined
   getContinent(codeName: string): Continent | undefined
   getProvinces(): ReadonlyMap<number, Province>
@@ -25,6 +30,15 @@ function createMapQueryApi(): MapQueryApi {
       const id = provincesByColor.get(color)
       return id === undefined ? undefined : provinces.get(id)
     },
+    getDraftProvinceById(id) {
+      return selectDraftTargetMaps().byProvinceId.get(id)
+    },
+    getDraftProvinceByGuid(guid) {
+      return selectDraftTargetMaps().byBmpGuid.get(guid)
+    },
+    getDraftProvinceByColor(color) {
+      return selectDraftTargetMaps().byColor.get(color)
+    },
     getTerrain(codeName) {
       return useMapDataStore.getState().terrains.get(codeName)
     },
@@ -44,6 +58,18 @@ function createMapQueryApi(): MapQueryApi {
       return useMapDataStore.getState().continents
     }
   }
+}
+
+function selectDraftTargetMaps() {
+  const state = useMapDataStore.getState()
+  return selectProvinceDraftTargetMaps(
+    state.originalDefinitions,
+    state.pendingEdits,
+    state.pendingBmpOnlyEdits,
+    state.bmpReplacements,
+    state.pendingNewProvinces,
+    state.bmpOnlyEntries
+  )
 }
 
 export function MapQueryProvider({ children }: { children: React.ReactNode }): JSX.Element {

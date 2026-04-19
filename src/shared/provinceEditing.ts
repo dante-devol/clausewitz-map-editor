@@ -1,8 +1,23 @@
-import type { Province, ProvinceColor } from './mapDataTypes'
+import type { Province, ProvinceColor, ProvinceType } from './mapDataTypes'
 
 export interface BmpOnlyEntry {
   guid: string
   color: ProvinceColor
+}
+
+export interface ProvinceDraftFields {
+  type: ProvinceType | undefined
+  isCoastal: boolean | undefined
+  terrain: string | undefined
+  continent: string | undefined
+}
+
+export interface ProvinceDraftTarget extends ProvinceDraftFields {
+  provinceId: number | null
+  bmpGuid: string | null
+  color: ProvinceColor
+  source: 'canonical' | 'bmp-only'
+  status: 'canonical' | 'replacement' | 'registered' | 'unregistered'
 }
 
 // Used by the assignBmpProvince store action
@@ -19,8 +34,16 @@ export interface FieldEdit {
   kind: 'field-edit'
   changeId: string
   provinceId: number
-  patch: Partial<Province>
+  patch: Partial<ProvinceDraftFields>
   original: Province
+}
+
+export interface BmpFieldEdit {
+  kind: 'bmp-field-edit'
+  changeId: string
+  bmpGuid: string
+  bmpColor: ProvinceColor
+  patch: ProvinceDraftFields
 }
 
 // A canonical province whose map color is being replaced by a BMP-only entry
@@ -42,4 +65,4 @@ export interface NewProvince {
   assignedId: number
 }
 
-export type PendingChange = FieldEdit | BmpReplacement | NewProvince
+export type PendingChange = FieldEdit | BmpFieldEdit | BmpReplacement | NewProvince

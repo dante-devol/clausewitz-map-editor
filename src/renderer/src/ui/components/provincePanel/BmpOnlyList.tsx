@@ -229,7 +229,7 @@ export function BmpOnlyList({
     lastSelectedIndexRef.current = null
   }
 
-  const handleRowClick = (entry: BmpOnlyEntry, index: number, e: React.MouseEvent) => {
+  const selectEntry = (entry: BmpOnlyEntry, index: number, e: React.MouseEvent) => {
     if (e.shiftKey) {
       e.preventDefault()
       if (lastSelectedIndexRef.current === null) {
@@ -249,6 +249,11 @@ export function BmpOnlyList({
       setSelection([])
       lastSelectedIndexRef.current = index
     }
+  }
+
+  const handleActionClick = (entry: BmpOnlyEntry, index: number, e: React.MouseEvent) => {
+    selectEntry(entry, index, e)
+    e.stopPropagation()
   }
 
   return (
@@ -330,7 +335,7 @@ export function BmpOnlyList({
                         isMultiSelected && styles.rowMultiSelected
                       )}
                       style={{ top: item.start + 2, height: ROW_H - 4 }}
-                      onClick={(e) => handleRowClick(entry, item.index, e)}
+                      onClick={(e) => selectEntry(entry, item.index, e)}
                     >
                       <div
                         className={styles.swatch}
@@ -350,7 +355,7 @@ export function BmpOnlyList({
                             <Text
                               size={100}
                               className={styles.assignedBadge}
-                              onClick={(e) => e.stopPropagation()}
+                              onClick={(e) => handleActionClick(entry, item.index, e)}
                             >
                               {action.kind === 'replace'
                                 ? t('provincePanel.changes.replace', { id: action.targetId })
@@ -360,7 +365,7 @@ export function BmpOnlyList({
                             <Button
                               size="small"
                               appearance="subtle"
-                              onClick={(e) => e.stopPropagation()}
+                              onClick={(e) => handleActionClick(entry, item.index, e)}
                             >
                               {t('bmpAssign.trigger.unassigned')}
                             </Button>

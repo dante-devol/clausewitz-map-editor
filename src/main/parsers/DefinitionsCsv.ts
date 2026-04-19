@@ -41,12 +41,17 @@ export class DefinitionsCsv {
       const g = parseInt(parts[2])
       const b = parseInt(parts[3])
       const rawType = parts[4].trim().toLowerCase()
-      const isCoastal = parts[5].trim().toLowerCase() === 'true'
-      const terrain = parts[6].trim()
+      const rawIsCoastal = parts[5].trim().toLowerCase()
+      const terrain = parts[6].trim() || undefined
       const continentPosition = parseInt(parts[7])
 
-      const type: ProvinceType = VALID_TYPES.has(rawType) ? (rawType as ProvinceType) : 'land'
-      const continent = continentById.get(continentPosition) ?? ''
+      const type: ProvinceType | undefined = VALID_TYPES.has(rawType) ? (rawType as ProvinceType) : undefined
+      const isCoastal = rawIsCoastal === 'true'
+        ? true
+        : rawIsCoastal === 'false'
+          ? false
+          : undefined
+      const continent = continentById.get(continentPosition)
 
       provinces.push({
         id,
@@ -77,9 +82,9 @@ export class DefinitionsCsv {
           r,
           g,
           b,
-          province.type,
-          province.isCoastal ? 'true' : 'false',
-          province.terrain,
+          province.type ?? 'sea',
+          province.isCoastal === true ? 'true' : 'false',
+          province.terrain ?? 'unknown',
           continentPosition
         ].join(';')
       })

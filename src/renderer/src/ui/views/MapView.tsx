@@ -56,7 +56,7 @@ const useStyles = makeStyles({
 })
 
 interface HoveredProvince {
-  id: number
+  color: number
   x: number
   y: number
 }
@@ -106,6 +106,8 @@ const MapViewportPane = memo(function MapViewportPane({
   const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
   const setSelection = useMapDataStore((s) => s.setSelection)
   const extendSelection = useMapDataStore((s) => s.extendSelection)
+  const setSelectedBmpGuids = useMapDataStore((s) => s.setSelectedBmpGuids)
+  const toggleBmpGuid = useMapDataStore((s) => s.toggleBmpGuid)
   const issuesByProvinceKey = useProvinceValidationStore((s) => s.issuesByProvinceKey)
   const displayModeOverrides = useDisplayModeConfigStore((s) => s.overrides)
   const displayMode = useCoreSelector(selectDisplayMode)
@@ -133,33 +135,43 @@ const MapViewportPane = memo(function MapViewportPane({
   const colorMap = useCoreSelector((state) => selectColorMap(state, provinces, displayModeOverrides, displayModeContext))
 
   const onColorPicked = useCallback((r: number, g: number, b: number, additive: boolean) => {
-    const province = query.getProvinceByColor(packColor(r, g, b))
-    if (!province) return
-    if (additive) {
-      extendSelection([province.id])
-    } else {
-      setSelection([province.id])
+    const draft = query.getDraftProvinceByColor(packColor(r, g, b))
+    if (!draft) return
+    if (draft.provinceId !== null) {
+      if (additive) {
+        extendSelection([draft.provinceId])
+      } else {
+        setSelection([draft.provinceId])
+      }
+      return
     }
-  }, [setSelection, extendSelection, query])
+
+    if (draft.bmpGuid === null) return
+    if (additive) {
+      toggleBmpGuid(draft.bmpGuid)
+    } else {
+      setSelectedBmpGuids([draft.bmpGuid])
+    }
+  }, [setSelectedBmpGuids, setSelection, extendSelection, query, toggleBmpGuid])
 
   const onHoverColorChange = useCallback((color: { r: number; g: number; b: number; x: number; y: number } | null) => {
     if (!color) {
       setHoveredProvince(null)
       return
     }
-    const province = query.getProvinceByColor(packColor(color.r, color.g, color.b))
-    if (!province) {
+    const draft = query.getDraftProvinceByColor(packColor(color.r, color.g, color.b))
+    if (!draft) {
       setHoveredProvince(null)
       return
     }
-    setHoveredProvince({ id: province.id, x: color.x, y: color.y })
+    setHoveredProvince({ color: packColor(color.r, color.g, color.b), x: color.x, y: color.y })
   }, [query])
 
   const resolvedHoverTooltip = useMemo(() => {
     if (!hoveredProvince) return null
     return selectHoverTooltip(
       displayMode,
-      query.getProvinceById(hoveredProvince.id),
+      query.getDraftProvinceByColor(hoveredProvince.color),
       displayModeContext,
       t as (key: string) => string
     )
