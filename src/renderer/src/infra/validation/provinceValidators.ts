@@ -12,8 +12,8 @@ export const provinceValidators: readonly ProvinceValidator[] = [
   {
     id: 'province/id-valid',
     phase: 'metadata',
-    validate(snapshot) {
-      return snapshot.catalog.flatMap((province) => {
+    validate(snapshot, province) {
+      return subjectProvinces(snapshot, province).flatMap((province) => {
         if (province.id === null) {
           return [issue('province.missing-id', 'warning', province, 'Province has no ID.')]
         }
@@ -28,8 +28,8 @@ export const provinceValidators: readonly ProvinceValidator[] = [
   {
     id: 'province/id-unique',
     phase: 'metadata',
-    validate(snapshot) {
-      return collectDuplicateIssues(snapshot, 'id', 'province.duplicate-id', 'warning', (value) => (
+    validate(snapshot, province) {
+      return collectDuplicateIssues(snapshot, province, 'id', 'province.duplicate-id', 'warning', (value) => (
         `Province ID ${value} is used more than once.`
       ))
     }
@@ -37,8 +37,8 @@ export const provinceValidators: readonly ProvinceValidator[] = [
   {
     id: 'province/type-valid',
     phase: 'metadata',
-    validate(snapshot) {
-      return snapshot.catalog.flatMap((province) => {
+    validate(snapshot, province) {
+      return subjectProvinces(snapshot, province).flatMap((province) => {
         if (province.type === null) {
           return [issue('province.missing-type', 'warning', province, 'Province type is missing.')]
         }
@@ -52,8 +52,8 @@ export const provinceValidators: readonly ProvinceValidator[] = [
   {
     id: 'province/color-valid',
     phase: 'metadata',
-    validate(snapshot) {
-      return snapshot.catalog.flatMap((province) => {
+    validate(snapshot, province) {
+      return subjectProvinces(snapshot, province).flatMap((province) => {
         if (province.id === 0) return []
         if (province.color === null) {
           return [issue('province.missing-color', 'warning', province, 'Province color is missing.')]
@@ -68,8 +68,8 @@ export const provinceValidators: readonly ProvinceValidator[] = [
   {
     id: 'province/color-unique',
     phase: 'metadata',
-    validate(snapshot) {
-      return collectDuplicateIssues(snapshot, 'color', 'province.duplicate-color', 'warning', (value) => (
+    validate(snapshot, province) {
+      return collectDuplicateIssues(snapshot, province, 'color', 'province.duplicate-color', 'warning', (value) => (
         `Province color ${formatPackedColor(value)} is used more than once.`
       ))
     }
@@ -77,8 +77,8 @@ export const provinceValidators: readonly ProvinceValidator[] = [
   {
     id: 'province/terrain-valid',
     phase: 'metadata',
-    validate(snapshot) {
-      return snapshot.catalog.flatMap((province) => {
+    validate(snapshot, province) {
+      return subjectProvinces(snapshot, province).flatMap((province) => {
         if (!province.terrain) {
           return [issue('province.missing-terrain', 'warning', province, 'Province terrain is missing.')]
         }
@@ -92,8 +92,8 @@ export const provinceValidators: readonly ProvinceValidator[] = [
   {
     id: 'province/color-present-on-map',
     phase: 'full',
-    validate(snapshot) {
-      return snapshot.catalog.flatMap((province) => {
+    validate(snapshot, province) {
+      return subjectProvinces(snapshot, province).flatMap((province) => {
         if (province.id === 0) return []
         if (province.color === null) return []
         if (province.sources.includes('bmp-color')) return []
@@ -107,8 +107,8 @@ export const provinceValidators: readonly ProvinceValidator[] = [
   {
     id: 'province/bmp-color-without-definition',
     phase: 'full',
-    validate(snapshot) {
-      return snapshot.catalog.flatMap((province) => {
+    validate(snapshot, province) {
+      return subjectProvinces(snapshot, province).flatMap((province) => {
         if (!province.sources.includes('bmp-color')) return []
         return [issue('province.bmp-color-without-definition', 'error', province, 'Map color exists on provinces.bmp but has no definition entry.')]
       })
@@ -118,6 +118,7 @@ export const provinceValidators: readonly ProvinceValidator[] = [
 
 function collectDuplicateIssues(
   snapshot: ProvinceValidationSnapshot,
+  subjectProvince: ProvinceCatalogEntry | undefined,
   field: 'id' | 'color',
   code: string,
   severity: ProvinceValidationIssue['severity'],
@@ -136,7 +137,7 @@ function collectDuplicateIssues(
   const issues: ProvinceValidationIssue[] = []
   for (const [value, provinces] of seen) {
     if (provinces.length < 2) continue
-    for (const province of provinces) {
+    for (const province of provincesForDuplicateGroup(provinces, subjectProvince)) {
       issues.push(issue(code, severity, province, messageForValue(value)))
     }
   }
@@ -161,4 +162,19 @@ function issue(
 
 function formatPackedColor(color: number): string {
   return `#${color.toString(16).padStart(6, '0').toUpperCase()}`
+}
+
+function subjectProvinces(
+  snapshot: ProvinceValidationSnapshot,
+  province?: ProvinceCatalogEntry
+): readonly ProvinceCatalogEntry[] {
+  return province ? [province] : snapshot.catalog
+}
+
+function provincesForDuplicateGroup(
+  provinces: ProvinceCatalogEntry[],
+  subjectProvince: ProvinceCatalogEntry | undefined
+): ProvinceCatalogEntry[] {
+  if (!subjectProvince) return provinces
+  return provinces.filter((province) => province.key === subjectProvince.key)
 }

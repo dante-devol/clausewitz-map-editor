@@ -1,5 +1,11 @@
 import type { Province } from '../../../../shared/mapDataTypes'
 import type { Continent } from '../../../../shared/mapDataTypes'
+import {
+  buildProvinceCatalog,
+  reconcileProvinceCatalogWithBitmap,
+  type ProvinceBitmapFacts,
+  type ProvinceCatalogEntry
+} from '../../../../shared/provinceCatalog'
 import type {
   BmpOnlyEntry,
   FieldEdit,
@@ -95,4 +101,42 @@ export function selectEffectiveProvinces(
   }
 
   return provinces.sort((a, b) => a.id - b.id)
+}
+
+export function selectEffectiveProvinceCatalog(
+  originalDefinitions: Map<number, Province>,
+  pendingEdits: Map<number, Partial<Province>>,
+  bmpReplacements: Map<number, string>,
+  pendingNewProvinces: Map<string, number>,
+  bmpOnlyEntries: BmpOnlyEntry[],
+  provinceCatalog: readonly ProvinceCatalogEntry[]
+): ProvinceCatalogEntry[] {
+  const effectiveProvinces = selectEffectiveProvinces(
+    originalDefinitions,
+    pendingEdits,
+    bmpReplacements,
+    pendingNewProvinces,
+    bmpOnlyEntries
+  )
+
+  const bitmapFacts = selectBitmapFactsFromCatalog(provinceCatalog)
+  const catalog = buildProvinceCatalog(effectiveProvinces)
+  return bitmapFacts ? reconcileProvinceCatalogWithBitmap(catalog, bitmapFacts) : catalog
+}
+
+function selectBitmapFactsFromCatalog(
+  provinceCatalog: readonly ProvinceCatalogEntry[]
+): ProvinceBitmapFacts | null {
+  const byColor = new Map<number, NonNullable<ProvinceCatalogEntry['bitmapFact']>>()
+
+  for (const entry of provinceCatalog) {
+    if (!entry.bitmapFact) continue
+    byColor.set(entry.bitmapFact.color, entry.bitmapFact)
+  }
+
+  if (byColor.size === 0) return null
+  return {
+    colors: [...byColor.keys()].sort((a, b) => a - b),
+    byColor
+  }
 }

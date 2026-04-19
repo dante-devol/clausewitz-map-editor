@@ -7,6 +7,7 @@ export type ProvinceValidationStatus = 'idle' | 'metadata-ready' | 'full-ready'
 
 export interface ProvinceValidationSnapshot {
   catalog: readonly ProvinceCatalogEntry[]
+  catalogByKey: ReadonlyMap<ProvinceCatalogEntryKey, ProvinceCatalogEntry>
   terrains: ReadonlyMap<string, TerrainCategory>
   continents: ReadonlyMap<string, Continent>
 }
@@ -22,7 +23,7 @@ export interface ProvinceValidationIssue {
 export interface ProvinceValidator {
   id: string
   phase: ProvinceValidationPhase
-  validate(snapshot: ProvinceValidationSnapshot): ProvinceValidationIssue[]
+  validate(snapshot: ProvinceValidationSnapshot, province?: ProvinceCatalogEntry): ProvinceValidationIssue[]
 }
 
 export interface ProvinceValidationResult {
@@ -43,6 +44,33 @@ export function runProvinceValidation(
   const issues = validators
     .filter((validator) => validator.phase === phase)
     .flatMap((validator) => validator.validate(snapshot))
+    .sort(compareIssues)
+
+  return {
+    phase,
+    issues,
+    summary: summarizeIssues(issues)
+  }
+}
+
+export function runProvinceValidationForProvince(
+  snapshot: ProvinceValidationSnapshot,
+  validators: readonly ProvinceValidator[],
+  phase: ProvinceValidationPhase,
+  provinceKey: ProvinceCatalogEntryKey
+): ProvinceValidationResult {
+  const province = snapshot.catalogByKey.get(provinceKey)
+  if (!province) {
+    return {
+      phase,
+      issues: [],
+      summary: summarizeIssues([])
+    }
+  }
+
+  const issues = validators
+    .filter((validator) => validator.phase === phase)
+    .flatMap((validator) => validator.validate(snapshot, province))
     .sort(compareIssues)
 
   return {
