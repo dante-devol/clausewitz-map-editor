@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
+  Button,
   ColorArea,
   ColorPicker,
   ColorSlider,
-  Button,
   Dialog,
   DialogActions,
   DialogBody,
@@ -15,11 +15,7 @@ import {
   PopoverSurface,
   PopoverTrigger,
   Select,
-  Radio,
-  RadioGroup,
   Slider,
-  Tab,
-  TabList,
   Text,
   Tooltip,
   makeStyles,
@@ -29,53 +25,20 @@ import {
 } from '@fluentui/react-components'
 import {
   Add12Regular,
-  BuildingLighthouseFilled,
   CheckmarkCircleRegular,
   ColorRegular,
   DismissRegular,
-  EarthFilled,
   EditRegular,
   EyeOffRegular,
   EyeRegular,
   MoreHorizontalRegular,
-  PuzzlePieceFilled,
   ReOrderDotsVerticalRegular,
-  SettingsRegular,
-  TreeEvergreenFilled,
-  WaterFilled
+  SettingsRegular
 } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
-import type { MessageKey } from '../i18n/messages/en'
 import type { OverlayFilterRule, OverlayId } from '../../core/contracts/MapOverlay'
-import { useDisplayModeConfigStore } from '../../infra/store/displayModeConfigStore'
 import type { OverlayPanelItem } from '../hooks/useOverlayAssets'
 import type { OverlayFilterRuleTemplate } from '../contracts/OverlayConfiguration'
-import {
-  type ConfigurableDisplayMode,
-  type DisplayMode,
-  type DisplayModeValueDescriptor,
-  DISPLAY_MODES,
-  isConfigurableDisplayMode,
-  packedColorToHex
-} from '../../infra/config/displayModes'
-
-const MODE_LABEL_KEYS: Record<DisplayMode, MessageKey> = {
-  provinces: 'mapMode.provinces',
-  type: 'mapMode.type',
-  terrain: 'mapMode.terrain',
-  coastal: 'mapMode.coastal',
-  continent: 'mapMode.continent'
-}
-
-const MODE_ICONS: Record<DisplayMode, JSX.Element> = {
-  provinces: <PuzzlePieceFilled />,
-  type: <WaterFilled />,
-  terrain: <TreeEvergreenFilled />,
-  coastal: <BuildingLighthouseFilled />,
-  continent: <EarthFilled />
-}
-
-type PanelTab = 'display' | 'overlay'
 
 const useStyles = makeStyles({
   root: {
@@ -83,180 +46,13 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: tokens.spacingVerticalM,
   },
-  tabs: {
-    flexShrink: 0
-  },
   section: {
     display: 'flex',
     flexDirection: 'column',
     gap: tokens.spacingVerticalS,
   },
-  label: {
-    color: tokens.colorNeutralForeground2,
-    marginBottom: tokens.spacingVerticalXS,
-  },
-  modeList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: tokens.spacingVerticalXXS
-  },
-  modeRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: tokens.spacingHorizontalXS
-  },
-  modeRadio: {
-    flex: 1
-  },
-  modeLabel: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: tokens.spacingHorizontalS
-  },
-  modeLabelIcon: {
-    fontSize: '20px',
-    lineHeight: 1,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0
-  },
-  iconButton: {
-    flexShrink: 0
-  },
-  dialogSurface: {
-    width: 'min(960px, calc(100vw - 32px))',
-    maxWidth: 'calc(100vw - 32px)'
-  },
-  dialogHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: tokens.spacingHorizontalM,
-    flexWrap: 'wrap',
-    minWidth: 0
-  },
-  dialogContent: {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(220px, 260px) minmax(0, 1fr)',
-    gap: tokens.spacingHorizontalL,
-    alignItems: 'start',
-    minWidth: 0,
-    overflowX: 'hidden',
-    '@media (max-width: 900px)': {
-      gridTemplateColumns: 'minmax(0, 1fr)'
-    }
-  },
-  valueList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: tokens.spacingVerticalS,
-    maxHeight: '520px',
-    overflowY: 'auto',
-    paddingRight: tokens.spacingHorizontalXS,
-    minWidth: 0
-  },
-  valueRow: {
-    display: 'grid',
-    gridTemplateColumns: '14px minmax(0, 1fr)',
-    gap: tokens.spacingHorizontalS,
-    alignItems: 'start',
-    padding: tokens.spacingHorizontalS,
-    borderRadius: tokens.borderRadiusMedium,
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    backgroundColor: tokens.colorNeutralBackground2,
-    cursor: 'pointer'
-  },
-  valueRowSelected: {
-    ...shorthands.borderColor(tokens.colorBrandStroke1),
-    backgroundColor: tokens.colorBrandBackground2
-  },
-  swatch: {
-    width: '14px',
-    height: '14px',
-    marginTop: '3px',
-    borderRadius: tokens.borderRadiusCircular,
-    border: '1px solid rgba(255,255,255,0.35)',
-    boxShadow: `0 0 0 1px ${tokens.colorNeutralBackground5}`
-  },
-  valueMeta: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: tokens.spacingHorizontalS,
-    marginBottom: tokens.spacingVerticalXS,
-    minWidth: 0
-  },
-  valueName: {
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap'
-  },
-  valueSource: {
-    color: tokens.colorNeutralForeground3,
-    fontSize: tokens.fontSizeBase100,
-    flexShrink: 0,
-    whiteSpace: 'nowrap'
-  },
-  valueSourceOverride: {
-    color: tokens.colorPaletteGreenForeground1
-  },
-  editorPanel: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: tokens.spacingVerticalM,
-    minWidth: 0
-  },
-  editorHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: tokens.spacingHorizontalM,
-    flexWrap: 'wrap',
-    minWidth: 0
-  },
-  editorTitle: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: tokens.spacingHorizontalS,
-    minWidth: 0
-  },
-  editorSwatch: {
-    width: '18px',
-    height: '18px',
-    borderRadius: tokens.borderRadiusCircular,
-    border: '1px solid rgba(255,255,255,0.35)',
-    boxShadow: `0 0 0 1px ${tokens.colorNeutralBackground5}`,
-    flexShrink: 0
-  },
-  pickerShell: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: tokens.spacingVerticalM,
-    padding: tokens.spacingHorizontalM,
-    borderRadius: tokens.borderRadiusLarge,
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    backgroundColor: tokens.colorNeutralBackground2,
-    minWidth: 0,
-    overflowX: 'hidden'
-  },
-  pickerArea: {
-    minHeight: '220px',
-    minWidth: 0
-  },
-  hexRow: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: tokens.spacingHorizontalS,
-    alignItems: 'center',
-    minWidth: 0
-  },
-  input: {
-    flex: '1 1 220px',
-    minWidth: 0
-  },
-  empty: {
-    color: tokens.colorNeutralForeground3
+  title: {
+    color: tokens.colorNeutralForeground2
   },
   overlayList: {
     display: 'flex',
@@ -610,9 +406,6 @@ const useStyles = makeStyles({
 })
 
 interface Props {
-  mode: DisplayMode
-  onModeChange: (mode: DisplayMode) => void
-  valuesByMode: Partial<Record<ConfigurableDisplayMode, DisplayModeValueDescriptor[]>>
   overlays: OverlayPanelItem[]
   onOverlayMove: (draggedId: OverlayId, targetId: OverlayId) => void
   onOverlayVisibilityChange: (overlayId: OverlayId, visible: boolean) => void
@@ -621,9 +414,6 @@ interface Props {
 }
 
 export function MapModePanel({
-  mode,
-  onModeChange,
-  valuesByMode,
   overlays,
   onOverlayMove,
   onOverlayVisibilityChange,
@@ -632,14 +422,11 @@ export function MapModePanel({
 }: Props): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
-  const [activeTab, setActiveTab] = useState<PanelTab>('display')
-  const [dialogMode, setDialogMode] = useState<ConfigurableDisplayMode | null>(null)
   const [overlayDialogId, setOverlayDialogId] = useState<OverlayId | null>(null)
   const [draggedOverlayId, setDraggedOverlayId] = useState<OverlayId | null>(null)
   const [dropTargetOverlayId, setDropTargetOverlayId] = useState<OverlayId | null>(null)
   const [initializedOverlayDefaults, setInitializedOverlayDefaults] = useState<OverlayId[]>([])
 
-  const activeValues = dialogMode ? (valuesByMode[dialogMode] ?? []) : []
   const selectedOverlay = overlays.find((overlay) => overlay.id === overlayDialogId) ?? null
 
   function openOverlayDialog(overlay: OverlayPanelItem) {
@@ -664,138 +451,78 @@ export function MapModePanel({
   return (
     <>
       <div className={styles.root}>
-        <TabList
-          className={styles.tabs}
-          selectedValue={activeTab}
-          onTabSelect={(_, data) => setActiveTab(data.value as PanelTab)}
-        >
-          <Tab value="display">{t('mapMode.title')}</Tab>
-          <Tab value="overlay">{t('overlay.title')}</Tab>
-        </TabList>
-
-        {activeTab === 'display' ? (
-          <div className={styles.section}>
-            <RadioGroup
-              value={mode}
-              layout="vertical"
-              onChange={(_, data) => onModeChange(data.value as DisplayMode)}
-            >
-              <div className={styles.modeList}>
-                {DISPLAY_MODES.map((entryMode) => {
-                  const configurable = isConfigurableDisplayMode(entryMode)
-                  const modeLabel = t(MODE_LABEL_KEYS[entryMode])
-                  return (
-                    <div key={entryMode} className={styles.modeRow}>
-                      <Radio
-                        className={styles.modeRadio}
-                        value={entryMode}
-                        label={(
-                          <span className={styles.modeLabel}>
-                            <span className={styles.modeLabelIcon}>
-                              {MODE_ICONS[entryMode]}
-                            </span>
-                            <span>{modeLabel}</span>
-                          </span>
-                        )}
-                      />
-                      {configurable && (
-                        <Button
-                          className={styles.iconButton}
-                          appearance="subtle"
-                          size="small"
-                          icon={<SettingsRegular />}
-                          aria-label={t('mapMode.configureColors', { mode: modeLabel })}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            setDialogMode(entryMode)
-                          }}
-                        />
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </RadioGroup>
-          </div>
-        ) : (
-          <div className={styles.section}>
-            <div className={styles.overlayList}>
-              {overlays.map((overlay) => {
-                return (
-                  <div
-                    key={overlay.id}
-                    className={mergeClasses(
-                      styles.overlayCard,
-                      draggedOverlayId === overlay.id && styles.overlayCardDragging,
-                      dropTargetOverlayId === overlay.id && styles.overlayCardDropTarget
-                    )}
-                    onDragOver={(event) => {
-                      if (!draggedOverlayId || draggedOverlayId === overlay.id) return
-                      event.preventDefault()
-                      setDropTargetOverlayId(overlay.id)
-                    }}
-                    onDrop={(event) => {
-                      event.preventDefault()
-                      if (draggedOverlayId && draggedOverlayId !== overlay.id) {
-                        onOverlayMove(draggedOverlayId, overlay.id)
-                      }
-                      setDraggedOverlayId(null)
-                      setDropTargetOverlayId(null)
-                    }}
-                  >
-                    <div className={styles.overlayTitleRow}>
-                      <Tooltip content={t('overlay.dragToReorder')} relationship="label">
-                        <Button
-                          draggable
-                          appearance="subtle"
-                          size="small"
-                          className={styles.overlayDragButton}
-                          icon={<ReOrderDotsVerticalRegular />}
-                          aria-label={t('overlay.dragToReorder')}
-                          onDragStart={(event) => {
-                            event.dataTransfer.effectAllowed = 'move'
-                            setDraggedOverlayId(overlay.id)
-                            setDropTargetOverlayId(null)
-                          }}
-                          onDragEnd={() => {
-                            setDraggedOverlayId(null)
-                            setDropTargetOverlayId(null)
-                          }}
-                        />
-                      </Tooltip>
-                      <Text size={300} weight="semibold" className={styles.overlayName}>{t(overlay.labelKey)}</Text>
-                    </div>
-                    <div className={styles.overlayControls}>
-                      <Tooltip content={overlay.visible ? t('overlay.hide') : t('overlay.show')} relationship="label">
-                        <Button
-                          appearance={overlay.visible ? 'primary' : 'subtle'}
-                          size="small"
-                          icon={overlay.visible ? <EyeRegular /> : <EyeOffRegular />}
-                          aria-label={overlay.visible ? t('overlay.hide') : t('overlay.show')}
-                          onClick={() => onOverlayVisibilityChange(overlay.id, !overlay.visible)}
-                        />
-                      </Tooltip>
+        <div className={styles.section}>
+          <Text size={300} weight="semibold" className={styles.title}>{t('overlay.title')}</Text>
+          <div className={styles.overlayList}>
+            {overlays.map((overlay) => {
+              return (
+                <div
+                  key={overlay.id}
+                  className={mergeClasses(
+                    styles.overlayCard,
+                    draggedOverlayId === overlay.id && styles.overlayCardDragging,
+                    dropTargetOverlayId === overlay.id && styles.overlayCardDropTarget
+                  )}
+                  onDragOver={(event) => {
+                    if (!draggedOverlayId || draggedOverlayId === overlay.id) return
+                    event.preventDefault()
+                    setDropTargetOverlayId(overlay.id)
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    if (draggedOverlayId && draggedOverlayId !== overlay.id) {
+                      onOverlayMove(draggedOverlayId, overlay.id)
+                    }
+                    setDraggedOverlayId(null)
+                    setDropTargetOverlayId(null)
+                  }}
+                >
+                  <div className={styles.overlayTitleRow}>
+                    <Tooltip content={t('overlay.dragToReorder')} relationship="label">
                       <Button
+                        draggable
                         appearance="subtle"
                         size="small"
-                        icon={<SettingsRegular />}
-                        aria-label={t('overlay.options')}
-                        onClick={() => openOverlayDialog(overlay)}
+                        className={styles.overlayDragButton}
+                        icon={<ReOrderDotsVerticalRegular />}
+                        aria-label={t('overlay.dragToReorder')}
+                        onDragStart={(event) => {
+                          event.dataTransfer.effectAllowed = 'move'
+                          setDraggedOverlayId(overlay.id)
+                          setDropTargetOverlayId(null)
+                        }}
+                        onDragEnd={() => {
+                          setDraggedOverlayId(null)
+                          setDropTargetOverlayId(null)
+                        }}
                       />
-                    </div>
+                    </Tooltip>
+                    <Text size={300} weight="semibold" className={styles.overlayName}>{t(overlay.labelKey)}</Text>
                   </div>
-                )
-              })}
-            </div>
+                  <div className={styles.overlayControls}>
+                    <Tooltip content={overlay.visible ? t('overlay.hide') : t('overlay.show')} relationship="label">
+                      <Button
+                        appearance={overlay.visible ? 'primary' : 'subtle'}
+                        size="small"
+                        icon={overlay.visible ? <EyeRegular /> : <EyeOffRegular />}
+                        aria-label={overlay.visible ? t('overlay.hide') : t('overlay.show')}
+                        onClick={() => onOverlayVisibilityChange(overlay.id, !overlay.visible)}
+                      />
+                    </Tooltip>
+                    <Button
+                      appearance="subtle"
+                      size="small"
+                      icon={<SettingsRegular />}
+                      aria-label={t('overlay.options')}
+                      onClick={() => openOverlayDialog(overlay)}
+                    />
+                  </div>
+                </div>
+              )
+            })}
           </div>
-        )}
+        </div>
       </div>
-
-      <ModeConfigDialog
-        mode={dialogMode}
-        values={activeValues}
-        onClose={() => setDialogMode(null)}
-      />
 
       <OverlayOptionsDialog
         overlay={selectedOverlay}
@@ -1348,224 +1075,11 @@ function CustomOverlayColorPopover({
   )
 }
 
-interface ModeConfigDialogProps {
-  mode: ConfigurableDisplayMode | null
-  values: DisplayModeValueDescriptor[]
-  onClose: () => void
-}
-
-function ModeConfigDialog({ mode, values, onClose }: ModeConfigDialogProps): JSX.Element {
-  const styles = useStyles()
-  const { t } = useI18n()
-  const resetModeOverrides = useDisplayModeConfigStore((s) => s.resetModeOverrides)
-  const hasOverrides = useMemo(() => values.some((value) => value.isOverride), [values])
-  const [selectedValueKey, setSelectedValueKey] = useState<string | null>(null)
-
-  useEffect(() => {
-    setSelectedValueKey(values[0]?.key ?? null)
-  }, [mode, values])
-
-  const selectedValue = values.find((value) => value.key === selectedValueKey) ?? values[0] ?? null
-
-  return (
-    <Dialog open={mode !== null} onOpenChange={(_, data) => { if (!data.open) onClose() }}>
-      <DialogSurface className={styles.dialogSurface}>
-        <DialogBody>
-          <div className={styles.dialogHeader}>
-            <DialogTitle>
-              {mode
-                ? t('mapMode.colorsTitle', { mode: t(MODE_LABEL_KEYS[mode]) })
-                : t('mapMode.colorsFallbackTitle')}
-            </DialogTitle>
-            {mode && (
-              <Button
-                size="small"
-                appearance="subtle"
-                disabled={!hasOverrides}
-                onClick={() => void resetModeOverrides(mode)}
-              >
-                {t('mapMode.resetMode')}
-              </Button>
-            )}
-          </div>
-          <DialogContent className={styles.dialogContent}>
-            {mode === null || values.length === 0 ? (
-              <Text size={100} className={styles.empty}>{t('mapMode.noValuesLoaded')}</Text>
-            ) : (
-              <>
-                <div className={styles.valueList}>
-                  {values.map((value) => (
-                    <ModeValueRow
-                      key={value.key}
-                      value={value}
-                      selected={value.key === selectedValue?.key}
-                      onSelect={() => setSelectedValueKey(value.key)}
-                    />
-                  ))}
-                </div>
-                {selectedValue && <ModeValueEditor mode={mode} value={selectedValue} values={values} />}
-              </>
-            )}
-          </DialogContent>
-          <DialogActions>
-            <Button appearance="primary" onClick={onClose}>{t('mapMode.close')}</Button>
-          </DialogActions>
-        </DialogBody>
-      </DialogSurface>
-    </Dialog>
-  )
-}
-
-interface ModeValueRowProps {
-  value: DisplayModeValueDescriptor
-  selected: boolean
-  onSelect: () => void
-}
-
-function ModeValueRow({ value, selected, onSelect }: ModeValueRowProps): JSX.Element {
-  const styles = useStyles()
-  const { t } = useI18n()
-
-  return (
-    <div
-      className={mergeClasses(styles.valueRow, selected && styles.valueRowSelected)}
-      onClick={onSelect}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onSelect()
-        }
-      }}
-    >
-      <div className={styles.swatch} style={{ backgroundColor: packedColorToHex(value.color) }} />
-      <div>
-        <div className={styles.valueMeta}>
-          <Text size={100} weight="medium" className={styles.valueName}>{getModeValueDisplayLabel(value.key, t)}</Text>
-          <Text
-            size={100}
-            className={mergeClasses(styles.valueSource, value.isOverride && styles.valueSourceOverride)}
-          >
-            {value.isOverride ? t('mapMode.valueSource.override') : t('mapMode.valueSource.default')}
-          </Text>
-        </div>
-        <Text size={100} className={styles.valueSource}>{packedColorToHex(value.color)}</Text>
-      </div>
-    </div>
-  )
-}
-
-interface ModeValueEditorProps {
-  mode: ConfigurableDisplayMode
-  value: DisplayModeValueDescriptor
-  values: DisplayModeValueDescriptor[]
-}
-
 type HsvColor = {
   h: number
   s: number
   v: number
   a?: number
-}
-
-function ModeValueEditor({ mode, value, values }: ModeValueEditorProps): JSX.Element {
-  const styles = useStyles()
-  const { t } = useI18n()
-  const setOverride = useDisplayModeConfigStore((s) => s.setOverride)
-  const resetOverride = useDisplayModeConfigStore((s) => s.resetOverride)
-  const [draft, setDraft] = useState(packedColorToHex(value.color))
-  const [pickerColor, setPickerColor] = useState<HsvColor>(() => hexToHsv(packedColorToHex(value.color)))
-
-  useEffect(() => {
-    const hex = packedColorToHex(value.color)
-    setDraft(hex)
-    setPickerColor(hexToHsv(hex))
-  }, [value.key, value.color])
-
-  const normalized = normalizeHexCandidate(draft)
-  const currentHex = packedColorToHex(value.color)
-  const canApply = normalized !== null && normalized !== currentHex
-
-  return (
-    <div className={styles.editorPanel}>
-      <div className={styles.editorHeader}>
-        <div className={styles.editorTitle}>
-          <div className={styles.editorSwatch} style={{ backgroundColor: hsvToHex(pickerColor) }} />
-          <Text size={300} weight="semibold" className={styles.valueName}>{getModeValueDisplayLabel(value.key, t)}</Text>
-        </div>
-        <Text
-          size={100}
-          className={mergeClasses(styles.valueSource, value.isOverride && styles.valueSourceOverride)}
-        >
-          {value.isOverride ? t('mapMode.valueSource.override') : t('mapMode.valueSource.default')}
-        </Text>
-      </div>
-
-      <div className={styles.pickerShell}>
-        <ColorPicker
-          style={{ minWidth: 0 }}
-          color={pickerColor}
-          onColorChange={(_, data) => {
-            setPickerColor({ ...data.color, a: data.color.a ?? 1 })
-            setDraft(hsvToHex(data.color))
-          }}
-        >
-          <ColorArea className={styles.pickerArea} />
-          <ColorSlider />
-        </ColorPicker>
-
-        <div className={styles.hexRow}>
-          <Input
-            size="small"
-            className={styles.input}
-            value={draft}
-            onChange={(_, data) => {
-              setDraft(data.value)
-              const next = normalizeHexCandidate(data.value)
-              if (next) setPickerColor(hexToHsv(next))
-            }}
-          />
-          <Button
-            size="small"
-            appearance="secondary"
-            onClick={() => {
-              const randomHex = pickDistantColorHex(values, value.key)
-              setDraft(randomHex)
-              setPickerColor(hexToHsv(randomHex))
-            }}
-          >
-            {t('mapMode.random')}
-          </Button>
-          <Button
-            size="small"
-            appearance="primary"
-            disabled={!canApply}
-            onClick={() => {
-              if (normalized) void setOverride(mode, value.key, normalized)
-            }}
-          >
-            {t('mapMode.apply')}
-          </Button>
-          <Button
-            size="small"
-            appearance="subtle"
-            disabled={!value.isOverride}
-            onClick={() => void resetOverride(mode, value.key)}
-          >
-            {t('mapMode.reset')}
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function getModeValueDisplayLabel(valueKey: string, t: (key: MessageKey) => string): string {
-  if (valueKey === 'coastal') return t('mapValue.coastal')
-  if (valueKey === 'inland') return t('mapValue.inland')
-  if (valueKey === 'none') return t('mapValue.none')
-  return valueKey
 }
 
 function normalizeHexCandidate(value: string): string | null {
@@ -1618,82 +1132,6 @@ function hsvToHex(color: HsvColor): string {
   else { r = c; g = 0; b = x }
 
   return `#${toHexChannel((r + m) * 255)}${toHexChannel((g + m) * 255)}${toHexChannel((b + m) * 255)}`
-}
-
-function pickDistantColorHex(values: DisplayModeValueDescriptor[], selectedKey: string): string {
-  const existing = values
-    .filter((value) => value.key !== selectedKey)
-    .map((value) => hexToHsv(packedColorToHex(value.color)))
-
-  const candidates: HsvColor[] = []
-  for (let hue = 0; hue < 360; hue += 8) {
-    for (const saturation of [0.58, 0.72, 0.86, 1]) {
-      for (const brightness of [0.58, 0.72, 0.86, 1]) {
-        candidates.push({ h: hue, s: saturation, v: brightness, a: 1 })
-      }
-    }
-  }
-
-  let bestScore = -1
-  let best: HsvColor[] = []
-
-  for (const candidate of candidates) {
-    const score = existing.length === 0
-      ? vividnessScore(candidate)
-      : Math.min(...existing.map((color) => colorDistance(candidate, color)))
-
-    if (score > bestScore + 1e-6) {
-      bestScore = score
-      best = [candidate]
-    } else if (Math.abs(score - bestScore) <= 1e-6) {
-      best.push(candidate)
-    }
-  }
-
-  const shortlist = best
-    .sort((a, b) => vividnessScore(b) - vividnessScore(a))
-    .slice(0, 12)
-
-  const chosen = shortlist[Math.floor(Math.random() * shortlist.length)] ?? { h: 210, s: 0.8, v: 0.9, a: 1 }
-  return hsvToHex(chosen)
-}
-
-function colorDistance(a: HsvColor, b: HsvColor): number {
-  const rgbA = hsvToRgb(a)
-  const rgbB = hsvToRgb(b)
-  const dr = (rgbA.r - rgbB.r) / 255
-  const dg = (rgbA.g - rgbB.g) / 255
-  const db = (rgbA.b - rgbB.b) / 255
-  const hueDelta = circularHueDistance(a.h, b.h) / 180
-  const satDelta = a.s - b.s
-  const valDelta = a.v - b.v
-
-  return Math.sqrt(
-    dr * dr * 0.45 +
-    dg * dg * 0.8 +
-    db * db * 0.35 +
-    hueDelta * hueDelta * 0.9 +
-    satDelta * satDelta * 0.35 +
-    valDelta * valDelta * 0.2
-  )
-}
-
-function vividnessScore(color: HsvColor): number {
-  return color.s * 0.7 + color.v * 0.3
-}
-
-function hsvToRgb(color: HsvColor): { r: number; g: number; b: number } {
-  const hex = hsvToHex(color)
-  return {
-    r: parseInt(hex.slice(1, 3), 16),
-    g: parseInt(hex.slice(3, 5), 16),
-    b: parseInt(hex.slice(5, 7), 16)
-  }
-}
-
-function circularHueDistance(a: number, b: number): number {
-  const delta = Math.abs(a - b) % 360
-  return Math.min(delta, 360 - delta)
 }
 
 function clamp01(value: number): number {
