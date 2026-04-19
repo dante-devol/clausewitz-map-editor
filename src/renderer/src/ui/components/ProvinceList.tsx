@@ -1,8 +1,8 @@
 import { useRef, useEffect, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { List, ListItem, makeStyles, mergeClasses, tokens, Text } from '@fluentui/react-components'
-import type { Province } from '../../../../shared/mapDataTypes'
 import { unpackColor } from '../../../../shared/mapDataTypes'
+import type { ProvinceCatalogEntry } from '../../../../shared/provinceCatalog'
 import { TYPE_COLORS, continentColor } from '../../infra/config/displayModes'
 import { useI18n } from '../i18n/I18nProvider'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
@@ -154,22 +154,19 @@ const useStyles = makeStyles({
 })
 
 interface Props {
-  provinces: ReadonlyMap<number, Province>
+  provinceCatalog: readonly ProvinceCatalogEntry[]
   selectedIds: number[]
   onSelect?: (id: number) => void
 }
 
-export function ProvinceList({ provinces, selectedIds, onSelect }: Props): JSX.Element {
+export function ProvinceList({ provinceCatalog, selectedIds, onSelect }: Props): JSX.Element {
   const styles = useStyles()
   const { t, formatNumber } = useI18n()
   const scrollRef = useRef<HTMLDivElement>(null)
   const terrains = useMapDataStore((s) => s.terrains)
   const continents = useMapDataStore((s) => s.continents)
 
-  const sortedProvinces = useMemo(
-    () => [...provinces.values()].sort((a, b) => a.id - b.id),
-    [provinces]
-  )
+  const sortedProvinces = useMemo(() => [...provinceCatalog], [provinceCatalog])
 
   const rowVirtualizer = useVirtualizer({
     count: sortedProvinces.length,
@@ -189,6 +186,10 @@ export function ProvinceList({ provinces, selectedIds, onSelect }: Props): JSX.E
     while (lo <= hi) {
       const mid = (lo + hi) >> 1
       const id = sortedProvinces[mid].id
+      if (id === null) {
+        hi = mid - 1
+        continue
+      }
       if (id === scrollTargetId) return mid
       if (id < scrollTargetId) lo = mid + 1
       else hi = mid - 1
@@ -201,7 +202,8 @@ export function ProvinceList({ provinces, selectedIds, onSelect }: Props): JSX.E
     rowVirtualizer.scrollToIndex(selectedIndex, { align: 'center' })
   }, [selectedIndex, rowVirtualizer])
 
-  const typeChipStyle = (type: Province['type']) => {
+  const typeChipStyle = (type: ProvinceCatalogEntry['type']) => {
+    if (!type) return undefined
     const hex = TYPE_COLORS[type] ?? '#808080'
     const { r, g, b } = hexToRgb(hex)
     return {
@@ -226,38 +228,41 @@ export function ProvinceList({ provinces, selectedIds, onSelect }: Props): JSX.E
             <div className={styles.spacer} style={{ height: rowVirtualizer.getTotalSize() }}>
               {rowVirtualizer.getVirtualItems().map((item) => {
                 const p = sortedProvinces[item.index]
-                const { r, g, b } = unpackColor(p.color)
-                const isSelected = selectedIdSet.has(p.id)
-                const terrainColor = terrains.get(p.terrain)?.color
+                const isSelected = p.id !== null && selectedIdSet.has(p.id)
+                const color = p.color ?? 0
+                const { r, g, b } = unpackColor(color)
+                const terrainColor = p.terrain ? terrains.get(p.terrain)?.color : undefined
                 const terrainChipStyle = terrainColor !== undefined
                   ? makePackedChipStyle(terrainColor)
                   : undefined
-                const continent = continents.get(p.continent)
+                const continent = p.continent ? continents.get(p.continent) : undefined
                 const continentChipStyle = continent !== undefined
                   ? makePackedChipStyle(continentColor(continent.position))
                   : undefined
                 return (
                   <ListItem
                     as="div"
-                    key={item.key}
+                    key={p.key}
                     className={mergeClasses(styles.row, isSelected && styles.rowSelected)}
                     style={{ top: item.start + 2, height: ROW_H - 4 }}
-                    onClick={() => onSelect?.(p.id)}
+                    onClick={() => {
+                      if (p.id !== null) onSelect?.(p.id)
+                    }}
                   >
                     <div
                       className={styles.swatch}
                       style={{ backgroundColor: `rgb(${r},${g},${b})` }}
                     />
-                    <Text size={100} className={styles.id}>{p.id}</Text>
+                    <Text size={100} className={styles.id}>{formatProvinceId(p)}</Text>
                     <Text size={100} className={styles.type} style={typeChipStyle(p.type)}>
-                      {p.type}
+                      {p.type ?? '—'}
                     </Text>
                     <Text
                       size={100}
                       className={mergeClasses(styles.chip, styles.terrain)}
                       style={terrainChipStyle}
                     >
-                      {p.terrain}
+                      {p.terrain ?? '—'}
                     </Text>
                     {continent && (
                       <Text
@@ -277,6 +282,10 @@ export function ProvinceList({ provinces, selectedIds, onSelect }: Props): JSX.E
       )}
     </div>
   )
+}
+
+function formatProvinceId(province: ProvinceCatalogEntry): string {
+  return province.id === null ? 'xxxxx' : String(province.id)
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {

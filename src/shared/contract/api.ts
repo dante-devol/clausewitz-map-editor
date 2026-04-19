@@ -1,4 +1,5 @@
 import type { Continent, Province, TerrainCategory } from '../mapDataTypes'
+import type { ProvinceCatalogEntry } from '../provinceCatalog'
 import type { GameVerificationResult, ModVerificationResult, ResolvedPaths } from '../pathTypes'
 import type { AppLocale } from '../i18n'
 
@@ -29,6 +30,7 @@ export interface FileChangedEvent {
 export interface MapDataSnapshot {
   continents: Continent[]
   provinces: Province[]
+  provinceCatalog: ProvinceCatalogEntry[]
   terrains: TerrainCategory[]
   provincesImageB64: string
 }

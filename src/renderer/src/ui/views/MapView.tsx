@@ -1,11 +1,12 @@
 import { memo, useCallback, useMemo, useState } from 'react'
-import { makeStyles, tokens, Divider } from '@fluentui/react-components'
+import { makeStyles, tokens } from '@fluentui/react-components'
 import { useCoreApi } from '../../bridge/CoreProvider'
 import { useMapQueryApi } from '../../bridge/MapQueryProvider'
 import { useCoreSelector } from '../../bridge/useCoreSelector'
 import { MapModePanel } from '../components/MapModePanel'
 import { MapCanvas } from '../components/MapCanvas'
 import { ProvinceList } from '../components/ProvinceList'
+import { ProvinceDetailPanel } from '../components/ProvinceDetailPanel'
 import { mapCommands } from '../../core/commands/mapCommands'
 import {
   selectColorMap,
@@ -27,6 +28,13 @@ const useStyles = makeStyles({
   root: {
     display: 'flex',
     height: '100%'
+  },
+  leftPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    width: '220px',
+    borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
+    overflow: 'hidden'
   },
   viewport: {
     flex: 1,
@@ -59,11 +67,13 @@ export function MapView() {
 
   return (
     <div className={styles.root}>
+      <div className={styles.leftPanel}>
+        <ProvinceListPane />
+        <ProvinceDetailPane />
+      </div>
       <MapViewportPane className={styles.viewport} canvasOverlays={canvasOverlays} />
       <div className={styles.sidebar}>
         <MapSidebarTop className={styles.sidebarTop} panelOverlays={panelOverlays} />
-        <Divider style={{ flexGrow: 0 }} />
-        <ProvinceListPane />
       </div>
     </div>
   )
@@ -179,14 +189,26 @@ const MapSidebarTop = memo(function MapSidebarTop({
 
 const ProvinceListPane = memo(function ProvinceListPane() {
   const api = useCoreApi()
-  const provinces = useMapDataStore((s) => s.provinces)
+  const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
   const selectedProvinceIds = useCoreSelector(selectSelectedProvinceIds)
 
   return (
     <ProvinceList
-      provinces={provinces}
+      provinceCatalog={provinceCatalog}
       selectedIds={selectedProvinceIds}
       onSelect={(provinceId) => api.dispatch(mapCommands.setSelection([provinceId]))}
+    />
+  )
+})
+
+const ProvinceDetailPane = memo(function ProvinceDetailPane() {
+  const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
+  const selectedProvinceIds = useCoreSelector(selectSelectedProvinceIds)
+
+  return (
+    <ProvinceDetailPanel
+      selectedIds={selectedProvinceIds}
+      provinceCatalog={provinceCatalog}
     />
   )
 })

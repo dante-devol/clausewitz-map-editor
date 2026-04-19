@@ -1,4 +1,4 @@
-import type { DisplayMode } from '../../config/displayModes'
+import type { DisplayMode } from '../../infra/config/displayModes'
 import { INITIAL_MAP_OVERLAYS, type MapOverlayState } from './MapOverlay'
 import type { SessionLifecycle } from './SessionLifecycle'
 

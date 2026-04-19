@@ -1,4 +1,4 @@
-import type { DisplayMode } from '../../config/displayModes'
+import type { DisplayMode } from '../../infra/config/displayModes'
 import type { OverlayFilterRule, OverlayId } from './MapOverlay'
 import type { Theme, View } from './CoreState'
 

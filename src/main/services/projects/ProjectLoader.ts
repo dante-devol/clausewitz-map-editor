@@ -5,6 +5,7 @@ import { DefinitionsCsv } from '../../parsers/DefinitionsCsv'
 import { TerrainTxt } from '../../parsers/TerrainTxt'
 import type { MapDataSnapshot, ProjectOpenRequest, ProjectOpenResult } from '../../../shared/contract/api'
 import type { Continent } from '../../../shared/mapDataTypes'
+import { buildProvinceCatalog } from '../../../shared/provinceCatalog'
 
 export interface LoadedProject {
   projectId: string
@@ -23,12 +24,14 @@ export class ProjectLoader {
     const continents = this.loadContinents(project)
     const terrains = new TerrainTxt(project.resolvedPaths.provinceTerrain).load()
     const provinces = new DefinitionsCsv(project.resolvedPaths.definitions).load(continents)
+    const provinceCatalog = buildProvinceCatalog(provinces)
     const provincesImageB64 = readFileSync(project.resolvedPaths.provinces).toString('base64')
 
     return {
       continents,
       terrains,
       provinces,
+      provinceCatalog,
       provincesImageB64
     }
   }
@@ -49,4 +52,3 @@ export class ProjectLoader {
     return readFileSync(project.resolvedPaths.provinces).toString('base64')
   }
 }
-

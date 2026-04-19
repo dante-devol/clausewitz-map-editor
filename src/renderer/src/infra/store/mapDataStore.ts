@@ -1,10 +1,13 @@
 import { create } from 'zustand'
 import type { Province, TerrainCategory, Continent } from '../../../../shared/mapDataTypes'
+import type { ProvinceCatalogEntry } from '../../../../shared/provinceCatalog'
 
 interface MapDataState {
   // Primary lookups
   provinces: Map<number, Province>          // id → Province
   provincesByColor: Map<number, number>     // ProvinceColor → Province id
+  baseProvinceCatalog: ProvinceCatalogEntry[]
+  provinceCatalog: ProvinceCatalogEntry[]
   terrains: Map<string, TerrainCategory>   // codeName → TerrainCategory
   continents: Map<string, Continent>        // codeName → Continent
 
@@ -13,6 +16,8 @@ interface MapDataState {
 
   // Bulk loaders — replace the entire table at once
   loadProvinces: (provinces: Province[]) => void
+  loadProvinceCatalog: (catalog: ProvinceCatalogEntry[]) => void
+  setProvinceCatalog: (catalog: ProvinceCatalogEntry[]) => void
   loadTerrains: (terrains: TerrainCategory[]) => void
   loadContinents: (continents: Continent[]) => void
   loadProvincesImage: (b64: string) => void
@@ -22,6 +27,8 @@ interface MapDataState {
 const EMPTY_STATE = {
   provinces: new Map<number, Province>(),
   provincesByColor: new Map<number, number>(),
+  baseProvinceCatalog: [] as ProvinceCatalogEntry[],
+  provinceCatalog: [] as ProvinceCatalogEntry[],
   terrains: new Map<string, TerrainCategory>(),
   continents: new Map<string, Continent>(),
   provincesImageB64: null as string | null
@@ -39,6 +46,13 @@ export const useMapDataStore = create<MapDataState>((set) => ({
     }
     set({ provinces, provincesByColor })
   },
+
+  loadProvinceCatalog: (provinceCatalog) => set({
+    baseProvinceCatalog: provinceCatalog,
+    provinceCatalog
+  }),
+
+  setProvinceCatalog: (provinceCatalog) => set({ provinceCatalog }),
 
   loadTerrains: (incoming) => {
     const terrains = new Map<string, TerrainCategory>()

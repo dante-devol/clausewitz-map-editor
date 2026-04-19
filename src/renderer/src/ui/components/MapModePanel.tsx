@@ -29,15 +29,20 @@ import {
 } from '@fluentui/react-components'
 import {
   Add12Regular,
+  BuildingLighthouseFilled,
   CheckmarkCircleRegular,
   ColorRegular,
   DismissRegular,
+  EarthFilled,
   EditRegular,
   EyeOffRegular,
   EyeRegular,
   MoreHorizontalRegular,
+  PuzzlePieceFilled,
   ReOrderDotsVerticalRegular,
-  SettingsRegular
+  SettingsRegular,
+  TreeEvergreenFilled,
+  WaterFilled
 } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/messages/en'
@@ -60,6 +65,14 @@ const MODE_LABEL_KEYS: Record<DisplayMode, MessageKey> = {
   terrain: 'mapMode.terrain',
   coastal: 'mapMode.coastal',
   continent: 'mapMode.continent'
+}
+
+const MODE_ICONS: Record<DisplayMode, JSX.Element> = {
+  provinces: <PuzzlePieceFilled />,
+  type: <WaterFilled />,
+  terrain: <TreeEvergreenFilled />,
+  coastal: <BuildingLighthouseFilled />,
+  continent: <EarthFilled />
 }
 
 type PanelTab = 'display' | 'overlay'
@@ -94,6 +107,19 @@ const useStyles = makeStyles({
   },
   modeRadio: {
     flex: 1
+  },
+  modeLabel: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS
+  },
+  modeLabelIcon: {
+    fontSize: '20px',
+    lineHeight: 1,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0
   },
   iconButton: {
     flexShrink: 0
@@ -660,7 +686,18 @@ export function MapModePanel({
                   const modeLabel = t(MODE_LABEL_KEYS[entryMode])
                   return (
                     <div key={entryMode} className={styles.modeRow}>
-                      <Radio className={styles.modeRadio} value={entryMode} label={modeLabel} />
+                      <Radio
+                        className={styles.modeRadio}
+                        value={entryMode}
+                        label={(
+                          <span className={styles.modeLabel}>
+                            <span className={styles.modeLabelIcon}>
+                              {MODE_ICONS[entryMode]}
+                            </span>
+                            <span>{modeLabel}</span>
+                          </span>
+                        )}
+                      />
                       {configurable && (
                         <Button
                           className={styles.iconButton}
