@@ -5,7 +5,7 @@ import { CanonicalProvinceList } from './CanonicalProvinceList'
 import { BmpOnlyList } from './BmpOnlyList'
 import { ChangesList } from './ChangesList'
 import { useCrossSelection } from './useCrossSelection'
-import type { BmpAssignment, SelectionOrigin } from '../../../../../shared/provinceEditing'
+import type { BmpAssignment } from '../../../../../shared/provinceEditing'
 
 const useStyles = makeStyles({
   panel: {
@@ -17,12 +17,7 @@ const useStyles = makeStyles({
   }
 })
 
-interface Props {
-  selectedIds: number[]
-  onSelect?: (id: number) => void
-}
-
-export function ProvincePanel({ selectedIds, onSelect }: Props): JSX.Element {
+export function ProvincePanel(): JSX.Element {
   const styles = useStyles()
 
   const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
@@ -32,8 +27,9 @@ export function ProvincePanel({ selectedIds, onSelect }: Props): JSX.Element {
   const revertEdit = useMapDataStore((s) => s.revertEdit)
   const revertBmpReplacement = useMapDataStore((s) => s.revertBmpReplacement)
   const revertNewProvince = useMapDataStore((s) => s.revertNewProvince)
+  const clearAllSelection = useMapDataStore((s) => s.clearAllSelection)
 
-  const { changes, canonicalId, bmpGuid, changeId, setSelection } = useCrossSelection()
+  const { changes, crossSelectedProvinceIds, crossSelectedBmpGuids, crossSelectedChangeId } = useCrossSelection()
 
   const [canonicalCollapsed, setCanonicalCollapsed] = useState(false)
   const [bmpCollapsed, setBmpCollapsed] = useState(false)
@@ -51,8 +47,6 @@ export function ProvincePanel({ selectedIds, onSelect }: Props): JSX.Element {
     return map
   }, [bmpReplacements, pendingNewProvinces])
 
-  const handleCrossSelect = (origin: SelectionOrigin) => setSelection(origin)
-
   const handleRevert = (id: string) => {
     if (id.startsWith('field-edit:')) {
       revertEdit(parseInt(id.slice('field-edit:'.length), 10))
@@ -61,7 +55,7 @@ export function ProvincePanel({ selectedIds, onSelect }: Props): JSX.Element {
     } else if (id.startsWith('new-province:')) {
       revertNewProvince(id.slice('new-province:'.length))
     }
-    setSelection(null)
+    clearAllSelection()
   }
 
   return (
@@ -70,25 +64,20 @@ export function ProvincePanel({ selectedIds, onSelect }: Props): JSX.Element {
         collapsed={canonicalCollapsed}
         onToggleCollapse={() => setCanonicalCollapsed((c) => !c)}
         provinceCatalog={provinceCatalog}
-        selectedIds={selectedIds}
-        crossSelectedId={canonicalId}
-        onSelect={onSelect}
-        onCrossSelect={handleCrossSelect}
+        crossSelectedIds={crossSelectedProvinceIds}
       />
       <BmpOnlyList
         collapsed={bmpCollapsed}
         onToggleCollapse={() => setBmpCollapsed((c) => !c)}
         entries={bmpOnlyEntries}
         bmpAssignments={bmpAssignments}
-        crossSelectedGuid={bmpGuid}
-        onCrossSelect={handleCrossSelect}
+        crossSelectedGuids={crossSelectedBmpGuids}
       />
       <ChangesList
         collapsed={changesCollapsed}
         onToggleCollapse={() => setChangesCollapsed((c) => !c)}
         changes={changes}
-        selectedChangeId={changeId}
-        onCrossSelect={handleCrossSelect}
+        crossSelectedChangeId={crossSelectedChangeId}
         onRevert={handleRevert}
       />
     </div>

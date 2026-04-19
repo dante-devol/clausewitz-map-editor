@@ -43,8 +43,3 @@ export interface NewProvince {
 }
 
 export type PendingChange = FieldEdit | BmpReplacement | NewProvince
-
-export type SelectionOrigin =
-  | { list: 'canonical'; provinceId: number }
-  | { list: 'bmp'; guid: string }
-  | { list: 'changes'; changeId: string }

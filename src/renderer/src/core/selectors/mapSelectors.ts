@@ -1,5 +1,6 @@
-import type { Continent, Province, TerrainCategory } from '../../../../shared/mapDataTypes'
+import type { Province } from '../../../../shared/mapDataTypes'
 import type { ProvinceCatalogEntry, ProvinceCatalogEntryKey } from '../../../../shared/provinceCatalog'
+import type { BmpOnlyEntry } from '../../../../shared/provinceEditing'
 import type { CoreState } from '../contracts/CoreState'
 import {
   getModeValueKey,
@@ -14,27 +15,54 @@ import type { ProvinceValidationIssue } from '../../../../shared/provinceValidat
 export const selectDisplayMode = (state: CoreState) => state.map.displayMode
 export const selectMapOverlays = (state: CoreState) => state.map.overlays
 
-export function selectSelectedProvinceIds(state: CoreState): number[] {
-  return state.map.selectedProvinceIds
-}
-
 export function selectHighlightColors(
-  state: CoreState,
-  provinces: ReadonlyMap<number, Province>
+  selectedProvinceIds: number[],
+  selectedBmpGuids: string[],
+  provinces: ReadonlyMap<number, Province>,
+  bmpOnlyEntries: BmpOnlyEntry[],
+  bmpReplacements: ReadonlyMap<number, string>
 ): number[] {
-  return state.map.selectedProvinceIds.reduce<number[]>((acc, id) => {
+  const colors: number[] = []
+
+  // Colors from canonical province selections
+  for (const id of selectedProvinceIds) {
     const color = provinces.get(id)?.color
-    if (color !== undefined) acc.push(color)
-    return acc
-  }, [])
+    if (color !== undefined) colors.push(color)
+  }
+
+  // Colors from BMP-only guid selections
+  // For each selected BMP guid:
+  //   - If it has a bmpReplacement (province assigned), show the province's original color (since after assignment the map shows that)
+  //   - Otherwise show the direct BMP color from bmpOnlyEntries
+  const bmpEntryByGuid = new Map(bmpOnlyEntries.map((e) => [e.guid, e]))
+  // Reverse lookup: bmp guid -> province id (if a replacement was assigned)
+  const guidToProvinceId = new Map<string, number>()
+  for (const [provinceId, guid] of bmpReplacements) {
+    guidToProvinceId.set(guid, provinceId)
+  }
+
+  for (const guid of selectedBmpGuids) {
+    const provinceId = guidToProvinceId.get(guid)
+    if (provinceId !== undefined) {
+      // After bmp replacement, the map shows the province's original color
+      const color = provinces.get(provinceId)?.color
+      if (color !== undefined) colors.push(color)
+    } else {
+      // Unassigned BMP: highlight the raw BMP color
+      const entry = bmpEntryByGuid.get(guid)
+      if (entry !== undefined) colors.push(entry.color)
+    }
+  }
+
+  return colors
 }
 
 export function selectValidationHighlightColors(
-  state: CoreState,
+  selectedProvinceIds: number[],
   provinceCatalog: readonly ProvinceCatalogEntry[],
   issuesByProvinceKey: ReadonlyMap<string, ProvinceValidationIssue[]>
 ): { warningColors: number[]; errorColors: number[] } {
-  const selectedIds = new Set(state.map.selectedProvinceIds)
+  const selectedIds = new Set(selectedProvinceIds)
   const warningColors: number[] = []
   const errorColors: number[] = []
 

@@ -487,6 +487,7 @@ export function MapCanvas({
     }
     if (e.button !== 0) return
     if (eyedropperActive) {
+      // Eyedropper mode: sample color for display only, do NOT fire selection
       const canvas = canvasRef.current
       if (!canvas) return
       const rect = canvas.getBoundingClientRect()
@@ -495,8 +496,19 @@ export function MapCanvas({
       const { x: tx, y: ty, scale } = transformRef.current
       const color = rendererRef.current?.readOriginalPixel(cx, cy, tx, ty, scale)
       setSampledColor(color ?? null)
-      if (color) onColorPicked?.(color.r, color.g, color.b, e.shiftKey)
       return
+    }
+    // Default left-click: select province AND start pan
+    {
+      const canvas = canvasRef.current
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect()
+        const cx = e.clientX - rect.left
+        const cy = e.clientY - rect.top
+        const { x: tx, y: ty, scale } = transformRef.current
+        const color = rendererRef.current?.readOriginalPixel(cx, cy, tx, ty, scale)
+        if (color) onColorPicked?.(color.r, color.g, color.b, e.shiftKey)
+      }
     }
     const t = transformRef.current
     dragRef.current = { startX: e.clientX, startY: e.clientY, startTX: t.x, startTY: t.y }

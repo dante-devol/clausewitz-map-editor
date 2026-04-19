@@ -1,17 +1,13 @@
 import { useMemo } from 'react'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
-import {
-  selectPendingChanges,
-  resolveSelection
-} from '../../../infra/store/provinceEditSelectors'
-import type { PendingChange, SelectionOrigin } from '../../../../../shared/provinceEditing'
+import { selectPendingChanges } from '../../../infra/store/provinceEditSelectors'
+import type { PendingChange, BmpReplacement, NewProvince } from '../../../../../shared/provinceEditing'
 
 interface CrossSelectionResult {
   changes: PendingChange[]
-  canonicalId: number | undefined
-  bmpGuid: string | undefined
-  changeId: string | undefined
-  setSelection: (origin: SelectionOrigin | null) => void
+  crossSelectedProvinceIds: number[]
+  crossSelectedBmpGuids: string[]
+  crossSelectedChangeId: string | undefined
 }
 
 export function useCrossSelection(): CrossSelectionResult {
@@ -20,24 +16,43 @@ export function useCrossSelection(): CrossSelectionResult {
   const pendingNewProvinces = useMapDataStore((s) => s.pendingNewProvinces)
   const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
   const bmpOnlyEntries = useMapDataStore((s) => s.bmpOnlyEntries)
-  const provinceSelection = useMapDataStore((s) => s.provinceSelection)
-  const setSelection = useMapDataStore((s) => s.setProvinceSelection)
+  const selectedProvinceIds = useMapDataStore((s) => s.selectedProvinceIds)
+  const selectedBmpGuids = useMapDataStore((s) => s.selectedBmpGuids)
 
   const changes = useMemo(
     () => selectPendingChanges(pendingEdits, bmpReplacements, pendingNewProvinces, originalDefinitions, bmpOnlyEntries),
     [pendingEdits, bmpReplacements, pendingNewProvinces, originalDefinitions, bmpOnlyEntries]
   )
 
-  const resolved = useMemo(
-    () => provinceSelection ? resolveSelection(provinceSelection, changes) : {},
-    [provinceSelection, changes]
-  )
+  // crossSelectedBmpGuids = selectedBmpGuids UNION guids that are bmpReplacements for any selectedProvinceId
+  const crossSelectedBmpGuids = useMemo(() => {
+    const guidSet = new Set(selectedBmpGuids)
+    for (const id of selectedProvinceIds) {
+      const guid = bmpReplacements.get(id)
+      if (guid !== undefined) guidSet.add(guid)
+    }
+    return [...guidSet]
+  }, [selectedBmpGuids, selectedProvinceIds, bmpReplacements])
+
+  // crossSelectedChangeId = first change where:
+  //   field-edit/bmp-replacement with provinceId in selectedProvinceIds, OR
+  //   new-province with bmpGuid in selectedBmpGuids
+  const crossSelectedChangeId = useMemo(() => {
+    const provinceIdSet = new Set(selectedProvinceIds)
+    const bmpGuidSet = new Set(selectedBmpGuids)
+    const match = changes.find((c) => {
+      if (c.kind === 'field-edit') return provinceIdSet.has(c.provinceId)
+      if (c.kind === 'bmp-replacement') return provinceIdSet.has((c as BmpReplacement).provinceId)
+      if (c.kind === 'new-province') return bmpGuidSet.has((c as NewProvince).bmpGuid)
+      return false
+    })
+    return match?.changeId
+  }, [changes, selectedProvinceIds, selectedBmpGuids])
 
   return {
     changes,
-    canonicalId: resolved.canonicalId,
-    bmpGuid: resolved.bmpGuid,
-    changeId: resolved.changeId,
-    setSelection
+    crossSelectedProvinceIds: selectedProvinceIds,
+    crossSelectedBmpGuids,
+    crossSelectedChangeId
   }
 }

@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import {
   Button,
   makeStyles,
@@ -8,8 +9,9 @@ import {
 } from '@fluentui/react-components'
 import { ChevronDownRegular, ChevronUpRegular, DismissRegular } from '@fluentui/react-icons'
 import { unpackColor } from '../../../../../shared/mapDataTypes'
-import type { PendingChange, SelectionOrigin } from '../../../../../shared/provinceEditing'
+import type { PendingChange } from '../../../../../shared/provinceEditing'
 import { useI18n } from '../../i18n/I18nProvider'
+import { useMapDataStore } from '../../../infra/store/mapDataStore'
 
 const useStyles = makeStyles({
   section: {
@@ -172,8 +174,7 @@ interface Props {
   collapsed: boolean
   onToggleCollapse: () => void
   changes: PendingChange[]
-  selectedChangeId: string | undefined
-  onCrossSelect?: (origin: SelectionOrigin) => void
+  crossSelectedChangeId: string | undefined
   onRevert: (changeId: string) => void
 }
 
@@ -181,12 +182,37 @@ export function ChangesList({
   collapsed,
   onToggleCollapse,
   changes,
-  selectedChangeId,
-  onCrossSelect,
+  crossSelectedChangeId,
   onRevert
 }: Props): JSX.Element {
   const styles = useStyles()
   const { t, formatNumber } = useI18n()
+  const lastClickedChangeIdRef = useRef<string | null>(null)
+
+  const setSelection = useMapDataStore((s) => s.setSelection)
+  const extendSelection = useMapDataStore((s) => s.extendSelection)
+  const setSelectedBmpGuids = useMapDataStore((s) => s.setSelectedBmpGuids)
+  const toggleBmpGuid = useMapDataStore((s) => s.toggleBmpGuid)
+
+  const handleChangeClick = (change: PendingChange, e: React.MouseEvent) => {
+    if (e.shiftKey) {
+      e.preventDefault()
+      // Additive selection on shift+click
+      if (change.kind === 'field-edit' || change.kind === 'bmp-replacement') {
+        extendSelection([change.provinceId])
+      } else if (change.kind === 'new-province') {
+        toggleBmpGuid(change.bmpGuid)
+      }
+    } else {
+      // Regular click — replace selection
+      if (change.kind === 'field-edit' || change.kind === 'bmp-replacement') {
+        setSelection([change.provinceId])
+      } else if (change.kind === 'new-province') {
+        setSelectedBmpGuids([change.bmpGuid])
+      }
+    }
+    lastClickedChangeIdRef.current = change.changeId
+  }
 
   return (
     <div className={mergeClasses(styles.section, collapsed && styles.sectionCollapsed)}>
@@ -210,18 +236,18 @@ export function ChangesList({
           <div className={styles.scroll}>
             <div className={styles.changeList}>
               {changes.map((change) => {
-                const isSelected = change.changeId === selectedChangeId
+                const isCrossSelected = change.changeId === crossSelectedChangeId
 
                 return (
                   <div
                     key={change.changeId}
                     role="button"
                     tabIndex={0}
-                    className={mergeClasses(styles.row, isSelected && styles.rowSelected)}
-                    onClick={() => onCrossSelect?.({ list: 'changes', changeId: change.changeId })}
+                    className={mergeClasses(styles.row, isCrossSelected && styles.rowSelected)}
+                    onClick={(e) => handleChangeClick(change, e)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
-                        onCrossSelect?.({ list: 'changes', changeId: change.changeId })
+                        handleChangeClick(change, e as unknown as React.MouseEvent)
                       }
                     }}
                   >

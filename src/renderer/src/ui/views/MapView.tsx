@@ -16,7 +16,6 @@ import {
   selectHoverTooltip,
   selectMapOverlays,
   selectModeValuesByMode,
-  selectSelectedProvinceIds,
   selectValidationHighlightColors
 } from '../../core/selectors/mapSelectors'
 import { useI18n } from '../i18n/I18nProvider'
@@ -101,6 +100,12 @@ const MapViewportPane = memo(function MapViewportPane({
   const continents = useMapDataStore((s) => s.continents)
   const stateProvinceToStateId = useMapDataStore((s) => s.stateProvinceToStateId)
   const strategicRegionProvinceToRegionId = useMapDataStore((s) => s.strategicRegionProvinceToRegionId)
+  const selectedProvinceIds = useMapDataStore((s) => s.selectedProvinceIds)
+  const selectedBmpGuids = useMapDataStore((s) => s.selectedBmpGuids)
+  const bmpOnlyEntries = useMapDataStore((s) => s.bmpOnlyEntries)
+  const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
+  const setSelection = useMapDataStore((s) => s.setSelection)
+  const extendSelection = useMapDataStore((s) => s.extendSelection)
   const issuesByProvinceKey = useProvinceValidationStore((s) => s.issuesByProvinceKey)
   const displayModeOverrides = useDisplayModeConfigStore((s) => s.overrides)
   const displayMode = useCoreSelector(selectDisplayMode)
@@ -115,20 +120,27 @@ const MapViewportPane = memo(function MapViewportPane({
     [provinces, displayModeOverrides, displayModeContext]
   )
 
-  const highlightColors = useCoreSelector((state) => selectHighlightColors(state, provinces))
-  const validationHighlightColors = useCoreSelector((state) => (
-    selectValidationHighlightColors(state, provinceCatalog, issuesByProvinceKey)
-  ))
+  const highlightColors = useMemo(
+    () => selectHighlightColors(selectedProvinceIds, selectedBmpGuids, provinces, bmpOnlyEntries, bmpReplacements),
+    [selectedProvinceIds, selectedBmpGuids, provinces, bmpOnlyEntries, bmpReplacements]
+  )
+
+  const validationHighlightColors = useMemo(
+    () => selectValidationHighlightColors(selectedProvinceIds, provinceCatalog, issuesByProvinceKey),
+    [selectedProvinceIds, provinceCatalog, issuesByProvinceKey]
+  )
+
   const colorMap = useCoreSelector((state) => selectColorMap(state, provinces, displayModeOverrides, displayModeContext))
 
   const onColorPicked = useCallback((r: number, g: number, b: number, additive: boolean) => {
     const province = query.getProvinceByColor(packColor(r, g, b))
     if (!province) return
-    api.dispatch(additive
-      ? mapCommands.toggleProvinceSelection(province.id)
-      : mapCommands.setSelection([province.id])
-    )
-  }, [api, query])
+    if (additive) {
+      extendSelection([province.id])
+    } else {
+      setSelection([province.id])
+    }
+  }, [setSelection, extendSelection, query])
 
   const onHoverColorChange = useCallback((color: { r: number; g: number; b: number; x: number; y: number } | null) => {
     if (!color) {
@@ -201,24 +213,18 @@ const MapSidebarTop = memo(function MapSidebarTop({
 })
 
 const ProvinceListPane = memo(function ProvinceListPane() {
-  const api = useCoreApi()
-  const selectedProvinceIds = useCoreSelector(selectSelectedProvinceIds)
-
-  return (
-    <ProvincePanel
-      selectedIds={selectedProvinceIds}
-      onSelect={(provinceId) => api.dispatch(mapCommands.setSelection([provinceId]))}
-    />
-  )
+  return <ProvincePanel />
 })
 
 const ProvinceDetailPane = memo(function ProvinceDetailPane() {
   const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
-  const selectedProvinceIds = useCoreSelector(selectSelectedProvinceIds)
+  const selectedProvinceIds = useMapDataStore((s) => s.selectedProvinceIds)
+  const selectedBmpGuids = useMapDataStore((s) => s.selectedBmpGuids)
 
   return (
     <ProvinceDetailPanel
-      selectedIds={selectedProvinceIds}
+      selectedProvinceIds={selectedProvinceIds}
+      selectedBmpGuids={selectedBmpGuids}
       provinceCatalog={provinceCatalog}
     />
   )

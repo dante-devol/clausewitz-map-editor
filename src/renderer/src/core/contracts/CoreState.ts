@@ -14,7 +14,6 @@ export interface CoreState {
   map: {
     displayMode: DisplayMode
     overlays: MapOverlayState[]
-    selectedProvinceIds: number[]
   }
 }
 
@@ -31,7 +30,6 @@ export const INITIAL_CORE_STATE: CoreState = {
   },
   map: {
     displayMode: 'provinces',
-    overlays: INITIAL_MAP_OVERLAYS,
-    selectedProvinceIds: []
+    overlays: INITIAL_MAP_OVERLAYS
   }
 }

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Button,
   Checkbox,
@@ -36,6 +36,42 @@ const useStyles = makeStyles({
     padding: `0 ${tokens.spacingHorizontalXS}`,
     borderRadius: tokens.borderRadiusCircular,
     backgroundColor: tokens.colorNeutralBackground3
+  },
+  tabStrip: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: tokens.spacingHorizontalXXS,
+    paddingBottom: tokens.spacingVerticalXXS
+  },
+  tab: {
+    padding: `2px ${tokens.spacingHorizontalXS}`,
+    borderRadius: tokens.borderRadiusSmall,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    backgroundColor: tokens.colorNeutralBackground1,
+    color: tokens.colorNeutralForeground2,
+    fontSize: tokens.fontSizeBase100,
+    lineHeight: tokens.lineHeightBase100,
+    fontFamily: 'monospace',
+    cursor: 'pointer',
+    flexShrink: 0,
+    '&:hover': {
+      backgroundColor: tokens.colorNeutralBackground2
+    }
+  },
+  tabActive: {
+    backgroundColor: tokens.colorBrandBackground2,
+    border: `1px solid ${tokens.colorBrandStroke1}`,
+    color: tokens.colorBrandForeground1
+  },
+  tabOverflow: {
+    padding: `2px ${tokens.spacingHorizontalXS}`,
+    borderRadius: tokens.borderRadiusSmall,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    backgroundColor: tokens.colorNeutralBackground3,
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase100,
+    lineHeight: tokens.lineHeightBase100,
+    flexShrink: 0
   },
   grid: {
     display: 'grid',
@@ -121,18 +157,30 @@ const useStyles = makeStyles({
     fontSize: tokens.fontSizeBase100,
     textAlign: 'center',
     padding: `${tokens.spacingVerticalS} 0`
+  },
+  bmpInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXXS
   }
 })
 
+const TAB_SHOW_LIMIT = 5
+
 interface Props {
-  selectedIds: number[]
+  selectedProvinceIds: number[]
+  selectedBmpGuids: string[]
   provinceCatalog: readonly ProvinceCatalogEntry[]
 }
 
-export function ProvinceDetailPanel({ selectedIds, provinceCatalog }: Props): JSX.Element {
+export function ProvinceDetailPanel({ selectedProvinceIds, selectedBmpGuids, provinceCatalog }: Props): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
 
+  const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
+  const bmpOnlyEntries = useMapDataStore((s) => s.bmpOnlyEntries)
+
+  // Build catalog lookup by id
   const catalogById = useMemo(() => {
     const map = new Map<number, ProvinceCatalogEntry>()
     for (const p of provinceCatalog) {
@@ -141,36 +189,182 @@ export function ProvinceDetailPanel({ selectedIds, provinceCatalog }: Props): JS
     return map
   }, [provinceCatalog])
 
-  const selected = useMemo(
-    () => selectedIds.map((id) => catalogById.get(id)).filter((p): p is ProvinceCatalogEntry => !!p),
-    [catalogById, selectedIds]
+  // Reverse lookup: guid -> canonical province id (via bmpReplacements)
+  const guidToProvinceId = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const [provinceId, guid] of bmpReplacements) {
+      map.set(guid, provinceId)
+    }
+    return map
+  }, [bmpReplacements])
+
+  // Compute the effective list of items to display:
+  // - canonical selected province ids (directly)
+  // - BMP guids that resolved to a canonical province (via bmpReplacements)
+  // - BMP guids with no canonical assignment (unregistered)
+  interface DisplayItem {
+    kind: 'canonical'
+    provinceId: number
+    label: string
+  }
+  interface DisplayBmpItem {
+    kind: 'bmp-unassigned'
+    guid: string
+    label: string
+  }
+  type TabItem = DisplayItem | DisplayBmpItem
+
+  const tabItems = useMemo<TabItem[]>(() => {
+    const items: TabItem[] = []
+    const seenProvinceIds = new Set<number>()
+
+    for (const id of selectedProvinceIds) {
+      if (!seenProvinceIds.has(id)) {
+        seenProvinceIds.add(id)
+        items.push({ kind: 'canonical', provinceId: id, label: String(id) })
+      }
+    }
+
+    for (const guid of selectedBmpGuids) {
+      const provinceId = guidToProvinceId.get(guid)
+      if (provinceId !== undefined) {
+        // Resolved to canonical — show as canonical if not already shown
+        if (!seenProvinceIds.has(provinceId)) {
+          seenProvinceIds.add(provinceId)
+          items.push({ kind: 'canonical', provinceId, label: String(provinceId) })
+        }
+      } else {
+        // Unassigned BMP
+        items.push({ kind: 'bmp-unassigned', guid, label: guid })
+      }
+    }
+
+    return items
+  }, [selectedProvinceIds, selectedBmpGuids, guidToProvinceId])
+
+  const [focusedTabIndex, setFocusedTabIndex] = useState(0)
+  const safeFocusedIndex = Math.min(focusedTabIndex, Math.max(0, tabItems.length - 1))
+  const focusedItem = tabItems[safeFocusedIndex]
+
+  // For canonical multi-selection (all canonical IDs including from BMP resolved)
+  const allCanonicalIds = useMemo(
+    () => tabItems.filter((i): i is DisplayItem => i.kind === 'canonical').map((i) => i.provinceId),
+    [tabItems]
   )
 
+  const totalCount = tabItems.length
+
   const title =
-    selected.length === 0
+    totalCount === 0
       ? t('provinceDetail.title.empty')
-      : selected.length === 1
-        ? t('provinceEdit.title', { id: selected[0].id ?? '?' })
-        : t('provinceDetail.title.multi', { count: selected.length })
+      : totalCount === 1
+        ? (focusedItem?.kind === 'canonical'
+            ? t('provinceEdit.title', { id: focusedItem.provinceId })
+            : t('provinceDetail.title.bmp', { guid: focusedItem?.label ?? '' }))
+        : t('provinceDetail.title.multi', { count: totalCount })
+
+  const showTabs = totalCount > 1
+  const visibleTabs = tabItems.slice(0, TAB_SHOW_LIMIT)
+  const overflowCount = tabItems.length - TAB_SHOW_LIMIT
+
+  // BMP entry lookup
+  const bmpEntryByGuid = useMemo(
+    () => new Map(bmpOnlyEntries.map((e) => [e.guid, e])),
+    [bmpOnlyEntries]
+  )
 
   return (
     <div className={styles.root}>
       <div className={styles.header}>
         <Text size={100} weight="semibold">{title}</Text>
-        {selected.length > 1 && (
-          <Text size={100} className={styles.count}>{selected.length}</Text>
+        {totalCount > 1 && (
+          <Text size={100} className={styles.count}>{totalCount}</Text>
         )}
       </div>
 
-      {selected.length === 0 && (
+      {showTabs && (
+        <div className={styles.tabStrip}>
+          {visibleTabs.map((item, index) => (
+            <div
+              key={item.kind === 'canonical' ? `p:${item.provinceId}` : `b:${item.guid}`}
+              role="button"
+              tabIndex={0}
+              className={mergeClasses(styles.tab, index === safeFocusedIndex && styles.tabActive)}
+              onClick={() => setFocusedTabIndex(index)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setFocusedTabIndex(index) }}
+            >
+              {item.label}
+            </div>
+          ))}
+          {overflowCount > 0 && (
+            <div className={styles.tabOverflow}>+{overflowCount}</div>
+          )}
+        </div>
+      )}
+
+      {totalCount === 0 && (
         <Text className={styles.empty}>{t('provinceDetail.empty')}</Text>
       )}
-      {selected.length === 1 && selected[0].id !== null && (
-        <SingleDetail provinceId={selected[0].id} />
+
+      {totalCount >= 1 && focusedItem && (
+        <>
+          {focusedItem.kind === 'canonical' && totalCount === 1 && (
+            <SingleDetail provinceId={focusedItem.provinceId} />
+          )}
+          {focusedItem.kind === 'canonical' && totalCount > 1 && (
+            // When multiple: show single detail for the focused tab's province
+            <SingleDetail provinceId={focusedItem.provinceId} />
+          )}
+          {focusedItem.kind === 'bmp-unassigned' && (
+            <BmpUnassignedDetail guid={focusedItem.guid} bmpEntryByGuid={bmpEntryByGuid} />
+          )}
+        </>
       )}
-      {selected.length > 1 && (
-        <MultiDetail selectedIds={selectedIds} />
+
+      {/* Show multi-edit only when multiple canonical provinces are selected and no focused BMP tab */}
+      {totalCount > 1 && focusedItem?.kind === 'canonical' && allCanonicalIds.length > 1 && (
+        <>
+          <Divider />
+          <MultiDetail selectedIds={allCanonicalIds} />
+        </>
       )}
+    </div>
+  )
+}
+
+function BmpUnassignedDetail({
+  guid,
+  bmpEntryByGuid
+}: {
+  guid: string
+  bmpEntryByGuid: Map<string, { guid: string; color: number }>
+}): JSX.Element {
+  const styles = useStyles()
+  const { t } = useI18n()
+  const entry = bmpEntryByGuid.get(guid)
+
+  return (
+    <div className={styles.bmpInfo}>
+      <div className={styles.grid}>
+        <span className={styles.label}>{t('provinceDetail.bmpGuid')}</span>
+        <span className={styles.idText}>{guid}</span>
+        {entry && (
+          <>
+            <span className={styles.label}>{t('provinceEdit.color.label')}</span>
+            <div className={styles.colorRow}>
+              <div
+                className={styles.swatch}
+                style={{
+                  backgroundColor: (() => {
+                    const { r, g, b } = unpackColor(entry.color)
+                    return `rgb(${r},${g},${b})`
+                  })()
+                }}
+              />
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }

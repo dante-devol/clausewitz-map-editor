@@ -29,7 +29,6 @@ import { useI18n } from '../../i18n/I18nProvider'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import { useProvinceValidationStore } from '../../../infra/store/provinceValidationStore'
 import type { ProvinceValidationIssue, ProvinceValidationSeverity } from '../../../../../shared/provinceValidation'
-import type { SelectionOrigin } from '../../../../../shared/provinceEditing'
 
 const ROW_H = 36
 const SUGGESTION_LIMIT = 8
@@ -418,30 +417,30 @@ interface Props {
   collapsed: boolean
   onToggleCollapse: () => void
   provinceCatalog: readonly ProvinceCatalogEntry[]
-  selectedIds: number[]
-  crossSelectedId: number | undefined
-  onSelect?: (id: number) => void
-  onCrossSelect?: (origin: SelectionOrigin) => void
+  crossSelectedIds: number[]
 }
 
 export function CanonicalProvinceList({
   collapsed,
   onToggleCollapse,
   provinceCatalog,
-  selectedIds,
-  crossSelectedId,
-  onSelect,
-  onCrossSelect
+  crossSelectedIds
 }: Props): JSX.Element {
   const styles = useStyles()
   const { t, formatNumber } = useI18n()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const lastClickedIndexRef = useRef<number | null>(null)
+
   const terrains = useMapDataStore((s) => s.terrains)
   const continents = useMapDataStore((s) => s.continents)
   const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
   const pendingEdits = useMapDataStore((s) => s.pendingEdits)
   const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
   const bmpOnlyEntries = useMapDataStore((s) => s.bmpOnlyEntries)
+  const selectedProvinceIds = useMapDataStore((s) => s.selectedProvinceIds)
+  const setSelection = useMapDataStore((s) => s.setSelection)
+  const extendSelection = useMapDataStore((s) => s.extendSelection)
+  const toggleProvinceId = useMapDataStore((s) => s.toggleProvinceId)
 
   const bmpOnlyByGuid = useMemo(
     () => new Map(bmpOnlyEntries.map((e) => [e.guid, e])),
@@ -484,8 +483,10 @@ export function CanonicalProvinceList({
     overscan: 12
   })
 
-  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
-  const scrollTargetId = selectedIds.length > 0 ? selectedIds[selectedIds.length - 1] : null
+  const selectedIdSet = useMemo(() => new Set(selectedProvinceIds), [selectedProvinceIds])
+  const crossSelectedIdSet = useMemo(() => new Set(crossSelectedIds), [crossSelectedIds])
+
+  const scrollTargetId = selectedProvinceIds.length > 0 ? selectedProvinceIds[selectedProvinceIds.length - 1] : null
   const selectedIndex = useMemo(() => {
     if (scrollTargetId === null) return -1
     return filteredProvinces.findIndex((p) => p.id === scrollTargetId)
@@ -495,6 +496,31 @@ export function CanonicalProvinceList({
     if (selectedIndex < 0) return
     rowVirtualizer.scrollToIndex(selectedIndex, { align: 'center' })
   }, [selectedIndex, rowVirtualizer])
+
+  const handleRowClick = (p: ProvinceCatalogEntry, index: number, e: React.MouseEvent) => {
+    if (p.id === null) return
+    if (e.shiftKey) {
+      e.preventDefault()
+      if (lastClickedIndexRef.current === null) {
+        setSelection([p.id])
+        lastClickedIndexRef.current = index
+      } else {
+        const start = Math.min(lastClickedIndexRef.current, index)
+        const end = Math.max(lastClickedIndexRef.current, index)
+        const rangeIds = filteredProvinces.slice(start, end + 1)
+          .map((rp) => rp.id)
+          .filter((id): id is number => id !== null)
+        setSelection(rangeIds)
+        // Anchor stays fixed
+      }
+    } else if (e.ctrlKey || e.metaKey) {
+      toggleProvinceId(p.id)
+      lastClickedIndexRef.current = index
+    } else {
+      setSelection([p.id])
+      lastClickedIndexRef.current = index
+    }
+  }
 
   const typeChipStyle = (type: ProvinceCatalogEntry['type']) => {
     if (!type) return undefined
@@ -639,7 +665,7 @@ export function CanonicalProvinceList({
                 {rowVirtualizer.getVirtualItems().map((item) => {
                   const p = filteredProvinces[item.index]
                   const isSelected = p.id !== null && selectedIdSet.has(p.id)
-                  const isCrossSelected = p.id !== null && p.id === crossSelectedId && !isSelected
+                  const isCrossSelected = p.id !== null && crossSelectedIdSet.has(p.id) && !isSelected
                   const isEdited = p.id !== null && (pendingEdits.has(p.id) || bmpReplacements.has(p.id))
 
                   // Compute effective values: original + field patch + BMP replacement color
@@ -675,12 +701,7 @@ export function CanonicalProvinceList({
                         isSelected && styles.rowSelected
                       )}
                       style={{ top: item.start + 2, height: ROW_H - 4 }}
-                      onClick={() => {
-                        if (p.id !== null) {
-                          onSelect?.(p.id)
-                          onCrossSelect?.({ list: 'canonical', provinceId: p.id })
-                        }
-                      }}
+                      onClick={(e) => handleRowClick(p, item.index, e)}
                     >
                       <div className={styles.issueCell}>
                         {issues.length > 0 && (

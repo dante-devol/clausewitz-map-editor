@@ -15,8 +15,9 @@ import {
 } from '@fluentui/react-components'
 import { ChevronDownRegular, ChevronUpRegular } from '@fluentui/react-icons'
 import { unpackColor } from '../../../../../shared/mapDataTypes'
-import type { BmpAssignment, BmpOnlyEntry, SelectionOrigin } from '../../../../../shared/provinceEditing'
+import type { BmpAssignment, BmpOnlyEntry } from '../../../../../shared/provinceEditing'
 import { useI18n } from '../../i18n/I18nProvider'
+import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import { BmpAssignPopover } from './BmpAssignPopover'
 
 const ROW_H = 36
@@ -190,8 +191,7 @@ interface Props {
   onToggleCollapse: () => void
   entries: BmpOnlyEntry[]
   bmpAssignments: Map<string, BmpAssignment>
-  crossSelectedGuid: string | undefined
-  onCrossSelect?: (origin: SelectionOrigin) => void
+  crossSelectedGuids: string[]
 }
 
 export function BmpOnlyList({
@@ -199,20 +199,23 @@ export function BmpOnlyList({
   onToggleCollapse,
   entries,
   bmpAssignments,
-  crossSelectedGuid,
-  onCrossSelect
+  crossSelectedGuids
 }: Props): JSX.Element {
   const styles = useStyles()
   const { t, formatNumber } = useI18n()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const lastSelectedIndexRef = useRef<number | null>(null)
+
+  const selectedBmpGuids = useMapDataStore((s) => s.selectedBmpGuids)
+  const setSelectedBmpGuids = useMapDataStore((s) => s.setSelectedBmpGuids)
+  const setSelection = useMapDataStore((s) => s.setSelection)
 
   const [openGuid, setOpenGuid] = useState<string | null>(null)
-  const [selectedGuids, setSelectedGuids] = useState<string[]>([])
-  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null)
   const [multiPopoverOpen, setMultiPopoverOpen] = useState(false)
 
   const unresolvedCount = entries.filter((e) => !bmpAssignments.has(e.guid)).length
-  const selectedSet = new Set(selectedGuids)
+  const selectedSet = new Set(selectedBmpGuids)
+  const crossSelectedSet = new Set(crossSelectedGuids)
 
   const rowVirtualizer = useVirtualizer({
     count: entries.length,
@@ -221,28 +224,31 @@ export function BmpOnlyList({
     overscan: 8
   })
 
+  const clearSelection = () => {
+    setSelectedBmpGuids([])
+    lastSelectedIndexRef.current = null
+  }
+
   const handleRowClick = (entry: BmpOnlyEntry, index: number, e: React.MouseEvent) => {
     if (e.shiftKey) {
       e.preventDefault()
-      if (lastSelectedIndex === null) {
-        setSelectedGuids([entry.guid])
-        setLastSelectedIndex(index)
+      if (lastSelectedIndexRef.current === null) {
+        setSelectedBmpGuids([entry.guid])
+        setSelection([])
+        lastSelectedIndexRef.current = index
       } else {
-        const start = Math.min(lastSelectedIndex, index)
-        const end = Math.max(lastSelectedIndex, index)
-        setSelectedGuids(entries.slice(start, end + 1).map((en) => en.guid))
-        // Anchor stays fixed; do not update lastSelectedIndex
+        const start = Math.min(lastSelectedIndexRef.current, index)
+        const end = Math.max(lastSelectedIndexRef.current, index)
+        const rangeGuids = entries.slice(start, end + 1).map((en) => en.guid)
+        setSelectedBmpGuids(rangeGuids)
+        setSelection([])
+        // Anchor stays fixed; do not update lastSelectedIndexRef
       }
     } else {
-      onCrossSelect?.({ list: 'bmp', guid: entry.guid })
-      setSelectedGuids([])
-      setLastSelectedIndex(index)
+      setSelectedBmpGuids([entry.guid])
+      setSelection([])
+      lastSelectedIndexRef.current = index
     }
-  }
-
-  const clearSelection = () => {
-    setSelectedGuids([])
-    setLastSelectedIndex(null)
   }
 
   return (
@@ -258,7 +264,7 @@ export function BmpOnlyList({
         </Text>
         <div className={styles.headerSpacer} />
 
-        {selectedGuids.length > 0 && (
+        {selectedBmpGuids.length > 0 && (
           <Popover
             positioning="below-end"
             withArrow
@@ -277,12 +283,12 @@ export function BmpOnlyList({
                   setMultiPopoverOpen(true)
                 }}
               >
-                {t('bmpAssign.resolveN', { count: selectedGuids.length })}
+                {t('bmpAssign.resolveN', { count: selectedBmpGuids.length })}
               </Button>
             </PopoverTrigger>
             <PopoverSurface className={styles.popoverSurface}>
               <BmpAssignPopover
-                selectedGuids={selectedGuids}
+                selectedGuids={selectedBmpGuids}
                 onDismiss={() => {
                   setMultiPopoverOpen(false)
                   clearSelection()
@@ -308,8 +314,8 @@ export function BmpOnlyList({
                   const entry = entries[item.index]
                   const action = bmpAssignments.get(entry.guid)
                   const isAddressed = action !== undefined
-                  const isCrossSelected = entry.guid === crossSelectedGuid
                   const isMultiSelected = selectedSet.has(entry.guid)
+                  const isCrossSelected = crossSelectedSet.has(entry.guid) && !isMultiSelected
 
                   const { r, g, b } = unpackColor(entry.color)
 
@@ -320,7 +326,7 @@ export function BmpOnlyList({
                       className={mergeClasses(
                         styles.row,
                         isAddressed && styles.rowAddressed,
-                        isCrossSelected && !isMultiSelected && styles.rowCrossSelected,
+                        isCrossSelected && styles.rowCrossSelected,
                         isMultiSelected && styles.rowMultiSelected
                       )}
                       style={{ top: item.start + 2, height: ROW_H - 4 }}

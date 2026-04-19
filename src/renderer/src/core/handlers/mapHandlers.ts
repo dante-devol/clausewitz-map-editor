@@ -51,18 +51,6 @@ export function handleMapCommand(state: CoreState, command: CoreCommand): CoreSt
       return { ...state, map: { ...state.map, overlays } }
     }
 
-    case 'map/setSelection':
-      return { ...state, map: { ...state.map, selectedProvinceIds: command.provinceIds } }
-
-    case 'map/toggleProvinceSelection': {
-      const ids = state.map.selectedProvinceIds
-      const existing = ids.indexOf(command.provinceId)
-      const selectedProvinceIds = existing === -1
-        ? [...ids, command.provinceId]
-        : ids.filter((id) => id !== command.provinceId)
-      return { ...state, map: { ...state.map, selectedProvinceIds } }
-    }
-
     default:
       return null
   }

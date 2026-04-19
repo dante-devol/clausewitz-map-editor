@@ -4,8 +4,7 @@ import type {
   FieldEdit,
   BmpReplacement,
   NewProvince,
-  PendingChange,
-  SelectionOrigin
+  PendingChange
 } from '../../../../shared/provinceEditing'
 
 export function selectPendingChanges(
@@ -57,49 +56,4 @@ export function selectPendingChanges(
   }
 
   return changes
-}
-
-export function resolveSelection(
-  origin: SelectionOrigin,
-  changes: PendingChange[]
-): { canonicalId?: number; bmpGuid?: string; changeId?: string } {
-  if (origin.list === 'canonical') {
-    const replacement = changes.find(
-      (c): c is BmpReplacement => c.kind === 'bmp-replacement' && c.provinceId === origin.provinceId
-    )
-    const edit = changes.find(
-      (c): c is FieldEdit => c.kind === 'field-edit' && c.provinceId === origin.provinceId
-    )
-    return {
-      canonicalId: origin.provinceId,
-      bmpGuid: replacement?.bmpGuid,
-      changeId: replacement?.changeId ?? edit?.changeId
-    }
-  }
-
-  if (origin.list === 'bmp') {
-    const replacement = changes.find(
-      (c): c is BmpReplacement => c.kind === 'bmp-replacement' && c.bmpGuid === origin.guid
-    )
-    const newProv = changes.find(
-      (c): c is NewProvince => c.kind === 'new-province' && c.bmpGuid === origin.guid
-    )
-    return {
-      bmpGuid: origin.guid,
-      canonicalId: replacement?.provinceId,
-      changeId: replacement?.changeId ?? newProv?.changeId
-    }
-  }
-
-  // list === 'changes'
-  const change = changes.find((c) => c.changeId === origin.changeId)
-  if (!change) return { changeId: origin.changeId }
-  if (change.kind === 'field-edit') {
-    return { canonicalId: change.provinceId, changeId: change.changeId }
-  }
-  if (change.kind === 'bmp-replacement') {
-    return { canonicalId: change.provinceId, bmpGuid: change.bmpGuid, changeId: change.changeId }
-  }
-  // new-province
-  return { bmpGuid: change.bmpGuid, changeId: change.changeId }
 }

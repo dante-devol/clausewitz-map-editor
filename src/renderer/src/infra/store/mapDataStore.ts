@@ -9,8 +9,7 @@ import type {
 import type { ProvinceCatalogEntry } from '../../../../shared/provinceCatalog'
 import type {
   BmpOnlyEntry,
-  BmpAssignmentAction,
-  SelectionOrigin
+  BmpAssignmentAction
 } from '../../../../shared/provinceEditing'
 
 interface MapDataState {
@@ -41,7 +40,10 @@ interface MapDataState {
   pendingEdits: Map<number, Partial<Province>>  // province id → field patch
   bmpReplacements: Map<number, string>          // canonical province id → bmp guid
   pendingNewProvinces: Map<string, number>      // bmp guid → assigned province id
-  provinceSelection: SelectionOrigin | null
+
+  // Unified selection state
+  selectedProvinceIds: number[]
+  selectedBmpGuids: string[]
 
   // Bulk loaders — replace the entire table at once
   loadProvinces: (provinces: Province[]) => void
@@ -65,7 +67,13 @@ interface MapDataState {
   assignBmpProvince: (guid: string, action: BmpAssignmentAction) => void
   revertBmpReplacement: (provinceId: number) => void
   revertNewProvince: (guid: string) => void
-  setProvinceSelection: (origin: SelectionOrigin | null) => void
+  // Selection actions
+  setSelection: (ids: number[]) => void
+  extendSelection: (ids: number[]) => void
+  toggleProvinceId: (id: number) => void
+  setSelectedBmpGuids: (guids: string[]) => void
+  toggleBmpGuid: (guid: string) => void
+  clearAllSelection: () => void
   clear: () => void
 }
 
@@ -96,7 +104,8 @@ const EMPTY_STATE = {
   pendingEdits: new Map<number, Partial<Province>>(),
   bmpReplacements: new Map<number, string>(),
   pendingNewProvinces: new Map<string, number>(),
-  provinceSelection: null as SelectionOrigin | null
+  selectedProvinceIds: [] as number[],
+  selectedBmpGuids: [] as string[]
 }
 
 export const useMapDataStore = create<MapDataState>((set) => ({
@@ -210,7 +219,35 @@ export const useMapDataStore = create<MapDataState>((set) => ({
     return { pendingNewProvinces }
   }),
 
-  setProvinceSelection: (provinceSelection) => set({ provinceSelection }),
+  setSelection: (ids) => set({ selectedProvinceIds: ids, selectedBmpGuids: [] }),
+
+  extendSelection: (ids) => set((state) => {
+    const existing = new Set(state.selectedProvinceIds)
+    for (const id of ids) existing.add(id)
+    return { selectedProvinceIds: [...existing] }
+  }),
+
+  toggleProvinceId: (id) => set((state) => {
+    const exists = state.selectedProvinceIds.includes(id)
+    return {
+      selectedProvinceIds: exists
+        ? state.selectedProvinceIds.filter((x) => x !== id)
+        : [...state.selectedProvinceIds, id]
+    }
+  }),
+
+  setSelectedBmpGuids: (guids) => set({ selectedBmpGuids: guids, selectedProvinceIds: [] }),
+
+  toggleBmpGuid: (guid) => set((state) => {
+    const exists = state.selectedBmpGuids.includes(guid)
+    return {
+      selectedBmpGuids: exists
+        ? state.selectedBmpGuids.filter((g) => g !== guid)
+        : [...state.selectedBmpGuids, guid]
+    }
+  }),
+
+  clearAllSelection: () => set({ selectedProvinceIds: [], selectedBmpGuids: [] }),
 
   clear: () => set({ ...EMPTY_STATE })
 }))
