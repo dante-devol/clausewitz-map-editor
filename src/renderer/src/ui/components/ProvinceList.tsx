@@ -9,7 +9,8 @@ import {
   makeStyles,
   mergeClasses,
   tokens,
-  Text
+  Text,
+  shorthands
 } from '@fluentui/react-components'
 import { ErrorCircleRegular, InfoRegular, WarningRegular } from '@fluentui/react-icons'
 import { unpackColor } from '../../../../shared/mapDataTypes'
@@ -131,17 +132,17 @@ const useStyles = makeStyles({
     cursor: 'pointer'
   },
   issueChipError: {
-    border: `1px solid rgba(210, 78, 78, 0.32)`,
+    ...shorthands.borderColor('rgba(210, 78, 78, 0.32)'),
     backgroundColor: 'rgba(210, 78, 78, 0.12)',
     color: tokens.colorPaletteRedForeground1
   },
   issueChipWarning: {
-    border: `1px solid rgba(181, 117, 0, 0.32)`,
+    ...shorthands.borderColor('rgba(181, 117, 0, 0.32)'),
     backgroundColor: 'rgba(181, 117, 0, 0.12)',
     color: tokens.colorPaletteDarkOrangeForeground1
   },
   issueChipInfo: {
-    border: `1px solid rgba(0, 120, 212, 0.28)`,
+    ...shorthands.borderColor('rgba(0, 120, 212, 0.28)'),
     backgroundColor: 'rgba(0, 120, 212, 0.10)',
     color: tokens.colorBrandForeground1
   },
@@ -176,17 +177,17 @@ const useStyles = makeStyles({
     border: '1px solid transparent'
   },
   issueEntryError: {
-    borderColor: 'rgba(210, 78, 78, 0.32)',
+    ...shorthands.borderColor('rgba(210, 78, 78, 0.32)'),
     backgroundColor: 'rgba(210, 78, 78, 0.08)',
     color: tokens.colorPaletteRedForeground1
   },
   issueEntryWarning: {
-    borderColor: 'rgba(181, 117, 0, 0.32)',
+    ...shorthands.borderColor('rgba(181, 117, 0, 0.32)'),
     backgroundColor: 'rgba(181, 117, 0, 0.08)',
     color: tokens.colorPaletteDarkOrangeForeground1
   },
   issueEntryInfo: {
-    borderColor: 'rgba(0, 120, 212, 0.28)',
+    ...shorthands.borderColor('rgba(0, 120, 212, 0.28)'),
     backgroundColor: 'rgba(0, 120, 212, 0.08)',
     color: tokens.colorBrandForeground1
   },
@@ -206,7 +207,7 @@ const useStyles = makeStyles({
     width: '12px',
     height: '12px',
     borderRadius: tokens.borderRadiusCircular,
-    border: `1px solid rgba(255,255,255,0.35)`,
+    ...shorthands.borderColor('rgba(255,255,255,0.35)'),
     flexShrink: 0,
     marginRight: tokens.spacingHorizontalXS,
     boxShadow: `0 0 0 1px ${tokens.colorNeutralBackground4}`

@@ -35,6 +35,15 @@ interface ProvinceBboxGroup {
   maxY: number
 }
 
+interface ScreenRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+const BBOX_MERGE_PADDING_PX = 1
+
 function toHex(n: number) { return n.toString(16).padStart(2, '0').toUpperCase() }
 function colorToHex({ r, g, b }: SampledColor) { return `#${toHex(r)}${toHex(g)}${toHex(b)}` }
 
@@ -210,6 +219,14 @@ export function MapCanvas({
     if (!renderer || !canvas || renderer.imageSize.width === 0) return
     const { width: iw, height: ih } = renderer.imageSize
     const scale = Math.min(canvas.width / iw, canvas.height / ih)
+    syncSelectionStructure(renderer, provinceIndexRef.current, highlightColorsRef.current, scale)
+    syncValidationStructure(
+      renderer,
+      provinceIndexRef.current,
+      validationWarningColorsRef.current,
+      validationErrorColorsRef.current,
+      scale
+    )
     applyTransform({
       scale,
       x: (canvas.width - iw * scale) / 2,
@@ -251,12 +268,18 @@ export function MapCanvas({
       if (cancelled) return
       const cm = colorMapRef.current
       if (cm && cm.size > 0) rendererRef.current?.recolorTexture(cm)
-      syncSelectionStructure(rendererRef.current, provinceIndexRef.current, highlightColorsRef.current)
+      syncSelectionStructure(
+        rendererRef.current,
+        provinceIndexRef.current,
+        highlightColorsRef.current,
+        transformRef.current.scale
+      )
       syncValidationStructure(
         rendererRef.current,
         provinceIndexRef.current,
         validationWarningColorsRef.current,
-        validationErrorColorsRef.current
+        validationErrorColorsRef.current,
+        transformRef.current.scale
       )
       fit()
       setImageLoaded(true)
@@ -367,7 +390,7 @@ export function MapCanvas({
     highlightColorsRef.current = highlightColors
     const renderer = rendererRef.current
     renderer?.setHighlightColors(highlightColors)
-    syncSelectionStructure(renderer, provinceIndexRef.current, highlightColors)
+    syncSelectionStructure(renderer, provinceIndexRef.current, highlightColors, transformRef.current.scale)
     const { x: tx, y: ty, scale } = transformRef.current
     renderer?.render(tx, ty, scale)
   }, [highlightColors])
@@ -380,7 +403,13 @@ export function MapCanvas({
       warningColors: validationWarningColors,
       errorColors: validationErrorColors
     })
-    syncValidationStructure(renderer, provinceIndexRef.current, validationWarningColors, validationErrorColors)
+    syncValidationStructure(
+      renderer,
+      provinceIndexRef.current,
+      validationWarningColors,
+      validationErrorColors,
+      transformRef.current.scale
+    )
     const { x: tx, y: ty, scale } = transformRef.current
     renderer?.render(tx, ty, scale)
   }, [validationErrorColors, validationWarningColors])
@@ -393,6 +422,14 @@ export function MapCanvas({
       canvas.width = container.clientWidth
       canvas.height = container.clientHeight
       const t = transformRef.current
+      syncSelectionStructure(rendererRef.current, provinceIndexRef.current, highlightColorsRef.current, t.scale)
+      syncValidationStructure(
+        rendererRef.current,
+        provinceIndexRef.current,
+        validationWarningColorsRef.current,
+        validationErrorColorsRef.current,
+        t.scale
+      )
       rendererRef.current?.render(t.x, t.y, t.scale)
     })
     observer.observe(container)
@@ -415,6 +452,14 @@ export function MapCanvas({
       const prev  = transformRef.current
       const newScale = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, prev.scale * factor))
       const ratio = newScale / prev.scale
+      syncSelectionStructure(rendererRef.current, provinceIndexRef.current, highlightColorsRef.current, newScale)
+      syncValidationStructure(
+        rendererRef.current,
+        provinceIndexRef.current,
+        validationWarningColorsRef.current,
+        validationErrorColorsRef.current,
+        newScale
+      )
       applyTransform({ scale: newScale, x: mx - (mx - prev.x) * ratio, y: my - (my - prev.y) * ratio })
     }
     el.addEventListener('wheel', handler, { passive: false })
@@ -508,6 +553,14 @@ export function MapCanvas({
     const cy = canvas ? canvas.height / 2 : 0
     const newScale = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, prev.scale * factor))
     const ratio = newScale / prev.scale
+    syncSelectionStructure(rendererRef.current, provinceIndexRef.current, highlightColorsRef.current, newScale)
+    syncValidationStructure(
+      rendererRef.current,
+      provinceIndexRef.current,
+      validationWarningColorsRef.current,
+      validationErrorColorsRef.current,
+      newScale
+    )
     applyTransform({ scale: newScale, x: cx - (cx - prev.x) * ratio, y: cy - (cy - prev.y) * ratio })
   }, [applyTransform])
 
@@ -703,11 +756,12 @@ function hexToPackedColor(hex: string): number {
 function syncSelectionStructure(
   renderer: MapRenderer | null,
   provinceIndex: ProvinceIndex | null,
-  highlightColors: number[]
+  highlightColors: number[],
+  scale: number
 ): void {
   if (!renderer || !provinceIndex) return
 
-  const groups = buildHighlightGroups(highlightColors, provinceIndex)
+  const groups = mergeCollidingBboxGroups(buildHighlightGroups(highlightColors, provinceIndex), scale)
   renderer.setSelectionStructure({
     bboxGroups: groups,
     centroid: computeGroupsCentroid(groups)
@@ -718,13 +772,14 @@ function syncValidationStructure(
   renderer: MapRenderer | null,
   provinceIndex: ProvinceIndex | null,
   warningColors: number[],
-  errorColors: number[]
+  errorColors: number[],
+  scale: number
 ): void {
   if (!renderer || !provinceIndex) return
 
   renderer.setValidationStructure({
-    warningBboxGroups: buildHighlightGroups(warningColors, provinceIndex),
-    errorBboxGroups: buildHighlightGroups(errorColors, provinceIndex)
+    warningBboxGroups: mergeCollidingBboxGroups(buildHighlightGroups(warningColors, provinceIndex), scale),
+    errorBboxGroups: mergeCollidingBboxGroups(buildHighlightGroups(errorColors, provinceIndex), scale)
   })
 }
 
@@ -792,4 +847,60 @@ function computeGroupsCentroid(
 
   if (minX === Infinity) return null
   return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
+}
+
+function mergeCollidingBboxGroups(
+  groups: readonly ProvinceBboxGroup[],
+  scale: number
+): ProvinceBboxGroup[] {
+  const merged = [...groups]
+  let changed = true
+
+  while (changed) {
+    changed = false
+
+    for (let i = 0; i < merged.length; i++) {
+      for (let j = i + 1; j < merged.length; j++) {
+        const left = expandedScreenRectForGroup(merged[i], scale, BBOX_MERGE_PADDING_PX)
+        const right = expandedScreenRectForGroup(merged[j], scale, BBOX_MERGE_PADDING_PX)
+        if (!screenRectsOverlap(left, right)) continue
+
+        merged[i] = unionGroups(merged[i], merged[j])
+        merged.splice(j, 1)
+        changed = true
+        break
+      }
+      if (changed) break
+    }
+  }
+
+  return merged
+}
+
+function expandedScreenRectForGroup(
+  group: ProvinceBboxGroup,
+  scale: number,
+  paddingPx: number
+): ScreenRect {
+  const left = group.minX * scale - 1 - paddingPx
+  const top = group.minY * scale - 1 - paddingPx
+  const right = (group.maxX + 1) * scale + 1 + paddingPx
+  const bottom = (group.maxY + 1) * scale + 1 + paddingPx
+  return { left, top, right, bottom }
+}
+
+function screenRectsOverlap(a: ScreenRect, b: ScreenRect): boolean {
+  return a.left <= b.right
+    && a.right >= b.left
+    && a.top <= b.bottom
+    && a.bottom >= b.top
+}
+
+function unionGroups(a: ProvinceBboxGroup, b: ProvinceBboxGroup): ProvinceBboxGroup {
+  return {
+    minX: Math.min(a.minX, b.minX),
+    minY: Math.min(a.minY, b.minY),
+    maxX: Math.max(a.maxX, b.maxX),
+    maxY: Math.max(a.maxY, b.maxY)
+  }
 }
