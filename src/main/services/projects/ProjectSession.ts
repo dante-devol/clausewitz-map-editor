@@ -38,6 +38,11 @@ export class ProjectSession {
     return this.project?.projectId ?? null
   }
 
+  requireProject(): LoadedProject {
+    if (!this.project) throw new Error('Project not open')
+    return this.project
+  }
+
   loadSnapshot() {
     if (!this.project) throw new Error('Project not open')
 

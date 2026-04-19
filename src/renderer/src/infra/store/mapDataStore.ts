@@ -67,6 +67,7 @@ interface MapDataState {
   assignBmpProvince: (guid: string, action: BmpAssignmentAction) => void
   revertBmpReplacement: (provinceId: number) => void
   revertNewProvince: (guid: string) => void
+  clearPendingChanges: () => void
   // Selection actions
   setSelection: (ids: number[]) => void
   extendSelection: (ids: number[]) => void
@@ -217,6 +218,12 @@ export const useMapDataStore = create<MapDataState>((set) => ({
     const pendingNewProvinces = new Map(state.pendingNewProvinces)
     pendingNewProvinces.delete(guid)
     return { pendingNewProvinces }
+  }),
+
+  clearPendingChanges: () => set({
+    pendingEdits: new Map<number, Partial<Province>>(),
+    bmpReplacements: new Map<number, string>(),
+    pendingNewProvinces: new Map<string, number>()
   }),
 
   setSelection: (ids) => set({ selectedProvinceIds: ids, selectedBmpGuids: [] }),

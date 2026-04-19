@@ -1,13 +1,37 @@
 import { useMemo, useState } from 'react'
-import { makeStyles } from '@fluentui/react-components'
+import { Button, makeStyles, tokens, Text } from '@fluentui/react-components'
+import { SaveRegular } from '@fluentui/react-icons'
+import { useCoreSelector } from '../../../bridge/useCoreSelector'
+import { selectCurrentProjectId } from '../../../core/selectors/sessionSelectors'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
+import { selectEffectiveProvinces } from '../../../infra/store/provinceEditSelectors'
 import { CanonicalProvinceList } from './CanonicalProvinceList'
 import { BmpOnlyList } from './BmpOnlyList'
 import { ChangesList } from './ChangesList'
 import { useCrossSelection } from './useCrossSelection'
 import type { BmpAssignment } from '../../../../../shared/provinceEditing'
+import { useI18n } from '../../i18n/I18nProvider'
 
 const useStyles = makeStyles({
+  header: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: tokens.spacingHorizontalS,
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalS}`,
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`
+  },
+  headerText: {
+    color: tokens.colorNeutralForeground3
+  },
+  headerActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS
+  },
+  errorText: {
+    color: tokens.colorPaletteRedForeground1
+  },
   panel: {
     display: 'flex',
     flexDirection: 'column',
@@ -19,11 +43,18 @@ const useStyles = makeStyles({
 
 export function ProvincePanel(): JSX.Element {
   const styles = useStyles()
+  const { t } = useI18n()
+  const projectId = useCoreSelector(selectCurrentProjectId)
 
   const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
+  const continents = useMapDataStore((s) => s.continents)
+  const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
   const bmpOnlyEntries = useMapDataStore((s) => s.bmpOnlyEntries)
+  const pendingEdits = useMapDataStore((s) => s.pendingEdits)
   const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
   const pendingNewProvinces = useMapDataStore((s) => s.pendingNewProvinces)
+  const loadOriginalDefinitions = useMapDataStore((s) => s.loadOriginalDefinitions)
+  const clearPendingChanges = useMapDataStore((s) => s.clearPendingChanges)
   const revertEdit = useMapDataStore((s) => s.revertEdit)
   const revertBmpReplacement = useMapDataStore((s) => s.revertBmpReplacement)
   const revertNewProvince = useMapDataStore((s) => s.revertNewProvince)
@@ -34,6 +65,8 @@ export function ProvincePanel(): JSX.Element {
   const [canonicalCollapsed, setCanonicalCollapsed] = useState(false)
   const [bmpCollapsed, setBmpCollapsed] = useState(false)
   const [changesCollapsed, setChangesCollapsed] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   // Derive a guid-keyed assignment map for BmpOnlyList display
   const bmpAssignments = useMemo(() => {
@@ -46,6 +79,36 @@ export function ProvincePanel(): JSX.Element {
     }
     return map
   }, [bmpReplacements, pendingNewProvinces])
+
+  const effectiveProvinces = useMemo(
+    () => selectEffectiveProvinces(
+      originalDefinitions,
+      pendingEdits,
+      bmpReplacements,
+      pendingNewProvinces,
+      bmpOnlyEntries
+    ),
+    [originalDefinitions, pendingEdits, bmpReplacements, pendingNewProvinces, bmpOnlyEntries]
+  )
+
+  const continentList = useMemo(() => [...continents.values()], [continents])
+  const hasPendingChanges = changes.length > 0
+
+  const handleSave = async () => {
+    if (!projectId || !hasPendingChanges || isSaving) return
+
+    setIsSaving(true)
+    setSaveError(null)
+    try {
+      await window.api.map.save(projectId, effectiveProvinces, continentList)
+      loadOriginalDefinitions(effectiveProvinces)
+      clearPendingChanges()
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : t('provincePanel.save.error'))
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   const handleRevert = (id: string) => {
     if (id.startsWith('field-edit:')) {
@@ -60,6 +123,27 @@ export function ProvincePanel(): JSX.Element {
 
   return (
     <div className={styles.panel}>
+      <div className={styles.header}>
+        <Text size={100} className={styles.headerText}>
+          {t('provincePanel.save.summary', { count: changes.length })}
+        </Text>
+        <div className={styles.headerActions}>
+          {saveError && (
+            <Text size={100} className={styles.errorText}>
+              {saveError}
+            </Text>
+          )}
+          <Button
+            size="small"
+            appearance="primary"
+            icon={<SaveRegular />}
+            disabled={!projectId || !hasPendingChanges || isSaving}
+            onClick={handleSave}
+          >
+            {isSaving ? t('provincePanel.save.saving') : t('provincePanel.save.action')}
+          </Button>
+        </div>
+      </div>
       <CanonicalProvinceList
         collapsed={canonicalCollapsed}
         onToggleCollapse={() => setCanonicalCollapsed((c) => !c)}

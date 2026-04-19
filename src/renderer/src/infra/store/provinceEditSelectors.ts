@@ -1,4 +1,5 @@
 import type { Province } from '../../../../shared/mapDataTypes'
+import type { Continent } from '../../../../shared/mapDataTypes'
 import type {
   BmpOnlyEntry,
   FieldEdit,
@@ -56,4 +57,42 @@ export function selectPendingChanges(
   }
 
   return changes
+}
+
+export function selectEffectiveProvinces(
+  originalDefinitions: Map<number, Province>,
+  pendingEdits: Map<number, Partial<Province>>,
+  bmpReplacements: Map<number, string>,
+  pendingNewProvinces: Map<string, number>,
+  bmpOnlyEntries: BmpOnlyEntry[]
+): Province[] {
+  const provinces: Province[] = []
+  const bmpOnlyByGuid = new Map(bmpOnlyEntries.map((entry) => [entry.guid, entry]))
+
+  for (const [id, original] of originalDefinitions) {
+    const patch = pendingEdits.get(id) ?? {}
+    const replacingGuid = bmpReplacements.get(id)
+    const bmpColor = replacingGuid ? bmpOnlyByGuid.get(replacingGuid)?.color : undefined
+    provinces.push({
+      ...original,
+      ...patch,
+      ...(bmpColor !== undefined ? { color: bmpColor } : {})
+    })
+  }
+
+  for (const [guid, assignedId] of pendingNewProvinces) {
+    const bmpColor = bmpOnlyByGuid.get(guid)?.color
+    if (bmpColor === undefined) continue
+    provinces.push({
+      id: assignedId,
+      color: bmpColor,
+      type: 'land',
+      isCoastal: false,
+      terrain: '',
+      continent: '',
+      ...(pendingEdits.get(assignedId) ?? {})
+    })
+  }
+
+  return provinces.sort((a, b) => a.id - b.id)
 }

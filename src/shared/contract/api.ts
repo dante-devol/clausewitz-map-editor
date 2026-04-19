@@ -104,6 +104,7 @@ export interface ApiContract {
   }
   map: {
     load: (projectId: string) => Promise<MapDataSnapshot>
+    save: (projectId: string, provinces: Province[], continents: Continent[]) => Promise<void>
     loadStates: (projectId: string) => Promise<void>
     loadStrategicRegions: (projectId: string) => Promise<void>
     onChanged: (callback: (event: MapChangedEvent) => void) => () => void

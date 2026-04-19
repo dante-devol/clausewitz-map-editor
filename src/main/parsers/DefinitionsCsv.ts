@@ -1,5 +1,5 @@
-import { readFileSync } from 'fs'
-import { packColor } from '../../shared/mapDataTypes'
+import { readFileSync, writeFileSync } from 'fs'
+import { packColor, unpackColor } from '../../shared/mapDataTypes'
 import type { Province, ProvinceType, Continent } from '../../shared/mapDataTypes'
 
 const VALID_TYPES = new Set<string>(['land', 'sea', 'lake'])
@@ -14,6 +14,13 @@ export class DefinitionsCsv {
   load(continents: Continent[]): Province[] {
     const content = readFileSync(this.filePath, 'utf-8')
     return DefinitionsCsv.parse(content, continents)
+  }
+
+  save(provinces: Province[], continents: Continent[]): void {
+    const existingContent = readFileSync(this.filePath, 'utf-8')
+    const lineEnding = DefinitionsCsv.detectLineEnding(existingContent)
+    const content = DefinitionsCsv.serialize(provinces, continents, lineEnding)
+    writeFileSync(this.filePath, content, 'utf-8')
   }
 
   static parse(content: string, continents: Continent[]): Province[] {
@@ -52,5 +59,35 @@ export class DefinitionsCsv {
     }
 
     return provinces
+  }
+
+  static serialize(provinces: Province[], continents: Continent[], lineEnding = '\n'): string {
+    const continentPositionByCodeName = new Map(continents.map((c) => [c.codeName, c.position]))
+
+    return [...provinces]
+      .sort((a, b) => a.id - b.id)
+      .map((province) => {
+        const { r, g, b } = unpackColor(province.color)
+        const continentPosition = province.continent
+          ? (continentPositionByCodeName.get(province.continent) ?? 0)
+          : 0
+
+        return [
+          province.id,
+          r,
+          g,
+          b,
+          province.type,
+          province.isCoastal ? 'true' : 'false',
+          province.terrain,
+          continentPosition
+        ].join(';')
+      })
+      .join(lineEnding)
+  }
+
+  static detectLineEnding(content: string): '\r\n' | '\n' {
+    const match = content.match(/\r\n|\n/)
+    return match?.[0] === '\r\n' ? '\r\n' : '\n'
   }
 }
