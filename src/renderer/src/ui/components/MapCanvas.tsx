@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import type { ReactNode } from 'react'
 import { animateValue, easeOutCubic, lerpVec2 } from '../lib/animateValue'
 import { vec2 } from 'gl-matrix'
 import { makeStyles, mergeClasses, tokens, Button, Spinner, Text, Tooltip, Skeleton, SkeletonItem } from '@fluentui/react-components'
@@ -79,6 +80,12 @@ const useStyles = makeStyles({
     alignItems: 'stretch',
     gap: tokens.spacingVerticalXS
   },
+  topRightControls: {
+    position: 'absolute',
+    top: tokens.spacingVerticalM,
+    right: tokens.spacingHorizontalM,
+    zIndex: 3
+  },
   widget: {
     display: 'flex',
     alignItems: 'center',
@@ -136,6 +143,7 @@ interface Props {
   hoverTooltipPosition?: HoverTooltipPosition | null
   hoverTooltip?: { label: string; value: string } | null
   onHoverColorChange?: (color: HoveredColor | null) => void
+  topRightContent?: ReactNode
 }
 
 export function MapCanvas({
@@ -147,6 +155,7 @@ export function MapCanvas({
   hoverTooltipPosition,
   hoverTooltip,
   onHoverColorChange,
+  topRightContent
 }: Props): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
@@ -519,6 +528,11 @@ export function MapCanvas({
           <Text size={200} weight="semibold" className={styles.hoverTooltipValue}>
             {hoverTooltip.value}
           </Text>
+        </div>
+      )}
+      {topRightContent && (
+        <div className={styles.topRightControls} onMouseDown={(e) => e.stopPropagation()}>
+          {topRightContent}
         </div>
       )}
       <div className={styles.controls} onMouseDown={(e) => e.stopPropagation()}>

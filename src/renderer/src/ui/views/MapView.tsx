@@ -3,6 +3,7 @@ import { makeStyles, tokens } from '@fluentui/react-components'
 import { useCoreApi } from '../../bridge/CoreProvider'
 import { useMapQueryApi } from '../../bridge/MapQueryProvider'
 import { useCoreSelector } from '../../bridge/useCoreSelector'
+import { DisplayModeControl } from '../components/DisplayModeControl'
 import { MapModePanel } from '../components/MapModePanel'
 import { MapCanvas } from '../components/MapCanvas'
 import { ProvinceList } from '../components/ProvinceList'
@@ -100,6 +101,10 @@ const MapViewportPane = memo(function MapViewportPane({
 
   const src = provincesImageB64 ? `data:image/bmp;base64,${provincesImageB64}` : null
   const displayModeContext = useMemo(() => ({ terrains, continents }), [terrains, continents])
+  const modeValuesByMode = useMemo(
+    () => selectModeValuesByMode(provinces, displayModeOverrides, displayModeContext),
+    [provinces, displayModeOverrides, displayModeContext]
+  )
 
   const highlightColors = useCoreSelector((state) => selectHighlightColors(state, provinces))
   const colorMap = useCoreSelector((state) => selectColorMap(state, provinces, displayModeOverrides, displayModeContext))
@@ -146,6 +151,13 @@ const MapViewportPane = memo(function MapViewportPane({
         hoverTooltipPosition={hoveredProvince ? { x: hoveredProvince.x, y: hoveredProvince.y } : null}
         hoverTooltip={resolvedHoverTooltip}
         onHoverColorChange={onHoverColorChange}
+        topRightContent={(
+          <DisplayModeControl
+            mode={displayMode}
+            onModeChange={(mode) => api.dispatch(mapCommands.setDisplayMode(mode))}
+            valuesByMode={modeValuesByMode}
+          />
+        )}
       />
     </div>
   )
@@ -159,24 +171,10 @@ const MapSidebarTop = memo(function MapSidebarTop({
   panelOverlays: ReturnType<typeof useOverlayAssets>['panelOverlays']
 }) {
   const api = useCoreApi()
-  const provinces = useMapDataStore((s) => s.provinces)
-  const terrains = useMapDataStore((s) => s.terrains)
-  const continents = useMapDataStore((s) => s.continents)
-  const displayModeOverrides = useDisplayModeConfigStore((s) => s.overrides)
-  const displayMode = useCoreSelector(selectDisplayMode)
-
-  const displayModeContext = useMemo(() => ({ terrains, continents }), [terrains, continents])
-  const modeValuesByMode = useMemo(
-    () => selectModeValuesByMode(provinces, displayModeOverrides, displayModeContext),
-    [provinces, displayModeOverrides, displayModeContext]
-  )
 
   return (
     <div className={className}>
       <MapModePanel
-        mode={displayMode}
-        onModeChange={(mode) => api.dispatch(mapCommands.setDisplayMode(mode))}
-        valuesByMode={modeValuesByMode}
         overlays={panelOverlays}
         onOverlayMove={(overlayId, targetOverlayId) => api.dispatch(mapCommands.moveOverlay(overlayId, targetOverlayId))}
         onOverlayVisibilityChange={(overlayId, visible) => api.dispatch(mapCommands.setOverlayVisibility(overlayId, visible))}
