@@ -16,15 +16,16 @@ interface CrossSelectionResult {
 
 export function useCrossSelection(): CrossSelectionResult {
   const pendingEdits = useMapDataStore((s) => s.pendingEdits)
-  const pendingReassignments = useMapDataStore((s) => s.pendingReassignments)
+  const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
+  const pendingNewProvinces = useMapDataStore((s) => s.pendingNewProvinces)
   const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
   const bmpOnlyEntries = useMapDataStore((s) => s.bmpOnlyEntries)
   const provinceSelection = useMapDataStore((s) => s.provinceSelection)
   const setSelection = useMapDataStore((s) => s.setProvinceSelection)
 
   const changes = useMemo(
-    () => selectPendingChanges(pendingEdits, pendingReassignments, originalDefinitions, bmpOnlyEntries),
-    [pendingEdits, pendingReassignments, originalDefinitions, bmpOnlyEntries]
+    () => selectPendingChanges(pendingEdits, bmpReplacements, pendingNewProvinces, originalDefinitions, bmpOnlyEntries),
+    [pendingEdits, bmpReplacements, pendingNewProvinces, originalDefinitions, bmpOnlyEntries]
   )
 
   const resolved = useMemo(

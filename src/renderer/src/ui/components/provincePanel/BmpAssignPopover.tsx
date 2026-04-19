@@ -213,30 +213,26 @@ export function BmpAssignPopover({ guid, selectedGuids, onDismiss }: Props): JSX
 
   const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
   const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
-  const pendingReassignments = useMapDataStore((s) => s.pendingReassignments)
+  const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
+  const pendingNewProvinces = useMapDataStore((s) => s.pendingNewProvinces)
   const terrains = useMapDataStore((s) => s.terrains)
   const continents = useMapDataStore((s) => s.continents)
   const assignBmpProvince = useMapDataStore((s) => s.assignBmpProvince)
 
   const claimedByOthers = useMemo(() => {
-    const claimed = new Set<number>()
     const selfGuids = new Set(isMulti ? selectedGuids : [guid!])
-    for (const [otherGuid, action] of pendingReassignments) {
-      if (!selfGuids.has(otherGuid) && action.type === 'replace') claimed.add(action.targetId)
+    const claimed = new Set<number>()
+    for (const [provinceId, claimingGuid] of bmpReplacements) {
+      if (!selfGuids.has(claimingGuid)) claimed.add(provinceId)
     }
     return claimed
-  }, [pendingReassignments, guid, selectedGuids, isMulti])
+  }, [bmpReplacements, guid, selectedGuids, isMulti])
 
   const nextAvailableId = useMemo(() => {
     if (originalDefinitions.size === 0) return 1
     const maxExisting = Math.max(...originalDefinitions.keys())
-    // Account for pending register assignments to avoid collisions
-    let pending = 0
-    for (const action of pendingReassignments.values()) {
-      if (action.type === 'register') pending++
-    }
-    return maxExisting + pending + 1
-  }, [originalDefinitions, pendingReassignments])
+    return maxExisting + pendingNewProvinces.size + 1
+  }, [originalDefinitions, pendingNewProvinces])
 
   const sortedCanonical = useMemo(() => {
     const canonical = provinceCatalog.filter((e) => e.canonical && e.id !== null && e.id !== 0)

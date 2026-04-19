@@ -420,6 +420,7 @@ export function CanonicalProvinceList({
   const continents = useMapDataStore((s) => s.continents)
   const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
   const pendingEdits = useMapDataStore((s) => s.pendingEdits)
+  const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
   const issuesByProvinceKey = useProvinceValidationStore((s) => s.issuesByProvinceKey)
   const [filters, setFilters] = useState<ProvinceListFilters>(EMPTY_FILTERS)
   const [filterQuery, setFilterQuery] = useState('')
@@ -613,7 +614,7 @@ export function CanonicalProvinceList({
                   const p = filteredProvinces[item.index]
                   const isSelected = p.id !== null && selectedIdSet.has(p.id)
                   const isCrossSelected = p.id !== null && p.id === crossSelectedId && !isSelected
-                  const isEdited = p.id !== null && pendingEdits.has(p.id)
+                  const isEdited = p.id !== null && (pendingEdits.has(p.id) || bmpReplacements.has(p.id))
 
                   // Display values always come from the original frozen definitions
                   const display = p.id !== null ? (originalDefinitions.get(p.id) ?? p) : p

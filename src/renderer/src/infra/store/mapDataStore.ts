@@ -9,7 +9,7 @@ import type {
 import type { ProvinceCatalogEntry } from '../../../../shared/provinceCatalog'
 import type {
   BmpOnlyEntry,
-  ReassignmentAction,
+  BmpAssignmentAction,
   SelectionOrigin
 } from '../../../../shared/provinceEditing'
 
@@ -37,9 +37,10 @@ interface MapDataState {
   // Province editing state — stable for the session, not reset on file-watch reloads
   originalDefinitions: Map<number, Province>
   bmpOnlyEntries: BmpOnlyEntry[]
-  bmpOnlyByColor: Map<number, string>          // color → guid
-  pendingEdits: Map<number, Partial<Province>> // province id → field patch
-  pendingReassignments: Map<string, ReassignmentAction> // guid → action
+  bmpOnlyByColor: Map<number, string>           // color → guid
+  pendingEdits: Map<number, Partial<Province>>  // province id → field patch
+  bmpReplacements: Map<number, string>          // canonical province id → bmp guid
+  pendingNewProvinces: Map<string, number>      // bmp guid → assigned province id
   provinceSelection: SelectionOrigin | null
 
   // Bulk loaders — replace the entire table at once
@@ -61,8 +62,9 @@ interface MapDataState {
   syncBmpOnlyEntries: (colors: number[]) => void
   editProvince: (id: number, patch: Partial<Province>) => void
   revertEdit: (id: number) => void
-  assignBmpProvince: (guid: string, action: ReassignmentAction) => void
-  revertReassignment: (guid: string) => void
+  assignBmpProvince: (guid: string, action: BmpAssignmentAction) => void
+  revertBmpReplacement: (provinceId: number) => void
+  revertNewProvince: (guid: string) => void
   setProvinceSelection: (origin: SelectionOrigin | null) => void
   clear: () => void
 }
@@ -92,7 +94,8 @@ const EMPTY_STATE = {
   bmpOnlyEntries: [] as BmpOnlyEntry[],
   bmpOnlyByColor: new Map<number, string>(),
   pendingEdits: new Map<number, Partial<Province>>(),
-  pendingReassignments: new Map<string, ReassignmentAction>(),
+  bmpReplacements: new Map<number, string>(),
+  pendingNewProvinces: new Map<string, number>(),
   provinceSelection: null as SelectionOrigin | null
 }
 
@@ -177,15 +180,34 @@ export const useMapDataStore = create<MapDataState>((set) => ({
   }),
 
   assignBmpProvince: (guid, action) => set((state) => {
-    const pendingReassignments = new Map(state.pendingReassignments)
-    pendingReassignments.set(guid, action)
-    return { pendingReassignments }
+    const bmpReplacements = new Map(state.bmpReplacements)
+    const pendingNewProvinces = new Map(state.pendingNewProvinces)
+
+    // Remove any prior assignment for this guid
+    for (const [id, g] of bmpReplacements) {
+      if (g === guid) { bmpReplacements.delete(id); break }
+    }
+    pendingNewProvinces.delete(guid)
+
+    if (action.type === 'replace') {
+      bmpReplacements.set(action.targetId, guid)
+    } else {
+      pendingNewProvinces.set(guid, action.assignedId)
+    }
+
+    return { bmpReplacements, pendingNewProvinces }
   }),
 
-  revertReassignment: (guid) => set((state) => {
-    const pendingReassignments = new Map(state.pendingReassignments)
-    pendingReassignments.delete(guid)
-    return { pendingReassignments }
+  revertBmpReplacement: (provinceId) => set((state) => {
+    const bmpReplacements = new Map(state.bmpReplacements)
+    bmpReplacements.delete(provinceId)
+    return { bmpReplacements }
+  }),
+
+  revertNewProvince: (guid) => set((state) => {
+    const pendingNewProvinces = new Map(state.pendingNewProvinces)
+    pendingNewProvinces.delete(guid)
+    return { pendingNewProvinces }
   }),
 
   setProvinceSelection: (provinceSelection) => set({ provinceSelection }),

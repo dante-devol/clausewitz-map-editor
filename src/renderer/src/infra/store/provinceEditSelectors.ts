@@ -2,15 +2,16 @@ import type { Province } from '../../../../shared/mapDataTypes'
 import type {
   BmpOnlyEntry,
   FieldEdit,
-  Reassignment,
+  BmpReplacement,
+  NewProvince,
   PendingChange,
-  ReassignmentAction,
   SelectionOrigin
 } from '../../../../shared/provinceEditing'
 
 export function selectPendingChanges(
   pendingEdits: Map<number, Partial<Province>>,
-  pendingReassignments: Map<string, ReassignmentAction>,
+  bmpReplacements: Map<number, string>,
+  pendingNewProvinces: Map<string, number>,
   originalDefinitions: Map<number, Province>,
   bmpOnlyEntries: BmpOnlyEntry[]
 ): PendingChange[] {
@@ -26,19 +27,33 @@ export function selectPendingChanges(
       provinceId: id,
       patch,
       original
-    })
+    } satisfies FieldEdit)
   }
 
-  for (const [guid, action] of pendingReassignments) {
+  for (const [provinceId, guid] of bmpReplacements) {
+    const original = originalDefinitions.get(provinceId)
+    const entry = bmpOnlyByGuid.get(guid)
+    if (!original || !entry) continue
+    changes.push({
+      kind: 'bmp-replacement',
+      changeId: `bmp-replacement:${provinceId}`,
+      provinceId,
+      bmpGuid: guid,
+      bmpColor: entry.color,
+      original
+    } satisfies BmpReplacement)
+  }
+
+  for (const [guid, assignedId] of pendingNewProvinces) {
     const entry = bmpOnlyByGuid.get(guid)
     if (!entry) continue
     changes.push({
-      kind: 'reassignment',
-      changeId: `reassignment:${guid}`,
-      guid,
+      kind: 'new-province',
+      changeId: `new-province:${guid}`,
+      bmpGuid: guid,
       bmpColor: entry.color,
-      action
-    })
+      assignedId
+    } satisfies NewProvince)
   }
 
   return changes
@@ -49,22 +64,42 @@ export function resolveSelection(
   changes: PendingChange[]
 ): { canonicalId?: number; bmpGuid?: string; changeId?: string } {
   if (origin.list === 'canonical') {
-    const change = changes.find(
+    const replacement = changes.find(
+      (c): c is BmpReplacement => c.kind === 'bmp-replacement' && c.provinceId === origin.provinceId
+    )
+    const edit = changes.find(
       (c): c is FieldEdit => c.kind === 'field-edit' && c.provinceId === origin.provinceId
     )
-    return { canonicalId: origin.provinceId, changeId: change?.changeId }
+    return {
+      canonicalId: origin.provinceId,
+      bmpGuid: replacement?.bmpGuid,
+      changeId: replacement?.changeId ?? edit?.changeId
+    }
   }
 
   if (origin.list === 'bmp') {
-    const change = changes.find(
-      (c): c is Reassignment => c.kind === 'reassignment' && c.guid === origin.guid
+    const replacement = changes.find(
+      (c): c is BmpReplacement => c.kind === 'bmp-replacement' && c.bmpGuid === origin.guid
     )
-    return { bmpGuid: origin.guid, changeId: change?.changeId }
+    const newProv = changes.find(
+      (c): c is NewProvince => c.kind === 'new-province' && c.bmpGuid === origin.guid
+    )
+    return {
+      bmpGuid: origin.guid,
+      canonicalId: replacement?.provinceId,
+      changeId: replacement?.changeId ?? newProv?.changeId
+    }
   }
 
   // list === 'changes'
   const change = changes.find((c) => c.changeId === origin.changeId)
   if (!change) return { changeId: origin.changeId }
-  if (change.kind === 'field-edit') return { canonicalId: change.provinceId, changeId: change.changeId }
-  return { bmpGuid: change.guid, changeId: change.changeId }
+  if (change.kind === 'field-edit') {
+    return { canonicalId: change.provinceId, changeId: change.changeId }
+  }
+  if (change.kind === 'bmp-replacement') {
+    return { canonicalId: change.provinceId, bmpGuid: change.bmpGuid, changeId: change.changeId }
+  }
+  // new-province
+  return { bmpGuid: change.bmpGuid, changeId: change.changeId }
 }

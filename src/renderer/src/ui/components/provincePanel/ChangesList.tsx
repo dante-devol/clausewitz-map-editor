@@ -110,12 +110,12 @@ const useStyles = makeStyles({
     backgroundColor: 'rgba(227, 164, 0, 0.12)',
     color: tokens.colorPaletteGoldForeground2
   },
-  kindReplace: {
+  kindBmp: {
     ...shorthands.borderColor('rgba(0, 120, 212, 0.28)'),
     backgroundColor: 'rgba(0, 120, 212, 0.10)',
     color: tokens.colorBrandForeground1
   },
-  kindRegister: {
+  kindNew: {
     ...shorthands.borderColor('rgba(55, 145, 80, 0.32)'),
     backgroundColor: 'rgba(55, 145, 80, 0.12)',
     color: tokens.colorPaletteGreenForeground1
@@ -128,7 +128,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
     boxShadow: `0 0 0 1px ${tokens.colorNeutralBackground4}`
   },
-  provinceId: {
+  label: {
     fontFamily: 'monospace',
     fontVariantNumeric: 'tabular-nums',
     flexShrink: 0,
@@ -143,7 +143,7 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
     flexShrink: 0
   },
-  targetChip: {
+  chip: {
     padding: `2px ${tokens.spacingHorizontalXS}`,
     borderRadius: tokens.borderRadiusSmall,
     fontSize: tokens.fontSizeBase100,
@@ -151,12 +151,12 @@ const useStyles = makeStyles({
     fontFamily: 'monospace',
     flexShrink: 0
   },
-  targetChipReplace: {
+  chipBmp: {
     ...shorthands.borderColor('rgba(0, 120, 212, 0.28)'),
     backgroundColor: 'rgba(0, 120, 212, 0.10)',
     color: tokens.colorBrandForeground1
   },
-  targetChipRegister: {
+  chipNew: {
     ...shorthands.borderColor('rgba(55, 145, 80, 0.32)'),
     backgroundColor: 'rgba(55, 145, 80, 0.12)',
     color: tokens.colorPaletteGreenForeground1
@@ -212,15 +212,6 @@ export function ChangesList({
               {changes.map((change) => {
                 const isSelected = change.changeId === selectedChangeId
 
-                const color = change.kind === 'field-edit'
-                  ? change.original.color
-                  : change.bmpColor
-                const { r, g, b } = unpackColor(color)
-
-                const idLabel = change.kind === 'field-edit'
-                  ? String(change.provinceId)
-                  : change.guid
-
                 return (
                   <div
                     key={change.changeId}
@@ -237,31 +228,10 @@ export function ChangesList({
                     <Text size={100} className={mergeClasses(styles.kindBadge, kindClass(change, styles))}>
                       {kindLabel(change)}
                     </Text>
-                    <div className={styles.swatch} style={{ backgroundColor: `rgb(${r},${g},${b})` }} />
-                    <Text size={100} className={styles.provinceId}>{idLabel}</Text>
 
-                    {change.kind === 'field-edit' ? (
-                      <>
-                        <div className={styles.rowSpacer} />
-                        <Text size={100} className={styles.fieldCount}>
-                          {t('provincePanel.changes.fieldCount', { count: Object.keys(change.patch).length })}
-                        </Text>
-                      </>
-                    ) : change.action.type === 'replace' ? (
-                      <>
-                        <div className={styles.rowSpacer} />
-                        <Text size={100} className={mergeClasses(styles.targetChip, styles.targetChipReplace)}>
-                          → {change.action.targetId}
-                        </Text>
-                      </>
-                    ) : (
-                      <>
-                        <div className={styles.rowSpacer} />
-                        <Text size={100} className={mergeClasses(styles.targetChip, styles.targetChipRegister)}>
-                          #{change.action.assignedId}
-                        </Text>
-                      </>
-                    )}
+                    {change.kind === 'field-edit' && <FieldEditRow change={change} styles={styles} t={t} />}
+                    {change.kind === 'bmp-replacement' && <BmpReplacementRow change={change} styles={styles} />}
+                    {change.kind === 'new-province' && <NewProvinceRow change={change} styles={styles} />}
 
                     <Button
                       size="small"
@@ -284,14 +254,76 @@ export function ChangesList({
   )
 }
 
+function FieldEditRow({
+  change,
+  styles,
+  t
+}: {
+  change: Extract<PendingChange, { kind: 'field-edit' }>
+  styles: ReturnType<typeof useStyles>
+  t: (key: string, params?: Record<string, string | number>) => string
+}) {
+  const { r, g, b } = unpackColor(change.original.color)
+  return (
+    <>
+      <div className={styles.swatch} style={{ backgroundColor: `rgb(${r},${g},${b})` }} />
+      <Text size={100} className={styles.label}>{change.provinceId}</Text>
+      <div className={styles.rowSpacer} />
+      <Text size={100} className={styles.fieldCount}>
+        {t('provincePanel.changes.fieldCount', { count: Object.keys(change.patch).length })}
+      </Text>
+    </>
+  )
+}
+
+function BmpReplacementRow({
+  change,
+  styles
+}: {
+  change: Extract<PendingChange, { kind: 'bmp-replacement' }>
+  styles: ReturnType<typeof useStyles>
+}) {
+  const { r, g, b } = unpackColor(change.bmpColor)
+  return (
+    <>
+      <div className={styles.swatch} style={{ backgroundColor: `rgb(${r},${g},${b})` }} />
+      <Text size={100} className={styles.label}>{change.provinceId}</Text>
+      <div className={styles.rowSpacer} />
+      <Text size={100} className={mergeClasses(styles.chip, styles.chipBmp)}>
+        {change.bmpGuid}
+      </Text>
+    </>
+  )
+}
+
+function NewProvinceRow({
+  change,
+  styles
+}: {
+  change: Extract<PendingChange, { kind: 'new-province' }>
+  styles: ReturnType<typeof useStyles>
+}) {
+  const { r, g, b } = unpackColor(change.bmpColor)
+  return (
+    <>
+      <div className={styles.swatch} style={{ backgroundColor: `rgb(${r},${g},${b})` }} />
+      <Text size={100} className={styles.label}>{change.bmpGuid}</Text>
+      <div className={styles.rowSpacer} />
+      <Text size={100} className={mergeClasses(styles.chip, styles.chipNew)}>
+        #{change.assignedId}
+      </Text>
+    </>
+  )
+}
+
 function kindClass(change: PendingChange, styles: ReturnType<typeof useStyles>): string {
   if (change.kind === 'field-edit') return styles.kindEdit
-  if (change.action.type === 'replace') return styles.kindReplace
-  return styles.kindRegister
+  if (change.kind === 'bmp-replacement') return styles.kindBmp
+  return styles.kindNew
 }
 
 function kindLabel(change: PendingChange): string {
   if (change.kind === 'field-edit') return 'edit'
-  if (change.action.type === 'replace') return '→'
-  return '+'
+  if (change.kind === 'bmp-replacement') return 'bmp'
+  return 'new'
 }

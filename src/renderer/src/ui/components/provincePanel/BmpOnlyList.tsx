@@ -15,7 +15,7 @@ import {
 } from '@fluentui/react-components'
 import { ChevronDownRegular, ChevronUpRegular } from '@fluentui/react-icons'
 import { unpackColor } from '../../../../../shared/mapDataTypes'
-import type { BmpOnlyEntry, ReassignmentAction, SelectionOrigin } from '../../../../../shared/provinceEditing'
+import type { BmpAssignment, BmpOnlyEntry, SelectionOrigin } from '../../../../../shared/provinceEditing'
 import { useI18n } from '../../i18n/I18nProvider'
 import { BmpAssignPopover } from './BmpAssignPopover'
 
@@ -189,7 +189,7 @@ interface Props {
   collapsed: boolean
   onToggleCollapse: () => void
   entries: BmpOnlyEntry[]
-  pendingReassignments: Map<string, ReassignmentAction>
+  bmpAssignments: Map<string, BmpAssignment>
   crossSelectedGuid: string | undefined
   onCrossSelect?: (origin: SelectionOrigin) => void
 }
@@ -198,7 +198,7 @@ export function BmpOnlyList({
   collapsed,
   onToggleCollapse,
   entries,
-  pendingReassignments,
+  bmpAssignments,
   crossSelectedGuid,
   onCrossSelect
 }: Props): JSX.Element {
@@ -211,7 +211,7 @@ export function BmpOnlyList({
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null)
   const [multiPopoverOpen, setMultiPopoverOpen] = useState(false)
 
-  const unresolvedCount = entries.filter((e) => !pendingReassignments.has(e.guid)).length
+  const unresolvedCount = entries.filter((e) => !bmpAssignments.has(e.guid)).length
   const selectedSet = new Set(selectedGuids)
 
   const rowVirtualizer = useVirtualizer({
@@ -306,7 +306,7 @@ export function BmpOnlyList({
               <div className={styles.spacer} style={{ height: rowVirtualizer.getTotalSize() }}>
                 {rowVirtualizer.getVirtualItems().map((item) => {
                   const entry = entries[item.index]
-                  const action = pendingReassignments.get(entry.guid)
+                  const action = bmpAssignments.get(entry.guid)
                   const isAddressed = action !== undefined
                   const isCrossSelected = entry.guid === crossSelectedGuid
                   const isMultiSelected = selectedSet.has(entry.guid)
@@ -346,7 +346,7 @@ export function BmpOnlyList({
                               className={styles.assignedBadge}
                               onClick={(e) => e.stopPropagation()}
                             >
-                              {action.type === 'replace'
+                              {action.kind === 'replace'
                                 ? t('provincePanel.changes.replace', { id: action.targetId })
                                 : t('provincePanel.changes.register', { id: action.assignedId })}
                             </Text>

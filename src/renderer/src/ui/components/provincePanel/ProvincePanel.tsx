@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { makeStyles } from '@fluentui/react-components'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import { CanonicalProvinceList } from './CanonicalProvinceList'
 import { BmpOnlyList } from './BmpOnlyList'
 import { ChangesList } from './ChangesList'
 import { useCrossSelection } from './useCrossSelection'
-import type { SelectionOrigin } from '../../../../../shared/provinceEditing'
+import type { BmpAssignment, SelectionOrigin } from '../../../../../shared/provinceEditing'
 
 const useStyles = makeStyles({
   panel: {
@@ -27,9 +27,11 @@ export function ProvincePanel({ selectedIds, onSelect }: Props): JSX.Element {
 
   const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
   const bmpOnlyEntries = useMapDataStore((s) => s.bmpOnlyEntries)
-  const pendingReassignments = useMapDataStore((s) => s.pendingReassignments)
+  const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
+  const pendingNewProvinces = useMapDataStore((s) => s.pendingNewProvinces)
   const revertEdit = useMapDataStore((s) => s.revertEdit)
-  const revertReassignment = useMapDataStore((s) => s.revertReassignment)
+  const revertBmpReplacement = useMapDataStore((s) => s.revertBmpReplacement)
+  const revertNewProvince = useMapDataStore((s) => s.revertNewProvince)
 
   const { changes, canonicalId, bmpGuid, changeId, setSelection } = useCrossSelection()
 
@@ -37,17 +39,28 @@ export function ProvincePanel({ selectedIds, onSelect }: Props): JSX.Element {
   const [bmpCollapsed, setBmpCollapsed] = useState(false)
   const [changesCollapsed, setChangesCollapsed] = useState(false)
 
+  // Derive a guid-keyed assignment map for BmpOnlyList display
+  const bmpAssignments = useMemo(() => {
+    const map = new Map<string, BmpAssignment>()
+    for (const [provinceId, guid] of bmpReplacements) {
+      map.set(guid, { kind: 'replace', targetId: provinceId })
+    }
+    for (const [guid, assignedId] of pendingNewProvinces) {
+      map.set(guid, { kind: 'register', assignedId })
+    }
+    return map
+  }, [bmpReplacements, pendingNewProvinces])
+
   const handleCrossSelect = (origin: SelectionOrigin) => setSelection(origin)
 
   const handleRevert = (id: string) => {
     if (id.startsWith('field-edit:')) {
-      const provinceId = parseInt(id.slice('field-edit:'.length), 10)
-      revertEdit(provinceId)
-    } else if (id.startsWith('reassignment:')) {
-      const guid = id.slice('reassignment:'.length)
-      revertReassignment(guid)
+      revertEdit(parseInt(id.slice('field-edit:'.length), 10))
+    } else if (id.startsWith('bmp-replacement:')) {
+      revertBmpReplacement(parseInt(id.slice('bmp-replacement:'.length), 10))
+    } else if (id.startsWith('new-province:')) {
+      revertNewProvince(id.slice('new-province:'.length))
     }
-    // Clear selection if it pointed at the reverted change
     setSelection(null)
   }
 
@@ -66,7 +79,7 @@ export function ProvincePanel({ selectedIds, onSelect }: Props): JSX.Element {
         collapsed={bmpCollapsed}
         onToggleCollapse={() => setBmpCollapsed((c) => !c)}
         entries={bmpOnlyEntries}
-        pendingReassignments={pendingReassignments}
+        bmpAssignments={bmpAssignments}
         crossSelectedGuid={bmpGuid}
         onCrossSelect={handleCrossSelect}
       />
