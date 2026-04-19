@@ -163,7 +163,7 @@ export const enMessages = {
   'provinceDetail.mixed': 'mixed',
   'provinceEdit.title': 'Province {id}',
   'provinceEdit.color.label': 'Color',
-  'provinceEdit.color.bmpAssigned': 'Color from unregistered province',
+  'provinceEdit.color.bmpAssigned': 'Reassigned',
   'provinceEdit.color.unchanged': 'Unchanged',
   'provinceEdit.type.label': 'Type',
   'provinceEdit.terrain.label': 'Terrain',

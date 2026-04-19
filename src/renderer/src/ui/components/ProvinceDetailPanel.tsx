@@ -4,6 +4,8 @@ import {
   Checkbox,
   Divider,
   Select,
+  Tab,
+  TabList,
   makeStyles,
   mergeClasses,
   tokens,
@@ -37,41 +39,18 @@ const useStyles = makeStyles({
     borderRadius: tokens.borderRadiusCircular,
     backgroundColor: tokens.colorNeutralBackground3
   },
-  tabStrip: {
+  tabStripRow: {
     display: 'flex',
-    flexWrap: 'wrap',
-    gap: tokens.spacingHorizontalXXS,
-    paddingBottom: tokens.spacingVerticalXXS
-  },
-  tab: {
-    padding: `2px ${tokens.spacingHorizontalXS}`,
-    borderRadius: tokens.borderRadiusSmall,
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    backgroundColor: tokens.colorNeutralBackground1,
-    color: tokens.colorNeutralForeground2,
-    fontSize: tokens.fontSizeBase100,
-    lineHeight: tokens.lineHeightBase100,
-    fontFamily: 'monospace',
-    cursor: 'pointer',
-    flexShrink: 0,
-    '&:hover': {
-      backgroundColor: tokens.colorNeutralBackground2
-    }
-  },
-  tabActive: {
-    backgroundColor: tokens.colorBrandBackground2,
-    border: `1px solid ${tokens.colorBrandStroke1}`,
-    color: tokens.colorBrandForeground1
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalXS,
+    minWidth: 0
   },
   tabOverflow: {
-    padding: `2px ${tokens.spacingHorizontalXS}`,
-    borderRadius: tokens.borderRadiusSmall,
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    backgroundColor: tokens.colorNeutralBackground3,
     color: tokens.colorNeutralForeground3,
     fontSize: tokens.fontSizeBase100,
     lineHeight: tokens.lineHeightBase100,
-    flexShrink: 0
+    flexShrink: 0,
+    whiteSpace: 'nowrap'
   },
   grid: {
     display: 'grid',
@@ -242,27 +221,24 @@ export function ProvinceDetailPanel({ selectedProvinceIds, selectedBmpGuids, pro
     return items
   }, [selectedProvinceIds, selectedBmpGuids, guidToProvinceId])
 
-  const [focusedTabIndex, setFocusedTabIndex] = useState(0)
-  const safeFocusedIndex = Math.min(focusedTabIndex, Math.max(0, tabItems.length - 1))
-  const focusedItem = tabItems[safeFocusedIndex]
+  const [selectedTabKey, setSelectedTabKey] = useState<string | null>(null)
 
-  // For canonical multi-selection (all canonical IDs including from BMP resolved)
-  const allCanonicalIds = useMemo(
-    () => tabItems.filter((i): i is DisplayItem => i.kind === 'canonical').map((i) => i.provinceId),
-    [tabItems]
+  const tabKey = (item: TabItem) =>
+    item.kind === 'canonical' ? `p:${item.provinceId}` : `b:${item.guid}`
+
+  const effectiveKey = useMemo(() => {
+    if (tabItems.length === 0) return null
+    const firstKey = tabKey(tabItems[0])
+    if (selectedTabKey === null) return firstKey
+    return tabItems.some((i) => tabKey(i) === selectedTabKey) ? selectedTabKey : firstKey
+  }, [tabItems, selectedTabKey])
+
+  const focusedItem = useMemo(
+    () => tabItems.find((i) => tabKey(i) === effectiveKey),
+    [tabItems, effectiveKey]
   )
 
   const totalCount = tabItems.length
-
-  const title =
-    totalCount === 0
-      ? t('provinceDetail.title.empty')
-      : totalCount === 1
-        ? (focusedItem?.kind === 'canonical'
-            ? t('provinceEdit.title', { id: focusedItem.provinceId })
-            : t('provinceDetail.title.bmp', { guid: focusedItem?.label ?? '' }))
-        : t('provinceDetail.title.multi', { count: totalCount })
-
   const showTabs = totalCount > 1
   const visibleTabs = tabItems.slice(0, TAB_SHOW_LIMIT)
   const overflowCount = tabItems.length - TAB_SHOW_LIMIT
@@ -275,29 +251,20 @@ export function ProvinceDetailPanel({ selectedProvinceIds, selectedBmpGuids, pro
 
   return (
     <div className={styles.root}>
-      <div className={styles.header}>
-        <Text size={100} weight="semibold">{title}</Text>
-        {totalCount > 1 && (
-          <Text size={100} className={styles.count}>{totalCount}</Text>
-        )}
-      </div>
-
       {showTabs && (
-        <div className={styles.tabStrip}>
-          {visibleTabs.map((item, index) => (
-            <div
-              key={item.kind === 'canonical' ? `p:${item.provinceId}` : `b:${item.guid}`}
-              role="button"
-              tabIndex={0}
-              className={mergeClasses(styles.tab, index === safeFocusedIndex && styles.tabActive)}
-              onClick={() => setFocusedTabIndex(index)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setFocusedTabIndex(index) }}
-            >
-              {item.label}
-            </div>
-          ))}
+        <div className={styles.tabStripRow}>
+          <TabList
+            size="small"
+            selectedValue={effectiveKey ?? undefined}
+            onTabSelect={(_, data) => setSelectedTabKey(data.value as string)}
+          >
+            {visibleTabs.map((item) => {
+              const key = tabKey(item)
+              return <Tab key={key} value={key}>{item.label}</Tab>
+            })}
+          </TabList>
           {overflowCount > 0 && (
-            <div className={styles.tabOverflow}>+{overflowCount}</div>
+            <Text size={100} className={styles.tabOverflow}>+{overflowCount}</Text>
           )}
         </div>
       )}
@@ -318,14 +285,6 @@ export function ProvinceDetailPanel({ selectedProvinceIds, selectedBmpGuids, pro
           {focusedItem.kind === 'bmp-unassigned' && (
             <BmpUnassignedDetail guid={focusedItem.guid} bmpEntryByGuid={bmpEntryByGuid} />
           )}
-        </>
-      )}
-
-      {/* Show multi-edit only when multiple canonical provinces are selected and no focused BMP tab */}
-      {totalCount > 1 && focusedItem?.kind === 'canonical' && allCanonicalIds.length > 1 && (
-        <>
-          <Divider />
-          <MultiDetail selectedIds={allCanonicalIds} />
         </>
       )}
     </div>
@@ -515,71 +474,6 @@ function SingleDetail({ provinceId }: { provinceId: number }): JSX.Element {
         </>
       )}
     </>
-  )
-}
-
-function MultiDetail({ selectedIds }: { selectedIds: number[] }): JSX.Element {
-  const styles = useStyles()
-  const { t } = useI18n()
-
-  const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
-  const pendingEdits = useMapDataStore((s) => s.pendingEdits)
-  const terrains = useMapDataStore((s) => s.terrains)
-  const continents = useMapDataStore((s) => s.continents)
-  const editProvince = useMapDataStore((s) => s.editProvince)
-
-  const sortedTerrains = useMemo(() => [...terrains.keys()].sort(), [terrains])
-  const sortedContinents = useMemo(() => [...continents.keys()].sort(), [continents])
-
-  // Compute effective values for each selected province
-  const effectiveList = useMemo(() => selectedIds.map((id) => {
-    const original = originalDefinitions.get(id)
-    if (!original) return null
-    const patch = pendingEdits.get(id) ?? {}
-    return { ...original, ...patch }
-  }).filter((p): p is Province => p !== null), [selectedIds, originalDefinitions, pendingEdits])
-
-  const idRanges = useMemo(() => formatIdRanges(selectedIds), [selectedIds])
-
-  const uniqueTypes = [...new Set(effectiveList.map((p) => p.type))]
-  const uniqueTerrains = [...new Set(effectiveList.map((p) => p.terrain).filter(Boolean))]
-  const uniqueContinents = [...new Set(effectiveList.map((p) => p.continent).filter(Boolean))]
-
-  const sharedType = uniqueTypes.length === 1 ? uniqueTypes[0] : ''
-  const sharedTerrain = uniqueTerrains.length === 1 ? uniqueTerrains[0] : ''
-  const sharedContinent = uniqueContinents.length === 1 ? uniqueContinents[0] : ''
-
-  const applyAll = (field: keyof Omit<Province, 'id' | 'color'>, value: string | boolean) => {
-    for (const id of selectedIds) editProvince(id, { [field]: value })
-  }
-
-  const mixed = t('provinceDetail.mixed')
-
-  return (
-    <div className={styles.grid}>
-      <span className={styles.label}>{t('provinceDetail.ids')}</span>
-      <span className={styles.idText} title={idRanges}>{idRanges}</span>
-
-      <span className={styles.label}>{t('provinceEdit.type.label')}</span>
-      <Select size="small" value={sharedType} onChange={(_, d) => applyAll('type', d.value as Province['type'])}>
-        {uniqueTypes.length > 1 && <option value="">{mixed}</option>}
-        <option value="land">land</option>
-        <option value="sea">sea</option>
-        <option value="lake">lake</option>
-      </Select>
-
-      <span className={styles.label}>{t('provinceEdit.terrain.label')}</span>
-      <Select size="small" value={sharedTerrain} onChange={(_, d) => applyAll('terrain', d.value)}>
-        {uniqueTerrains.length > 1 && <option value="">{mixed}</option>}
-        {sortedTerrains.map((name) => <option key={name} value={name}>{name}</option>)}
-      </Select>
-
-      <span className={styles.label}>{t('provinceEdit.continent.label')}</span>
-      <Select size="small" value={sharedContinent} onChange={(_, d) => applyAll('continent', d.value)}>
-        <option value="">{uniqueContinents.length > 1 ? mixed : t('provinceEdit.noneOption')}</option>
-        {sortedContinents.map((name) => <option key={name} value={name}>{name}</option>)}
-      </Select>
-    </div>
   )
 }
 
