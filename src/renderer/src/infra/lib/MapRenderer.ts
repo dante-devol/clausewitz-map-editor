@@ -77,6 +77,32 @@ void main() {
 }
 `
 
+const FRAG_OUTLINE_COLOR = `#version 300 es
+precision highp float;
+uniform sampler2D u_id_tex;
+uniform sampler2D u_sel_tex;
+uniform int u_sel_height;
+uniform vec2 u_poff;
+uniform vec4 u_color;
+in vec2 v_uv;
+out vec4 fragColor;
+bool isSel(vec2 uv) {
+  vec4 p = texture(u_id_tex, clamp(uv, vec2(0.0), vec2(1.0)));
+  float pu = (p.r * 255.0 + 0.5) / 256.0;
+  float pv = (p.g * 255.0 + 0.5) / float(u_sel_height);
+  return texture(u_sel_tex, vec2(pu, pv)).r > 0.5;
+}
+void main() {
+  bool c = isSel(v_uv);
+  if (!c) discard;
+  if (isSel(v_uv + vec2( u_poff.x, 0.0)) == c &&
+      isSel(v_uv + vec2(-u_poff.x, 0.0)) == c &&
+      isSel(v_uv + vec2(0.0,  u_poff.y)) == c &&
+      isSel(v_uv + vec2(0.0, -u_poff.y)) == c) discard;
+  fragColor = u_color;
+}
+`
+
 // Bounding-box outline: vertices arrive pre-computed in NDC.
 const VERT_NDC = `#version 300 es
 in vec2 a_pos;
@@ -85,13 +111,21 @@ void main() {
 }
 `
 
-const FRAG_WHITE = `#version 300 es
+const FRAG_SOLID = `#version 300 es
 precision mediump float;
+uniform vec4 u_color;
 out vec4 fragColor;
 void main() {
-  fragColor = vec4(1.0);
+  fragColor = u_color;
 }
 `
+
+interface ProvinceBboxGroup {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
 
 const QUAD = new Float32Array([
   0, 0,  1, 0,  0, 1,
@@ -132,19 +166,37 @@ export class MapRenderer {
   private readonly outlineSelTexLoc: WebGLUniformLocation
   private readonly outlineSelHeightLoc: WebGLUniformLocation
   private readonly outlinePoffLoc: WebGLUniformLocation
+  private readonly validationOutlineProgram: WebGLProgram
+  private readonly validationOutlinePosLoc: number
+  private readonly validationOutlineMatrixLoc: WebGLUniformLocation
+  private readonly validationOutlineIdTexLoc: WebGLUniformLocation
+  private readonly validationOutlineSelTexLoc: WebGLUniformLocation
+  private readonly validationOutlineSelHeightLoc: WebGLUniformLocation
+  private readonly validationOutlinePoffLoc: WebGLUniformLocation
+  private readonly validationOutlineColorLoc: WebGLUniformLocation
 
   // Selection texture: 256×paletteHeight R8 (stored as RGBA8, R channel = 1 if selected).
   // Same UV indexing as the palette texture — cell (id%256, id/256) = 1 when id is selected.
   private selectionTexture: WebGLTexture | null = null
   private selectionData: Uint8Array | null = null  // CPU mirror for partial updates
+  private selectionCount = 0
+  private validationWarningTexture: WebGLTexture | null = null
+  private validationWarningData: Uint8Array | null = null
+  private validationWarningCount = 0
+  private validationErrorTexture: WebGLTexture | null = null
+  private validationErrorData: Uint8Array | null = null
+  private validationErrorCount = 0
 
   // Bounding-box outline: 4 thin screen-space quads per contiguous selection group.
   private readonly bboxProgram: WebGLProgram
   private readonly bboxPosLoc: number
+  private readonly bboxColorLoc: WebGLUniformLocation
   private readonly bboxDynBuffer: WebGLBuffer
 
   // Contiguous groups of the current selection; one bbox per group.
-  private selectionBboxGroups: Array<{ minX: number; minY: number; maxX: number; maxY: number }> = []
+  private selectionBboxGroups: ProvinceBboxGroup[] = []
+  private validationWarningBboxGroups: ProvinceBboxGroup[] = []
+  private validationErrorBboxGroups: ProvinceBboxGroup[] = []
 
   // Public — read by MapCanvas for viewport centering (center of union of all selected bboxes).
   provinceCentroid: { x: number; y: number } | null = null
@@ -164,6 +216,7 @@ export class MapRenderer {
   private _imageSize = { width: 0, height: 0 }
 
   get imageSize() { return this._imageSize }
+  get index() { return this.provinceIndex }
 
   constructor(canvas: HTMLCanvasElement) {
     const gl = canvas.getContext('webgl2', { preserveDrawingBuffer: true }) as WebGL2RenderingContext | null
@@ -229,9 +282,28 @@ export class MapRenderer {
     this.outlineSelHeightLoc = gl.getUniformLocation(outlineProg, 'u_sel_height')!
     this.outlinePoffLoc      = gl.getUniformLocation(outlineProg, 'u_poff')!
 
+    const validationOutlineVert = compileShader(gl, gl.VERTEX_SHADER, VERT)
+    const validationOutlineFrag = compileShader(gl, gl.FRAGMENT_SHADER, FRAG_OUTLINE_COLOR)
+    const validationOutlineProg = gl.createProgram()!
+    gl.attachShader(validationOutlineProg, validationOutlineVert)
+    gl.attachShader(validationOutlineProg, validationOutlineFrag)
+    gl.linkProgram(validationOutlineProg)
+    if (!gl.getProgramParameter(validationOutlineProg, gl.LINK_STATUS))
+      throw new Error(`Validation outline shader link error: ${gl.getProgramInfoLog(validationOutlineProg)}`)
+    gl.deleteShader(validationOutlineVert)
+    gl.deleteShader(validationOutlineFrag)
+    this.validationOutlineProgram = validationOutlineProg
+    this.validationOutlinePosLoc = gl.getAttribLocation(validationOutlineProg, 'a_pos')
+    this.validationOutlineMatrixLoc = gl.getUniformLocation(validationOutlineProg, 'u_matrix')!
+    this.validationOutlineIdTexLoc = gl.getUniformLocation(validationOutlineProg, 'u_id_tex')!
+    this.validationOutlineSelTexLoc = gl.getUniformLocation(validationOutlineProg, 'u_sel_tex')!
+    this.validationOutlineSelHeightLoc = gl.getUniformLocation(validationOutlineProg, 'u_sel_height')!
+    this.validationOutlinePoffLoc = gl.getUniformLocation(validationOutlineProg, 'u_poff')!
+    this.validationOutlineColorLoc = gl.getUniformLocation(validationOutlineProg, 'u_color')!
+
     // Bounding-box program: NDC positions + solid magenta.
     const bboxVert = compileShader(gl, gl.VERTEX_SHADER, VERT_NDC)
-    const bboxFrag = compileShader(gl, gl.FRAGMENT_SHADER, FRAG_WHITE)
+    const bboxFrag = compileShader(gl, gl.FRAGMENT_SHADER, FRAG_SOLID)
     const bboxProg = gl.createProgram()!
     gl.attachShader(bboxProg, bboxVert)
     gl.attachShader(bboxProg, bboxFrag)
@@ -242,6 +314,7 @@ export class MapRenderer {
     gl.deleteShader(bboxFrag)
     this.bboxProgram = bboxProg
     this.bboxPosLoc  = gl.getAttribLocation(bboxProg, 'a_pos')
+    this.bboxColorLoc = gl.getUniformLocation(bboxProg, 'u_color')!
     this.bboxDynBuffer = gl.createBuffer()!
   }
 
@@ -252,8 +325,6 @@ export class MapRenderer {
     this._imageSize     = { width, height }
     this.pixelData      = pixelData
     this.pixelDataWidth = width
-    this.selectedLoHi   = null
-    this.provinceBbox   = null
     this.provinceCentroid = null
 
     // Build province index (one O(W×H) pass; never repeated for this image).
@@ -317,14 +388,24 @@ export class MapRenderer {
     if (this.selectionTexture) gl.deleteTexture(this.selectionTexture)
     this.selectionData = new Uint8Array(256 * paletteHeight * 4)
     this.selectionTexture = gl.createTexture()!
-    gl.bindTexture(gl.TEXTURE_2D, this.selectionTexture)
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, paletteHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.selectionData)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+    initializeMaskTexture(gl, this.selectionTexture, this.selectionData, paletteHeight)
+    this.selectionCount = 0
+
+    if (this.validationWarningTexture) gl.deleteTexture(this.validationWarningTexture)
+    this.validationWarningData = new Uint8Array(256 * paletteHeight * 4)
+    this.validationWarningTexture = gl.createTexture()!
+    initializeMaskTexture(gl, this.validationWarningTexture, this.validationWarningData, paletteHeight)
+    this.validationWarningCount = 0
+
+    if (this.validationErrorTexture) gl.deleteTexture(this.validationErrorTexture)
+    this.validationErrorData = new Uint8Array(256 * paletteHeight * 4)
+    this.validationErrorTexture = gl.createTexture()!
+    initializeMaskTexture(gl, this.validationErrorTexture, this.validationErrorData, paletteHeight)
+    this.validationErrorCount = 0
 
     this.selectionBboxGroups = []
+    this.validationWarningBboxGroups = []
+    this.validationErrorBboxGroups = []
     this.provinceCentroid = null
   }
 
@@ -348,8 +429,7 @@ export class MapRenderer {
     }
   }
 
-  // Updates the multi-selection. packedColors is an array of province RGB values to highlight.
-  // Computes contiguous groups via adjacency BFS for bounding-box rendering.
+  // Updates the multi-selection mask texture only.
   setHighlightColors(packedColors: number[]): void {
     const { gl } = this
     const index = this.provinceIndex
@@ -367,52 +447,32 @@ export class MapRenderer {
       selectedIds.add(id)
       sel[id * 4] = 255  // R channel = selected
     }
+    this.selectionCount = selectedIds.size
 
     gl.bindTexture(gl.TEXTURE_2D, this.selectionTexture)
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, this.paletteHeight, gl.RGBA, gl.UNSIGNED_BYTE, sel)
 
-    // BFS over adjacency to find contiguous groups; union their bboxes.
-    this.selectionBboxGroups = []
-    const visited = new Set<number>()
-    let unionMinX = Infinity, unionMinY = Infinity, unionMaxX = -Infinity, unionMaxY = -Infinity
+  }
 
-    for (const startId of selectedIds) {
-      if (visited.has(startId)) continue
-      visited.add(startId)
-      const queue: number[] = [startId]
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  setSelectionStructure(input: {
+    bboxGroups: ProvinceBboxGroup[]
+    centroid: { x: number; y: number } | null
+  }): void {
+    this.selectionBboxGroups = input.bboxGroups
+    this.provinceCentroid = input.centroid
+  }
 
-      while (queue.length > 0) {
-        const cur = queue.pop()!
-        const bb = index.bboxes.get(cur)
-        if (bb) {
-          if (bb.minX < minX) minX = bb.minX
-          if (bb.minY < minY) minY = bb.minY
-          if (bb.maxX > maxX) maxX = bb.maxX
-          if (bb.maxY > maxY) maxY = bb.maxY
-        }
-        const adj = index.adjacency.get(cur)
-        if (adj) {
-          for (const neighbor of adj) {
-            if (!selectedIds.has(neighbor) || visited.has(neighbor)) continue
-            visited.add(neighbor)
-            queue.push(neighbor)
-          }
-        }
-      }
+  setValidationHighlightColors(input: { warningColors: number[]; errorColors: number[] }): void {
+    this.validationWarningCount = this.updateHighlightTexture(this.validationWarningTexture, this.validationWarningData, input.warningColors)
+    this.validationErrorCount = this.updateHighlightTexture(this.validationErrorTexture, this.validationErrorData, input.errorColors)
+  }
 
-      if (minX !== Infinity) {
-        this.selectionBboxGroups.push({ minX, minY, maxX, maxY })
-        if (minX < unionMinX) unionMinX = minX
-        if (minY < unionMinY) unionMinY = minY
-        if (maxX > unionMaxX) unionMaxX = maxX
-        if (maxY > unionMaxY) unionMaxY = maxY
-      }
-    }
-
-    this.provinceCentroid = unionMinX !== Infinity
-      ? { x: (unionMinX + unionMaxX) / 2, y: (unionMinY + unionMaxY) / 2 }
-      : null
+  setValidationStructure(input: {
+    warningBboxGroups: ProvinceBboxGroup[]
+    errorBboxGroups: ProvinceBboxGroup[]
+  }): void {
+    this.validationWarningBboxGroups = input.warningBboxGroups
+    this.validationErrorBboxGroups = input.errorBboxGroups
   }
 
   render(tx: number, ty: number, scale: number): void {
@@ -460,6 +520,23 @@ export class MapRenderer {
       gl.disable(gl.BLEND)
     }
 
+    // --- Validation outlines ---
+    if ((this.validationWarningCount > 0 && this.validationWarningTexture) || (this.validationErrorCount > 0 && this.validationErrorTexture)) {
+      const { width: iw, height: ih } = this._imageSize
+      gl.enable(gl.BLEND)
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+
+      if (this.validationWarningCount > 0 && this.validationWarningTexture) {
+        this.renderValidationOutline(this.validationWarningTexture, matrix, iw, ih, scale, [0.95, 0.78, 0.16, 1.0])
+        this.renderBboxGroups(this.validationWarningBboxGroups, tx, ty, scale, w, h, [0.95, 0.78, 0.16, 1.0])
+      }
+      if (this.validationErrorCount > 0 && this.validationErrorTexture) {
+        this.renderValidationOutline(this.validationErrorTexture, matrix, iw, ih, scale, [0.91, 0.25, 0.21, 1.0])
+        this.renderBboxGroups(this.validationErrorBboxGroups, tx, ty, scale, w, h, [0.91, 0.25, 0.21, 1.0])
+      }
+      gl.disable(gl.BLEND)
+    }
+
     // --- Province outline + bounding boxes ---
     if (this.selectionBboxGroups.length > 0 && this.selectionTexture) {
       const { width: iw, height: ih } = this._imageSize
@@ -484,15 +561,7 @@ export class MapRenderer {
       gl.drawArrays(gl.TRIANGLES, 0, 6)
 
       // Bounding-box: one rect per contiguous selection group.
-      gl.useProgram(this.bboxProgram)
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.bboxDynBuffer)
-      gl.enableVertexAttribArray(this.bboxPosLoc)
-      for (const bbox of this.selectionBboxGroups) {
-        const verts = this.buildBboxVerts(bbox, tx, ty, scale, w, h)
-        gl.bufferData(gl.ARRAY_BUFFER, verts, gl.DYNAMIC_DRAW)
-        gl.vertexAttribPointer(this.bboxPosLoc, 2, gl.FLOAT, false, 0, 0)
-        gl.drawArrays(gl.TRIANGLES, 0, verts.length / 2)
-      }
+      this.renderBboxGroups(this.selectionBboxGroups, tx, ty, scale, w, h, [1, 1, 1, 1])
 
       gl.disable(gl.BLEND)
     }
@@ -505,13 +574,22 @@ export class MapRenderer {
     if (this.idTexture)       { gl.deleteTexture(this.idTexture);       this.idTexture = null }
     if (this.paletteTexture)  { gl.deleteTexture(this.paletteTexture);  this.paletteTexture = null }
     if (this.selectionTexture){ gl.deleteTexture(this.selectionTexture); this.selectionTexture = null }
+    if (this.validationWarningTexture) { gl.deleteTexture(this.validationWarningTexture); this.validationWarningTexture = null }
+    if (this.validationErrorTexture) { gl.deleteTexture(this.validationErrorTexture); this.validationErrorTexture = null }
     this._imageSize         = { width: 0, height: 0 }
     this.pixelData          = null
     this.pixelDataWidth     = 0
     this.provinceIndex      = null
     this.paletteData        = null
     this.selectionData      = null
+    this.selectionCount     = 0
+    this.validationWarningData = null
+    this.validationWarningCount = 0
+    this.validationErrorData = null
+    this.validationErrorCount = 0
     this.selectionBboxGroups = []
+    this.validationWarningBboxGroups = []
+    this.validationErrorBboxGroups = []
     this.provinceCentroid   = null
     for (const entry of this.overlayEntries) this.gl.deleteTexture(entry.texture)
     this.overlayEntries = []
@@ -591,13 +669,91 @@ export class MapRenderer {
     if (this.idTexture)        gl.deleteTexture(this.idTexture)
     if (this.paletteTexture)   gl.deleteTexture(this.paletteTexture)
     if (this.selectionTexture) gl.deleteTexture(this.selectionTexture)
+    if (this.validationWarningTexture) gl.deleteTexture(this.validationWarningTexture)
+    if (this.validationErrorTexture) gl.deleteTexture(this.validationErrorTexture)
     for (const entry of this.overlayEntries) gl.deleteTexture(entry.texture)
     gl.deleteBuffer(this.quadBuffer)
     gl.deleteBuffer(this.bboxDynBuffer)
     gl.deleteProgram(this.program)
     gl.deleteProgram(this.overlayProgram)
     gl.deleteProgram(this.outlineProgram)
+    gl.deleteProgram(this.validationOutlineProgram)
     gl.deleteProgram(this.bboxProgram)
+  }
+
+  private updateHighlightTexture(
+    texture: WebGLTexture | null,
+    data: Uint8Array | null,
+    packedColors: number[]
+  ): number {
+    const index = this.provinceIndex
+    if (!index || !data || !texture) return 0
+
+    data.fill(0)
+    let count = 0
+    for (const packed of packedColors) {
+      const id = index.colorToId.get(packed)
+      if (id === undefined) continue
+      if (data[id * 4] === 255) continue
+      data[id * 4] = 255
+      count += 1
+    }
+
+    const { gl } = this
+    gl.bindTexture(gl.TEXTURE_2D, texture)
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, this.paletteHeight, gl.RGBA, gl.UNSIGNED_BYTE, data)
+    return count
+  }
+
+  private renderValidationOutline(
+    texture: WebGLTexture,
+    matrix: Float32Array,
+    imageWidth: number,
+    imageHeight: number,
+    scale: number,
+    color: [number, number, number, number]
+  ): void {
+    const { gl } = this
+    gl.useProgram(this.validationOutlineProgram)
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer)
+    gl.enableVertexAttribArray(this.validationOutlinePosLoc)
+    gl.vertexAttribPointer(this.validationOutlinePosLoc, 2, gl.FLOAT, false, 0, 0)
+    gl.uniformMatrix3fv(this.validationOutlineMatrixLoc, false, matrix)
+    gl.activeTexture(gl.TEXTURE0)
+    gl.bindTexture(gl.TEXTURE_2D, this.idTexture)
+    gl.uniform1i(this.validationOutlineIdTexLoc, 0)
+    gl.activeTexture(gl.TEXTURE1)
+    gl.bindTexture(gl.TEXTURE_2D, texture)
+    gl.uniform1i(this.validationOutlineSelTexLoc, 1)
+    gl.uniform1i(this.validationOutlineSelHeightLoc, this.paletteHeight)
+    gl.uniform2f(this.validationOutlinePoffLoc, 1 / (imageWidth * scale), 1 / (imageHeight * scale))
+    gl.uniform4f(this.validationOutlineColorLoc, color[0], color[1], color[2], color[3])
+    gl.drawArrays(gl.TRIANGLES, 0, 6)
+  }
+
+  private renderBboxGroups(
+    groups: ProvinceBboxGroup[],
+    tx: number,
+    ty: number,
+    scale: number,
+    canvasWidth: number,
+    canvasHeight: number,
+    color: [number, number, number, number]
+  ): void {
+    if (groups.length === 0) return
+
+    const { gl } = this
+    gl.useProgram(this.bboxProgram)
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.bboxDynBuffer)
+    gl.enableVertexAttribArray(this.bboxPosLoc)
+    gl.uniform4f(this.bboxColorLoc, color[0], color[1], color[2], color[3])
+
+    for (const bbox of groups) {
+      const verts = this.buildBboxVerts(bbox, tx, ty, scale, canvasWidth, canvasHeight)
+      gl.bufferData(gl.ARRAY_BUFFER, verts, gl.DYNAMIC_DRAW)
+      gl.vertexAttribPointer(this.bboxPosLoc, 2, gl.FLOAT, false, 0, 0)
+      gl.drawArrays(gl.TRIANGLES, 0, verts.length / 2)
+    }
   }
 
   // Builds 4 thin screen-space quads (1px thick) for a bounding-box outline in NDC.
@@ -644,4 +800,18 @@ export class MapRenderer {
     m[6] = tx * 2 / cw - 1;     m[7] = 1 - ty * 2 / ch;       m[8] = 1
     return m
   }
+}
+
+function initializeMaskTexture(
+  gl: WebGL2RenderingContext,
+  texture: WebGLTexture,
+  data: Uint8Array,
+  paletteHeight: number
+): void {
+  gl.bindTexture(gl.TEXTURE_2D, texture)
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, paletteHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, data)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 }

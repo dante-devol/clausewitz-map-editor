@@ -1,4 +1,5 @@
 import type { Continent, Province, TerrainCategory } from '../../../../shared/mapDataTypes'
+import type { ProvinceCatalogEntry, ProvinceCatalogEntryKey } from '../../../../shared/provinceCatalog'
 import type { CoreState } from '../contracts/CoreState'
 import {
   getModeValueKey,
@@ -8,6 +9,7 @@ import {
   type DisplayModeContext
 } from '../../infra/config/displayModes'
 import type { DisplayModeOverrides } from '../../infra/store/displayModeConfigStore'
+import type { ProvinceValidationIssue } from '../../../../shared/provinceValidation'
 
 export const selectDisplayMode = (state: CoreState) => state.map.displayMode
 export const selectMapOverlays = (state: CoreState) => state.map.overlays
@@ -25,6 +27,29 @@ export function selectHighlightColors(
     if (color !== undefined) acc.push(color)
     return acc
   }, [])
+}
+
+export function selectValidationHighlightColors(
+  state: CoreState,
+  provinceCatalog: readonly ProvinceCatalogEntry[],
+  issuesByProvinceKey: ReadonlyMap<string, ProvinceValidationIssue[]>
+): { warningColors: number[]; errorColors: number[] } {
+  const selectedIds = new Set(state.map.selectedProvinceIds)
+  const warningColors: number[] = []
+  const errorColors: number[] = []
+
+  for (const province of provinceCatalog) {
+    const issues = issuesByProvinceKey.get(province.key as ProvinceCatalogEntryKey)
+    if (!issues || issues.length === 0) continue
+    if (province.color === null) continue
+    if (province.id !== null && selectedIds.has(province.id)) continue
+
+    const highestSeverity = resolveHighestSeverity(issues)
+    if (highestSeverity === 'error') errorColors.push(province.color)
+    else if (highestSeverity === 'warning') warningColors.push(province.color)
+  }
+
+  return { warningColors, errorColors }
 }
 
 export function selectColorMap(
@@ -88,4 +113,16 @@ export function selectHoverTooltip(
     label: t('map.hover.continent'),
     value: province.continent ? province.continent : t('mapValue.none')
   }
+}
+
+function resolveHighestSeverity(
+  issues: readonly ProvinceValidationIssue[]
+): ProvinceValidationIssue['severity'] | null {
+  let result: ProvinceValidationIssue['severity'] | null = null
+  for (const issue of issues) {
+    if (issue.severity === 'error') return 'error'
+    if (issue.severity === 'warning') result = 'warning'
+    else if (result === null) result = 'info'
+  }
+  return result
 }

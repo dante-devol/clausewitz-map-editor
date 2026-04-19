@@ -104,10 +104,18 @@ export const frMessages: Record<MessageKey, string> = {
   'debug.tab.provinces': 'Provinces',
   'debug.tab.terrain': 'Terrain',
   'debug.tab.continents': 'Continents',
+  'debug.tab.validation': 'Validation',
   'debug.provincesLoaded': '{count} provinces chargees',
   'debug.showingFirst': '(affichage des {count} premieres)',
   'debug.terrainCategoriesLoaded': '{count} categories de terrain chargees',
   'debug.continentsLoaded': '{count} continents charges',
+  'debug.validationIssues': '{count} problemes de validation',
+  'debug.validationStatus': 'Etat : {status} ({phase})',
+  'debug.validationState.idle': 'inactif',
+  'debug.validationState.metadata-ready': 'metadonnees pretes',
+  'debug.validationState.full-ready': 'validation complete',
+  'debug.validationPhase.metadata': 'metadonnees',
+  'debug.validationPhase.full': 'complet',
   'debug.column.id': 'ID',
   'debug.column.color': 'Couleur',
   'debug.column.type': 'Type',
@@ -115,5 +123,7 @@ export const frMessages: Record<MessageKey, string> = {
   'debug.column.terrain': 'Terrain',
   'debug.column.continent': 'Continent',
   'debug.column.codeName': 'Nom de code',
-  'debug.column.position': 'Position'
+  'debug.column.position': 'Position',
+  'debug.column.severity': 'Severite',
+  'debug.column.message': 'Message'
 }

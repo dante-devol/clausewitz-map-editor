@@ -102,10 +102,18 @@ export const enMessages = {
   'debug.tab.provinces': 'Provinces',
   'debug.tab.terrain': 'Terrain',
   'debug.tab.continents': 'Continents',
+  'debug.tab.validation': 'Validation',
   'debug.provincesLoaded': '{count} provinces loaded',
   'debug.showingFirst': '(showing first {count})',
   'debug.terrainCategoriesLoaded': '{count} terrain categories loaded',
   'debug.continentsLoaded': '{count} continents loaded',
+  'debug.validationIssues': '{count} validation issues',
+  'debug.validationStatus': 'Status: {status} ({phase})',
+  'debug.validationState.idle': 'idle',
+  'debug.validationState.metadata-ready': 'metadata ready',
+  'debug.validationState.full-ready': 'full ready',
+  'debug.validationPhase.metadata': 'metadata',
+  'debug.validationPhase.full': 'full',
   'debug.column.id': 'ID',
   'debug.column.color': 'Color',
   'debug.column.type': 'Type',
@@ -113,7 +121,9 @@ export const enMessages = {
   'debug.column.terrain': 'Terrain',
   'debug.column.continent': 'Continent',
   'debug.column.codeName': 'Code Name',
-  'debug.column.position': 'Position'
+  'debug.column.position': 'Position',
+  'debug.column.severity': 'Severity',
+  'debug.column.message': 'Message'
 } as const
 
 export type MessageKey = keyof typeof enMessages

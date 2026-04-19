@@ -9,6 +9,7 @@ import { useAppState } from '../hooks/useAppState'
 import { useDisplayModeConfig } from '../hooks/useDisplayModeConfig'
 import { useProjectSelection } from '../hooks/useProjectSelection'
 import { useMapLoader } from '../hooks/useMapLoader'
+import { useProvinceValidation } from '../hooks/useProvinceValidation'
 
 const VIEWS = {
   map: <MapView />,
@@ -26,6 +27,7 @@ function App(): JSX.Element {
 
   useDisplayModeConfig()
   useMapLoader()
+  useProvinceValidation()
 
   const [debugOpen, setDebugOpen] = useState(false)
 

@@ -26,6 +26,7 @@ export function useMapLoader(): void {
   const setProvinceCatalog = useMapDataStore((s) => s.setProvinceCatalog)
   const loadTerrains = useMapDataStore((s) => s.loadTerrains)
   const loadProvincesImage = useMapDataStore((s) => s.loadProvincesImage)
+  const setProvinceBitmapStatus = useMapDataStore((s) => s.setProvinceBitmapStatus)
   const baseProvinceCatalog = useMapDataStore((s) => s.baseProvinceCatalog)
   const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
   const clear = useMapDataStore((s) => s.clear)
@@ -45,6 +46,7 @@ export function useMapLoader(): void {
         loadProvincesImage(snapshot.provincesImageB64)
         loadProvinces(snapshot.provinces)
         loadProvinceCatalog(snapshot.provinceCatalog)
+        setProvinceBitmapStatus('idle')
         api.dispatch(sessionCommands.mapReady())
       } catch (error) {
         if (cancelled) return
@@ -61,9 +63,13 @@ export function useMapLoader(): void {
         const provinces = event.data as import('../../../../shared/mapDataTypes').Province[]
         loadProvinces(provinces)
         loadProvinceCatalog(buildProvinceCatalog(provinces))
+        setProvinceBitmapStatus('idle')
       }
       else if (event.type === 'terrain') loadTerrains(event.data as import('../../../../shared/mapDataTypes').TerrainCategory[])
-      else if (event.type === 'image') loadProvincesImage(event.data as string)
+      else if (event.type === 'image') {
+        loadProvincesImage(event.data as string)
+        setProvinceBitmapStatus('idle')
+      }
     })
 
     return () => {
@@ -72,7 +78,7 @@ export function useMapLoader(): void {
       api.dispatch(sessionCommands.cleared())
       clear()
     }
-  }, [api, clear, loadContinents, loadProvinceCatalog, loadProvinces, loadProvincesImage, loadTerrains, projectId])
+  }, [api, clear, loadContinents, loadProvinceCatalog, loadProvinces, loadProvincesImage, loadTerrains, projectId, setProvinceBitmapStatus])
 
   useEffect(() => {
     const provincesPath = resolvedPaths?.provinces
@@ -81,12 +87,14 @@ export function useMapLoader(): void {
     let cancelled = false
 
     async function reconcileWithBitmap(): Promise<void> {
+      setProvinceBitmapStatus('loading')
       const imageRecord = await window.api.files.read(provincesPath)
       if (cancelled) return
 
       const cachedFacts = provinceBitmapFactsCache.get(imageRecord.hash)
       if (cachedFacts) {
         setProvinceCatalog(reconcileProvinceCatalogWithBitmap(baseProvinceCatalog, cachedFacts))
+        setProvinceBitmapStatus('ready')
         return
       }
 
@@ -102,17 +110,21 @@ export function useMapLoader(): void {
         provinceBitmapFactsCache.set(imageRecord.hash, bitmapFacts)
         if (cancelled) return
         setProvinceCatalog(reconcileProvinceCatalogWithBitmap(baseProvinceCatalog, bitmapFacts))
+        setProvinceBitmapStatus('ready')
       } finally {
         source.dispose()
       }
     }
 
     void reconcileWithBitmap().catch(() => {
-      if (!cancelled) setProvinceCatalog(baseProvinceCatalog)
+      if (!cancelled) {
+        setProvinceCatalog(baseProvinceCatalog)
+        setProvinceBitmapStatus('error')
+      }
     })
 
     return () => {
       cancelled = true
     }
-  }, [baseProvinceCatalog, projectId, provincesImageB64, resolvedPaths, setProvinceCatalog])
+  }, [baseProvinceCatalog, projectId, provincesImageB64, resolvedPaths, setProvinceBitmapStatus, setProvinceCatalog])
 }

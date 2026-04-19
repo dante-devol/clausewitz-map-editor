@@ -8,6 +8,7 @@ import { MapRenderer } from '../../infra/lib/MapRenderer'
 import { BmpProvinceMapSource } from '../../infra/lib/BmpProvinceMapSource'
 import type { CanvasOverlay } from '../contracts/CanvasOverlay'
 import type { OverlayFilterRule } from '../../core/contracts/MapOverlay'
+import type { ProvinceIndex } from '../../infra/lib/provinceAnalysis'
 
 const ZOOM_STEP = 1.25
 const ZOOM_MIN = 0.02
@@ -25,6 +26,13 @@ interface OverlayBitmapEntry {
   height: number
   filteredCanvas: OffscreenCanvas | null
   filteredSignature: string | null
+}
+
+interface ProvinceBboxGroup {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
 }
 
 function toHex(n: number) { return n.toString(16).padStart(2, '0').toUpperCase() }
@@ -131,6 +139,8 @@ interface Props {
   src: string | null
   overlays?: CanvasOverlay[]
   highlightColors: number[]
+  validationWarningColors: number[]
+  validationErrorColors: number[]
   colorMap?: Map<number, number> | null
   onColorPicked?: (r: number, g: number, b: number, additive: boolean) => void
   hoverTooltipPosition?: HoverTooltipPosition | null
@@ -142,6 +152,8 @@ export function MapCanvas({
   src,
   overlays = [],
   highlightColors,
+  validationWarningColors,
+  validationErrorColors,
   colorMap,
   onColorPicked,
   hoverTooltipPosition,
@@ -153,10 +165,13 @@ export function MapCanvas({
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const rendererRef  = useRef<MapRenderer | null>(null)
+  const provinceIndexRef = useRef<ProvinceIndex | null>(null)
   const canvasOverlaysRef = useRef<CanvasOverlay[]>([])
   const overlayBitmapsRef = useRef(new Map<string, OverlayBitmapEntry>())
   const transformRef      = useRef<Transform>({ x: 0, y: 0, scale: 1 })
   const highlightColorsRef = useRef<number[]>([])
+  const validationWarningColorsRef = useRef<number[]>([])
+  const validationErrorColorsRef = useRef<number[]>([])
   const colorMapRef        = useRef<Map<number, number> | null | undefined>(null)
   const cancelPanRef = useRef<(() => void) | null>(null)
   const dragRef      = useRef<{ startX: number; startY: number; startTX: number; startTY: number } | null>(null)
@@ -231,10 +246,18 @@ export function MapCanvas({
     BmpProvinceMapSource.load(src).then(async (source) => {
       if (cancelled) { source.dispose(); return }
       await rendererRef.current?.loadImage(source)
+      provinceIndexRef.current = rendererRef.current?.index ?? null
       source.dispose()
       if (cancelled) return
       const cm = colorMapRef.current
       if (cm && cm.size > 0) rendererRef.current?.recolorTexture(cm)
+      syncSelectionStructure(rendererRef.current, provinceIndexRef.current, highlightColorsRef.current)
+      syncValidationStructure(
+        rendererRef.current,
+        provinceIndexRef.current,
+        validationWarningColorsRef.current,
+        validationErrorColorsRef.current
+      )
       fit()
       setImageLoaded(true)
       setBaseImageLoading(false)
@@ -246,6 +269,7 @@ export function MapCanvas({
     return () => {
       cancelled = true
       setBaseImageLoading(false)
+      provinceIndexRef.current = null
     }
   }, [src, fit])
 
@@ -341,10 +365,25 @@ export function MapCanvas({
 
   useEffect(() => {
     highlightColorsRef.current = highlightColors
-    rendererRef.current?.setHighlightColors(highlightColors)
+    const renderer = rendererRef.current
+    renderer?.setHighlightColors(highlightColors)
+    syncSelectionStructure(renderer, provinceIndexRef.current, highlightColors)
     const { x: tx, y: ty, scale } = transformRef.current
-    rendererRef.current?.render(tx, ty, scale)
+    renderer?.render(tx, ty, scale)
   }, [highlightColors])
+
+  useEffect(() => {
+    validationWarningColorsRef.current = validationWarningColors
+    validationErrorColorsRef.current = validationErrorColors
+    const renderer = rendererRef.current
+    renderer?.setValidationHighlightColors({
+      warningColors: validationWarningColors,
+      errorColors: validationErrorColors
+    })
+    syncValidationStructure(renderer, provinceIndexRef.current, validationWarningColors, validationErrorColors)
+    const { x: tx, y: ty, scale } = transformRef.current
+    renderer?.render(tx, ty, scale)
+  }, [validationErrorColors, validationWarningColors])
 
   useEffect(() => {
     const container = containerRef.current
@@ -659,4 +698,98 @@ async function readBitmapPixels(bitmap: ImageBitmap): Promise<{ bitmap: ImageBit
 function hexToPackedColor(hex: string): number {
   const normalized = hex.trim().replace(/^#/, '')
   return parseInt(normalized, 16)
+}
+
+function syncSelectionStructure(
+  renderer: MapRenderer | null,
+  provinceIndex: ProvinceIndex | null,
+  highlightColors: number[]
+): void {
+  if (!renderer || !provinceIndex) return
+
+  const groups = buildHighlightGroups(highlightColors, provinceIndex)
+  renderer.setSelectionStructure({
+    bboxGroups: groups,
+    centroid: computeGroupsCentroid(groups)
+  })
+}
+
+function syncValidationStructure(
+  renderer: MapRenderer | null,
+  provinceIndex: ProvinceIndex | null,
+  warningColors: number[],
+  errorColors: number[]
+): void {
+  if (!renderer || !provinceIndex) return
+
+  renderer.setValidationStructure({
+    warningBboxGroups: buildHighlightGroups(warningColors, provinceIndex),
+    errorBboxGroups: buildHighlightGroups(errorColors, provinceIndex)
+  })
+}
+
+function buildHighlightGroups(
+  packedColors: readonly number[],
+  provinceIndex: ProvinceIndex
+): ProvinceBboxGroup[] {
+  const selectedIds = new Set<number>()
+  for (const packed of packedColors) {
+    const id = provinceIndex.colorToId.get(packed)
+    if (id !== undefined) selectedIds.add(id)
+  }
+
+  const groups: ProvinceBboxGroup[] = []
+  const visited = new Set<number>()
+
+  for (const startId of selectedIds) {
+    if (visited.has(startId)) continue
+    visited.add(startId)
+    const queue: number[] = [startId]
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+
+    while (queue.length > 0) {
+      const currentId = queue.pop()!
+      const bbox = provinceIndex.bboxes.get(currentId)
+      if (bbox) {
+        if (bbox.minX < minX) minX = bbox.minX
+        if (bbox.minY < minY) minY = bbox.minY
+        if (bbox.maxX > maxX) maxX = bbox.maxX
+        if (bbox.maxY > maxY) maxY = bbox.maxY
+      }
+
+      const adjacent = provinceIndex.adjacency.get(currentId)
+      if (!adjacent) continue
+      for (const neighborId of adjacent) {
+        if (!selectedIds.has(neighborId) || visited.has(neighborId)) continue
+        visited.add(neighborId)
+        queue.push(neighborId)
+      }
+    }
+
+    if (minX !== Infinity) groups.push({ minX, minY, maxX, maxY })
+  }
+
+  return groups
+}
+
+function computeGroupsCentroid(
+  groups: readonly ProvinceBboxGroup[]
+): { x: number; y: number } | null {
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+
+  for (const group of groups) {
+    if (group.minX < minX) minX = group.minX
+    if (group.minY < minY) minY = group.minY
+    if (group.maxX > maxX) maxX = group.maxX
+    if (group.maxY > maxY) maxY = group.maxY
+  }
+
+  if (minX === Infinity) return null
+  return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
 }

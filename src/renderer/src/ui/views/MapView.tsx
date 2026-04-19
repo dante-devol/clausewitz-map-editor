@@ -15,7 +15,8 @@ import {
   selectHoverTooltip,
   selectMapOverlays,
   selectModeValuesByMode,
-  selectSelectedProvinceIds
+  selectSelectedProvinceIds,
+  selectValidationHighlightColors
 } from '../../core/selectors/mapSelectors'
 import { useI18n } from '../i18n/I18nProvider'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
@@ -23,6 +24,7 @@ import { useDisplayModeConfigStore } from '../../infra/store/displayModeConfigSt
 import { useProjectStore } from '../../infra/store/projectStore'
 import { useOverlayAssets } from '../hooks/useOverlayAssets'
 import { packColor } from '../../../../shared/mapDataTypes'
+import { useProvinceValidationStore } from '../../infra/store/provinceValidationStore'
 
 const useStyles = makeStyles({
   root: {
@@ -32,7 +34,7 @@ const useStyles = makeStyles({
   leftPanel: {
     display: 'flex',
     flexDirection: 'column',
-    width: '220px',
+    width: '300px',
     borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
     overflow: 'hidden'
   },
@@ -93,8 +95,10 @@ const MapViewportPane = memo(function MapViewportPane({
 
   const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
   const provinces = useMapDataStore((s) => s.provinces)
+  const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
   const terrains = useMapDataStore((s) => s.terrains)
   const continents = useMapDataStore((s) => s.continents)
+  const issuesByProvinceKey = useProvinceValidationStore((s) => s.issuesByProvinceKey)
   const displayModeOverrides = useDisplayModeConfigStore((s) => s.overrides)
   const displayMode = useCoreSelector(selectDisplayMode)
 
@@ -102,6 +106,9 @@ const MapViewportPane = memo(function MapViewportPane({
   const displayModeContext = useMemo(() => ({ terrains, continents }), [terrains, continents])
 
   const highlightColors = useCoreSelector((state) => selectHighlightColors(state, provinces))
+  const validationHighlightColors = useCoreSelector((state) => (
+    selectValidationHighlightColors(state, provinceCatalog, issuesByProvinceKey)
+  ))
   const colorMap = useCoreSelector((state) => selectColorMap(state, provinces, displayModeOverrides, displayModeContext))
 
   const onColorPicked = useCallback((r: number, g: number, b: number, additive: boolean) => {
@@ -141,6 +148,8 @@ const MapViewportPane = memo(function MapViewportPane({
         src={src}
         overlays={canvasOverlays}
         highlightColors={highlightColors}
+        validationWarningColors={validationHighlightColors.warningColors}
+        validationErrorColors={validationHighlightColors.errorColors}
         colorMap={colorMap}
         onColorPicked={onColorPicked}
         hoverTooltipPosition={hoveredProvince ? { x: hoveredProvince.x, y: hoveredProvince.y } : null}

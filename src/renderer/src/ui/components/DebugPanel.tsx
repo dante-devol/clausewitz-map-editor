@@ -15,6 +15,7 @@ import {
 import { useI18n } from '../i18n/I18nProvider'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
 import { unpackColor } from '../../../../shared/mapDataTypes'
+import { useProvinceValidationStore } from '../../infra/store/provinceValidationStore'
 
 const useStyles = makeStyles({
   surface: {
@@ -77,6 +78,12 @@ const useStyles = makeStyles({
   cap: {
     color: tokens.colorNeutralForeground3,
     fontSize: '11px'
+  },
+  statusText: {
+    color: tokens.colorNeutralForeground2
+  },
+  message: {
+    whiteSpace: 'normal'
   }
 })
 
@@ -97,9 +104,9 @@ function Swatch({ color }: { color: number }) {
 function ProvincesTab() {
   const styles = useStyles()
   const { t, formatNumber } = useI18n()
-  const provinces = useMapDataStore((s) => s.provinces)
-  const rows = Array.from(provinces.values()).slice(0, ROW_CAP)
-  const total = provinces.size
+  const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
+  const rows = provinceCatalog.slice(0, ROW_CAP)
+  const total = provinceCatalog.length
 
   return (
     <>
@@ -122,15 +129,16 @@ function ProvincesTab() {
           </thead>
           <tbody>
             {rows.map((p, i) => {
-              const { r, g, b } = unpackColor(p.color)
+              const color = p.color ?? 0
+              const { r, g, b } = unpackColor(color)
               return (
-                <tr key={p.id} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
-                  <td className={styles.td}>{p.id}</td>
+                <tr key={p.key} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
+                  <td className={styles.td}>{p.id ?? 'xxxxx'}</td>
                   <td className={styles.td}>
-                    <Swatch color={p.color} />
-                    {r}, {g}, {b}
+                    {p.color !== null && <Swatch color={p.color} />}
+                    {p.color !== null ? `${r}, ${g}, ${b}` : '—'}
                   </td>
-                  <td className={styles.td}>{p.type}</td>
+                  <td className={styles.td}>{p.type ?? '—'}</td>
                   <td className={styles.td}>{p.isCoastal ? '✓' : '—'}</td>
                   <td className={styles.td}>{p.terrain || '—'}</td>
                   <td className={styles.td}>{p.continent || '—'}</td>
@@ -218,7 +226,57 @@ function ContinentsTab() {
   )
 }
 
-type TabId = 'provinces' | 'terrains' | 'continents'
+function ValidationTab() {
+  const styles = useStyles()
+  const { t, formatNumber } = useI18n()
+  const status = useProvinceValidationStore((s) => s.status)
+  const phase = useProvinceValidationStore((s) => s.phase)
+  const issues = useProvinceValidationStore((s) => s.issues)
+  const summary = useProvinceValidationStore((s) => s.summary)
+  const rows = issues.slice(0, ROW_CAP)
+
+  return (
+    <>
+      <div className={styles.summary}>
+        <Badge appearance="filled" color="danger">{formatNumber(summary.errorCount)}</Badge>
+        <Badge appearance="filled" color="warning">{formatNumber(summary.warningCount)}</Badge>
+        <Badge appearance="filled" color="informative">{formatNumber(summary.infoCount)}</Badge>
+        <Text size={200}>{t('debug.validationIssues', { count: formatNumber(issues.length) })}</Text>
+        <Text size={200} className={styles.statusText}>
+          {t('debug.validationStatus', {
+            status: t(`debug.validationState.${status}`),
+            phase: phase ? t(`debug.validationPhase.${phase}`) : '—'
+          })}
+        </Text>
+        {issues.length > ROW_CAP && <Text className={styles.cap}>{t('debug.showingFirst', { count: formatNumber(ROW_CAP) })}</Text>}
+      </div>
+      <div className={styles.tableWrap}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th className={styles.th}>{t('debug.column.severity')}</th>
+              <th className={styles.th}>{t('debug.column.id')}</th>
+              <th className={styles.th}>{t('debug.column.codeName')}</th>
+              <th className={styles.th}>{t('debug.column.message')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((issue, i) => (
+              <tr key={`${issue.provinceKey}:${issue.code}:${i}`} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
+                <td className={styles.td}>{issue.severity}</td>
+                <td className={styles.td}>{issue.provinceId ?? 'xxxxx'}</td>
+                <td className={styles.td}>{issue.code}</td>
+                <td className={`${styles.td} ${styles.message}`}>{issue.message}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+type TabId = 'provinces' | 'terrain' | 'continents' | 'validation'
 
 interface DebugPanelProps {
   open: boolean
@@ -230,9 +288,10 @@ export function DebugPanel({ open, onClose }: DebugPanelProps) {
   const { t, formatNumber } = useI18n()
   const [tab, setTab] = useState<TabId>('provinces')
 
-  const provinces = useMapDataStore((s) => s.provinces)
+  const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
   const terrains = useMapDataStore((s) => s.terrains)
   const continents = useMapDataStore((s) => s.continents)
+  const validationSummary = useProvinceValidationStore((s) => s.summary)
 
   return (
     <Dialog open={open} onOpenChange={(_, d) => { if (!d.open) onClose() }}>
@@ -244,19 +303,23 @@ export function DebugPanel({ open, onClose }: DebugPanelProps) {
             onTabSelect={(_, d) => setTab(d.value as TabId)}
           >
             <Tab value="provinces">
-              {t('debug.tab.provinces')} <Badge appearance="tint">{formatNumber(provinces.size)}</Badge>
+              {t('debug.tab.provinces')} <Badge appearance="tint">{formatNumber(provinceCatalog.length)}</Badge>
             </Tab>
-            <Tab value="terrains">
+            <Tab value="terrain">
               {t('debug.tab.terrain')} <Badge appearance="tint">{formatNumber(terrains.size)}</Badge>
             </Tab>
             <Tab value="continents">
               {t('debug.tab.continents')} <Badge appearance="tint">{formatNumber(continents.size)}</Badge>
             </Tab>
+            <Tab value="validation">
+              {t('debug.tab.validation')} <Badge appearance="tint">{formatNumber(validationSummary.errorCount + validationSummary.warningCount + validationSummary.infoCount)}</Badge>
+            </Tab>
           </TabList>
           <DialogContent>
             {tab === 'provinces'  && <ProvincesTab />}
-            {tab === 'terrains'   && <TerrainsTab />}
+            {tab === 'terrain'    && <TerrainsTab />}
             {tab === 'continents' && <ContinentsTab />}
+            {tab === 'validation' && <ValidationTab />}
           </DialogContent>
         </DialogBody>
       </DialogSurface>

@@ -1,11 +1,24 @@
 import { useRef, useEffect, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { List, ListItem, makeStyles, mergeClasses, tokens, Text } from '@fluentui/react-components'
+import {
+  List,
+  ListItem,
+  Popover,
+  PopoverSurface,
+  PopoverTrigger,
+  makeStyles,
+  mergeClasses,
+  tokens,
+  Text
+} from '@fluentui/react-components'
+import { ErrorCircleRegular, InfoRegular, WarningRegular } from '@fluentui/react-icons'
 import { unpackColor } from '../../../../shared/mapDataTypes'
 import type { ProvinceCatalogEntry } from '../../../../shared/provinceCatalog'
 import { TYPE_COLORS, continentColor } from '../../infra/config/displayModes'
 import { useI18n } from '../i18n/I18nProvider'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
+import { useProvinceValidationStore } from '../../infra/store/provinceValidationStore'
+import type { ProvinceValidationIssue } from '../../../../shared/provinceValidation'
 
 const ROW_H = 36
 
@@ -14,7 +27,8 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     minHeight: 0,
-    flex: 1
+    flex: 1,
+    overflow: 'hidden'
   },
   header: {
     display: 'flex',
@@ -36,7 +50,7 @@ const useStyles = makeStyles({
     overflowX: 'hidden',
     minHeight: 0,
     backgroundColor: tokens.colorNeutralBackground1,
-    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalXS} ${tokens.spacingVerticalXS} 0`
+    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`
   },
   list: {
     position: 'relative',
@@ -51,12 +65,14 @@ const useStyles = makeStyles({
   },
   row: {
     position: 'absolute',
-    left: tokens.spacingHorizontalXS,
-    right: tokens.spacingHorizontalXS,
+    left: 0,
+    right: 0,
     display: 'flex',
     alignItems: 'center',
     gap: tokens.spacingHorizontalXS,
-    paddingLeft: tokens.spacingHorizontalXS,
+    minWidth: 0,
+    overflow: 'hidden',
+    paddingLeft: tokens.spacingHorizontalS,
     paddingRight: tokens.spacingHorizontalS,
     cursor: 'pointer',
     boxSizing: 'border-box',
@@ -95,20 +111,110 @@ const useStyles = makeStyles({
       backgroundColor: tokens.colorBrandForeground1
     }
   },
+  issueCell: {
+    width: '28px',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0
+  },
+  issueChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '2px',
+    minWidth: '28px',
+    height: '18px',
+    padding: `0 ${tokens.spacingHorizontalXXS}`,
+    borderRadius: tokens.borderRadiusSmall,
+    fontSize: tokens.fontSizeBase100,
+    lineHeight: tokens.lineHeightBase100,
+    cursor: 'pointer'
+  },
+  issueChipError: {
+    border: `1px solid rgba(210, 78, 78, 0.32)`,
+    backgroundColor: 'rgba(210, 78, 78, 0.12)',
+    color: tokens.colorPaletteRedForeground1
+  },
+  issueChipWarning: {
+    border: `1px solid rgba(181, 117, 0, 0.32)`,
+    backgroundColor: 'rgba(181, 117, 0, 0.12)',
+    color: tokens.colorPaletteDarkOrangeForeground1
+  },
+  issueChipInfo: {
+    border: `1px solid rgba(0, 120, 212, 0.28)`,
+    backgroundColor: 'rgba(0, 120, 212, 0.10)',
+    color: tokens.colorBrandForeground1
+  },
+  issueChipIcon: {
+    fontSize: '12px',
+    lineHeight: 1
+  },
+  issueChipCount: {
+    fontSize: tokens.fontSizeBase100,
+    lineHeight: tokens.lineHeightBase100
+  },
+  popover: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXS,
+    maxWidth: '280px'
+  },
+  popoverHeader: {
+    color: tokens.colorNeutralForeground2
+  },
+  issueList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalXXS
+  },
+  issueEntry: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: tokens.spacingHorizontalXS,
+    padding: `${tokens.spacingVerticalXXS} ${tokens.spacingHorizontalXS}`,
+    borderRadius: tokens.borderRadiusSmall,
+    border: '1px solid transparent'
+  },
+  issueEntryError: {
+    borderColor: 'rgba(210, 78, 78, 0.32)',
+    backgroundColor: 'rgba(210, 78, 78, 0.08)',
+    color: tokens.colorPaletteRedForeground1
+  },
+  issueEntryWarning: {
+    borderColor: 'rgba(181, 117, 0, 0.32)',
+    backgroundColor: 'rgba(181, 117, 0, 0.08)',
+    color: tokens.colorPaletteDarkOrangeForeground1
+  },
+  issueEntryInfo: {
+    borderColor: 'rgba(0, 120, 212, 0.28)',
+    backgroundColor: 'rgba(0, 120, 212, 0.08)',
+    color: tokens.colorBrandForeground1
+  },
+  issueEntryIcon: {
+    flexShrink: 0,
+    marginTop: '1px',
+    fontSize: '12px',
+    lineHeight: 1
+  },
+  issueEntryText: {
+    flex: 1,
+    minWidth: 0,
+    whiteSpace: 'normal',
+    color: tokens.colorNeutralForeground1
+  },
   swatch: {
     width: '12px',
     height: '12px',
     borderRadius: tokens.borderRadiusCircular,
     border: `1px solid rgba(255,255,255,0.35)`,
     flexShrink: 0,
-    marginLeft: tokens.spacingHorizontalXXS,
     marginRight: tokens.spacingHorizontalXS,
     boxShadow: `0 0 0 1px ${tokens.colorNeutralBackground4}`
   },
   id: {
     fontFamily: 'monospace',
     fontVariantNumeric: 'tabular-nums',
-    width: '32px',
+    width: '40px',
     textAlign: 'right',
     flexShrink: 0,
     color: tokens.colorNeutralForeground2,
@@ -128,7 +234,7 @@ const useStyles = makeStyles({
   },
   chip: {
     flexShrink: 0,
-    maxWidth: '72px',
+    maxWidth: '96px',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -140,6 +246,7 @@ const useStyles = makeStyles({
   },
   terrain: {
     flex: 1,
+    minWidth: 0,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -165,6 +272,7 @@ export function ProvinceList({ provinceCatalog, selectedIds, onSelect }: Props):
   const scrollRef = useRef<HTMLDivElement>(null)
   const terrains = useMapDataStore((s) => s.terrains)
   const continents = useMapDataStore((s) => s.continents)
+  const issuesByProvinceKey = useProvinceValidationStore((s) => s.issuesByProvinceKey)
 
   const sortedProvinces = useMemo(() => [...provinceCatalog], [provinceCatalog])
 
@@ -239,6 +347,8 @@ export function ProvinceList({ provinceCatalog, selectedIds, onSelect }: Props):
                 const continentChipStyle = continent !== undefined
                   ? makePackedChipStyle(continentColor(continent.position))
                   : undefined
+                const issues = issuesByProvinceKey.get(p.key) ?? []
+                const issueSeverityClassName = getIssueSeverityClassName(styles, issues)
                 return (
                   <ListItem
                     as="div"
@@ -249,6 +359,55 @@ export function ProvinceList({ provinceCatalog, selectedIds, onSelect }: Props):
                       if (p.id !== null) onSelect?.(p.id)
                     }}
                   >
+                    <div className={styles.issueCell}>
+                      {issues.length > 0 && (
+                        <Popover positioning="after-top" withArrow>
+                          <PopoverTrigger disableButtonEnhancement>
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              className={mergeClasses(styles.issueChip, issueSeverityClassName)}
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
+                              }}
+                              aria-label={`Show issues for province ${formatProvinceId(p)}`}
+                            >
+                              <WarningRegular className={styles.issueChipIcon} />
+                              <Text as="span" className={styles.issueChipCount}>
+                                {issues.length}
+                              </Text>
+                            </div>
+                          </PopoverTrigger>
+                          <PopoverSurface onClick={(event) => event.stopPropagation()}>
+                            <div className={styles.popover}>
+                              <Text size={100} weight="semibold">
+                                Province {formatProvinceId(p)}
+                              </Text>
+                              <Text size={100} className={styles.popoverHeader}>
+                                {issues.length} issue{issues.length === 1 ? '' : 's'}
+                              </Text>
+                              <div className={styles.issueList}>
+                                {issues.map((issue, index) => (
+                                  <div
+                                    key={`${issue.code}:${index}`}
+                                    className={mergeClasses(
+                                      styles.issueEntry,
+                                      getIssueEntrySeverityClassName(styles, issue)
+                                    )}
+                                  >
+                                    {renderSeverityIcon(issue.severity, styles.issueEntryIcon)}
+                                    <Text size={100} className={styles.issueEntryText}>
+                                      {issue.message}
+                                    </Text>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </PopoverSurface>
+                        </Popover>
+                      )}
+                    </div>
                     <div
                       className={styles.swatch}
                       style={{ backgroundColor: `rgb(${r},${g},${b})` }}
@@ -286,6 +445,33 @@ export function ProvinceList({ provinceCatalog, selectedIds, onSelect }: Props):
 
 function formatProvinceId(province: ProvinceCatalogEntry): string {
   return province.id === null ? 'xxxxx' : String(province.id)
+}
+
+function getIssueSeverityClassName(
+  styles: ReturnType<typeof useStyles>,
+  issues: ProvinceValidationIssue[]
+): string {
+  if (issues.some((issue) => issue.severity === 'error')) return styles.issueChipError
+  if (issues.some((issue) => issue.severity === 'warning')) return styles.issueChipWarning
+  return styles.issueChipInfo
+}
+
+function getIssueEntrySeverityClassName(
+  styles: ReturnType<typeof useStyles>,
+  issue: ProvinceValidationIssue
+): string {
+  if (issue.severity === 'error') return styles.issueEntryError
+  if (issue.severity === 'warning') return styles.issueEntryWarning
+  return styles.issueEntryInfo
+}
+
+function renderSeverityIcon(
+  severity: ProvinceValidationIssue['severity'],
+  className: string
+): JSX.Element {
+  if (severity === 'error') return <ErrorCircleRegular className={className} />
+  if (severity === 'warning') return <WarningRegular className={className} />
+  return <InfoRegular className={className} />
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {

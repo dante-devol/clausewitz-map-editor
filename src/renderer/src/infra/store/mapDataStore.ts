@@ -13,6 +13,7 @@ interface MapDataState {
 
   // Raw provinces.bmp image, base64-encoded
   provincesImageB64: string | null
+  provinceBitmapStatus: 'idle' | 'loading' | 'ready' | 'error'
 
   // Bulk loaders — replace the entire table at once
   loadProvinces: (provinces: Province[]) => void
@@ -21,6 +22,7 @@ interface MapDataState {
   loadTerrains: (terrains: TerrainCategory[]) => void
   loadContinents: (continents: Continent[]) => void
   loadProvincesImage: (b64: string) => void
+  setProvinceBitmapStatus: (status: 'idle' | 'loading' | 'ready' | 'error') => void
   clear: () => void
 }
 
@@ -31,7 +33,8 @@ const EMPTY_STATE = {
   provinceCatalog: [] as ProvinceCatalogEntry[],
   terrains: new Map<string, TerrainCategory>(),
   continents: new Map<string, Continent>(),
-  provincesImageB64: null as string | null
+  provincesImageB64: null as string | null,
+  provinceBitmapStatus: 'idle' as const
 }
 
 export const useMapDataStore = create<MapDataState>((set) => ({
@@ -67,6 +70,8 @@ export const useMapDataStore = create<MapDataState>((set) => ({
   },
 
   loadProvincesImage: (b64) => set({ provincesImageB64: b64 }),
+
+  setProvinceBitmapStatus: (provinceBitmapStatus) => set({ provinceBitmapStatus }),
 
   clear: () => set({ ...EMPTY_STATE })
 }))
