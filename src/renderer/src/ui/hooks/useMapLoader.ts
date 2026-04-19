@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useCoreApi } from '../../bridge/CoreProvider'
 import { sessionCommands } from '../../core/commands/sessionCommands'
 import { useCoreSelector } from '../../bridge/useCoreSelector'
-import { selectDisplayMode } from '../../core/selectors/mapSelectors'
+import { selectDisplayMode, selectMapOverlays } from '../../core/selectors/mapSelectors'
 import { selectCurrentProjectId } from '../../core/selectors/sessionSelectors'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
 import {
@@ -28,6 +28,7 @@ export function useMapLoader(): void {
   const tRef = useRef(t)
   const projectId = useCoreSelector(selectCurrentProjectId)
   const displayMode = useCoreSelector(selectDisplayMode)
+  const overlays = useCoreSelector(selectMapOverlays)
   const resolvedPaths = useProjectStore((s) => s.resolvedPaths)
   const loadContinents = useMapDataStore((s) => s.loadContinents)
   const loadProvinces = useMapDataStore((s) => s.loadProvinces)
@@ -174,7 +175,8 @@ export function useMapLoader(): void {
 
   useEffect(() => {
     if (!projectId) return
-    if (displayMode !== 'state' || statesStatus !== 'idle') return
+    const stateOverlayVisible = overlays.some((overlay) => overlay.id === 'states' && overlay.visible)
+    if ((displayMode !== 'state' && !stateOverlayVisible) || statesStatus !== 'idle') return
 
     let cancelled = false
     let settled = false
@@ -215,11 +217,12 @@ export function useMapLoader(): void {
       cancelled = true
       if (!settled) notificationService.dismiss(statesScope)
     }
-  }, [displayMode, projectId, replaceStates, setStatesStatus, statesStatus])
+  }, [displayMode, overlays, projectId, replaceStates, setStatesStatus, statesStatus])
 
   useEffect(() => {
     if (!projectId) return
-    if (displayMode !== 'strategicRegion' || strategicRegionsStatus !== 'idle') return
+    const strategicRegionOverlayVisible = overlays.some((overlay) => overlay.id === 'strategicRegions' && overlay.visible)
+    if ((displayMode !== 'strategicRegion' && !strategicRegionOverlayVisible) || strategicRegionsStatus !== 'idle') return
 
     let cancelled = false
     let settled = false
@@ -262,6 +265,7 @@ export function useMapLoader(): void {
     }
   }, [
     displayMode,
+    overlays,
     projectId,
     replaceStrategicRegions,
     setStrategicRegionsStatus,

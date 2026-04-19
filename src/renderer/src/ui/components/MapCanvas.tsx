@@ -5,7 +5,7 @@ import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperReg
 import { useI18n } from '../i18n/I18nProvider'
 import { MapRenderer } from '../../infra/lib/MapRenderer'
 import { BmpProvinceMapSource } from '../../infra/lib/BmpProvinceMapSource'
-import type { CanvasOverlay } from '../contracts/CanvasOverlay'
+import type { CanvasOverlay, BitmapCanvasOverlay } from '../contracts/CanvasOverlay'
 import type { OverlayFilterRule } from '../../core/contracts/MapOverlay'
 import type { ProvinceIndex } from '../../infra/lib/provinceAnalysis'
 import type { NotificationRecord } from '../../infra/store/notificationStore'
@@ -256,14 +256,25 @@ export function MapCanvas({
   const syncOverlaysToRenderer = useCallback(() => {
     const renderer = rendererRef.current
     if (!renderer) return
-    const entries: { id: string; source: ImageBitmap | OffscreenCanvas; opacity: number }[] = []
+    const bitmapEntries: { id: string; source: ImageBitmap | OffscreenCanvas; opacity: number }[] = []
+    const outlineEntries: { id: string; source: ImageBitmap | OffscreenCanvas; opacity: number; color: [number, number, number, number] }[] = []
     for (const overlay of canvasOverlaysRef.current) {
       if (!overlay.visible) continue
-      const entry = overlayBitmapsRef.current.get(overlay.id)
-      if (!entry) continue
-      entries.push({ id: overlay.id, source: getOverlayRenderSource(entry, overlay), opacity: overlay.opacity })
+      if (overlay.kind === 'bitmap') {
+        const entry = overlayBitmapsRef.current.get(overlay.id)
+        if (!entry) continue
+        bitmapEntries.push({ id: overlay.id, source: getOverlayRenderSource(entry, overlay), opacity: overlay.opacity })
+        continue
+      }
+
+      outlineEntries.push({
+        id: overlay.id,
+        source: overlay.source,
+        opacity: overlay.opacity,
+        color: hexToRgba(overlay.lineColor)
+      })
     }
-    renderer.setOverlayTextures(entries)
+    renderer.setOverlayTextures({ bitmapEntries, outlineEntries })
   }, [])
 
   const applyTransform = useCallback((next: Transform) => {
@@ -375,14 +386,15 @@ export function MapCanvas({
 
     for (const [id, entry] of overlayBitmapsRef.current.entries()) {
       const overlay = overlays.find((candidate) => candidate.id === id)
-      if (!overlay || overlay.src !== entry.src) {
+      if (!overlay || overlay.kind !== 'bitmap' || overlay.src !== entry.src) {
         entry.bitmap.close()
         overlayBitmapsRef.current.delete(id)
       }
     }
 
     async function loadOverlays() {
-      const pendingOverlays = overlays.filter((overlay) => {
+      const pendingOverlays = overlays.filter((overlay): overlay is Extract<CanvasOverlay, { kind: 'bitmap' }> => {
+        if (overlay.kind !== 'bitmap') return false
         const existing = overlayBitmapsRef.current.get(overlay.id)
         return !existing || existing.src !== overlay.src
       })
@@ -432,7 +444,7 @@ export function MapCanvas({
       setOverlaysLoadingCount(0)
     })
 
-    if (overlays.length === 0) {
+    if (overlays.length === 0 || overlays.every((overlay) => overlay.kind === 'outline')) {
       setOverlaysLoadingCount(0)
       syncOverlaysToRenderer()
       const { x: tx, y: ty, scale } = transformRef.current
@@ -736,7 +748,7 @@ export function MapCanvas({
   )
 }
 
-function getOverlayRenderSource(entry: OverlayBitmapEntry, overlay: CanvasOverlay): CanvasImageSource {
+function getOverlayRenderSource(entry: OverlayBitmapEntry, overlay: BitmapCanvasOverlay): CanvasImageSource {
   const signature = JSON.stringify({
     configuration: overlay.configuration,
     filterRules: overlay.filterRules
@@ -765,7 +777,7 @@ function getOverlayRenderSource(entry: OverlayBitmapEntry, overlay: CanvasOverla
 function applyOverlayFilterRules(
   pixels: Uint8ClampedArray,
   rules: OverlayFilterRule[],
-  groups: CanvasOverlay['configuration']['groups']
+  groups: BitmapCanvasOverlay['configuration']['groups']
 ): void {
   if (rules.length === 0) return
 
@@ -833,6 +845,16 @@ async function readBitmapPixels(bitmap: ImageBitmap): Promise<{ bitmap: ImageBit
 function hexToPackedColor(hex: string): number {
   const normalized = hex.trim().replace(/^#/, '')
   return parseInt(normalized, 16)
+}
+
+function hexToRgba(hex: string): [number, number, number, number] {
+  const packed = hexToPackedColor(hex)
+  return [
+    ((packed >> 16) & 0xff) / 255,
+    ((packed >> 8) & 0xff) / 255,
+    (packed & 0xff) / 255,
+    1
+  ]
 }
 
 function syncSelectionStructure(

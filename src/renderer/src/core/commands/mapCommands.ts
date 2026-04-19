@@ -12,6 +12,9 @@ export const mapCommands = {
   setOverlayFilterRules: (overlayId: OverlayId, rules: OverlayFilterRule[]) => (
     { type: 'map/setOverlayFilterRules' as const, overlayId, rules }
   ),
+  setOverlayLineColor: (overlayId: OverlayId, lineColor: string) => (
+    { type: 'map/setOverlayLineColor' as const, overlayId, lineColor }
+  ),
   moveOverlay: (overlayId: OverlayId, targetOverlayId: OverlayId) => (
     { type: 'map/moveOverlay' as const, overlayId, targetOverlayId }
   ),

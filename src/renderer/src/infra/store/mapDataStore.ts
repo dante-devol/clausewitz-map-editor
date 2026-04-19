@@ -25,10 +25,12 @@ interface MapDataState {
   statesById: Map<number, StateDefinition>
   stateProvinceToStateId: Map<number, number>
   statesStatus: 'idle' | 'loading' | 'ready' | 'error'
+  statesRevision: number
   strategicRegions: StrategicRegionDefinition[]
   strategicRegionsById: Map<number, StrategicRegionDefinition>
   strategicRegionProvinceToRegionId: Map<number, number>
   strategicRegionsStatus: 'idle' | 'loading' | 'ready' | 'error'
+  strategicRegionsRevision: number
 
   // Raw provinces.bmp image, base64-encoded
   provincesImageB64: string | null
@@ -98,10 +100,12 @@ const EMPTY_STATE = {
   statesById: new Map<number, StateDefinition>(),
   stateProvinceToStateId: new Map<number, number>(),
   statesStatus: 'idle' as const,
+  statesRevision: 0,
   strategicRegions: [] as StrategicRegionDefinition[],
   strategicRegionsById: new Map<number, StrategicRegionDefinition>(),
   strategicRegionProvinceToRegionId: new Map<number, number>(),
   strategicRegionsStatus: 'idle' as const,
+  strategicRegionsRevision: 0,
   provincesImageB64: null as string | null,
   provinceBitmapStatus: 'idle' as const,
   originalDefinitions: new Map<number, Province>(),
@@ -147,13 +151,25 @@ export const useMapDataStore = create<MapDataState>((set) => ({
     set({ continents })
   },
 
-  replaceStates: (incoming) => set(buildStatesSlice(incoming)),
+  replaceStates: (incoming) => set((state) => ({
+    ...buildStatesSlice(incoming),
+    statesRevision: state.statesRevision + 1
+  })),
 
-  appendStates: (incoming) => set((state) => buildStatesSlice([...state.states, ...incoming])),
+  appendStates: (incoming) => set((state) => ({
+    ...buildStatesSlice([...state.states, ...incoming]),
+    statesRevision: state.statesRevision + 1
+  })),
 
-  replaceStrategicRegions: (incoming) => set(buildStrategicRegionsSlice(incoming)),
+  replaceStrategicRegions: (incoming) => set((state) => ({
+    ...buildStrategicRegionsSlice(incoming),
+    strategicRegionsRevision: state.strategicRegionsRevision + 1
+  })),
 
-  appendStrategicRegions: (incoming) => set((state) => buildStrategicRegionsSlice([...state.strategicRegions, ...incoming])),
+  appendStrategicRegions: (incoming) => set((state) => ({
+    ...buildStrategicRegionsSlice([...state.strategicRegions, ...incoming]),
+    strategicRegionsRevision: state.strategicRegionsRevision + 1
+  })),
 
   loadProvincesImage: (b64) => set({ provincesImageB64: b64 }),
 

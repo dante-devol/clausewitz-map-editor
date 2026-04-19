@@ -346,6 +346,7 @@ const MapSidebarTop = memo(function MapSidebarTop({
         onOverlayVisibilityChange={(overlayId, visible) => api.dispatch(mapCommands.setOverlayVisibility(overlayId, visible))}
         onOverlayOpacityChange={(overlayId, opacity) => api.dispatch(mapCommands.setOverlayOpacity(overlayId, opacity))}
         onOverlayFilterRulesChange={(overlayId, rules) => api.dispatch(mapCommands.setOverlayFilterRules(overlayId, rules))}
+        onOverlayLineColorChange={(overlayId, lineColor) => api.dispatch(mapCommands.setOverlayLineColor(overlayId, lineColor))}
       />
     </div>
   )

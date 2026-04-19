@@ -49,6 +49,31 @@ void main() {
 }
 `
 
+const OUTLINE_OVERLAY_FRAG = `#version 300 es
+precision mediump float;
+uniform sampler2D u_tex;
+uniform float u_opacity;
+uniform vec4 u_color;
+uniform vec2 u_poff;
+in vec2 v_uv;
+out vec4 fragColor;
+vec4 sampleGroup(vec2 uv) {
+  return texture(u_tex, clamp(uv, vec2(0.0), vec2(1.0)));
+}
+bool sameGroup(vec4 a, vec4 b) {
+  return distance(a, b) < 0.002;
+}
+void main() {
+  vec4 center = sampleGroup(v_uv);
+  if (center.a <= 0.0) discard;
+  if (sameGroup(center, sampleGroup(v_uv + vec2( u_poff.x, 0.0))) &&
+      sameGroup(center, sampleGroup(v_uv + vec2(-u_poff.x, 0.0))) &&
+      sameGroup(center, sampleGroup(v_uv + vec2(0.0,  u_poff.y))) &&
+      sameGroup(center, sampleGroup(v_uv + vec2(0.0, -u_poff.y)))) discard;
+  fragColor = vec4(u_color.rgb, u_opacity * u_color.a);
+}
+`
+
 // Province outline: for each fragment, looks up whether the province at that UV
 // is selected (via a dedicated selection texture, same 256-column layout as the
 // palette). Checks 4 screen-pixel-offset neighbours; if any differ in selection
@@ -157,6 +182,14 @@ export class MapRenderer {
   private readonly overlayTexLoc: WebGLUniformLocation
   private readonly overlayOpacityLoc: WebGLUniformLocation
   private overlayEntries: { id: string; texture: WebGLTexture; opacity: number }[] = []
+  private readonly outlineOverlayProgram: WebGLProgram
+  private readonly outlineOverlayPosLoc: number
+  private readonly outlineOverlayMatrixLoc: WebGLUniformLocation
+  private readonly outlineOverlayTexLoc: WebGLUniformLocation
+  private readonly outlineOverlayOpacityLoc: WebGLUniformLocation
+  private readonly outlineOverlayColorLoc: WebGLUniformLocation
+  private readonly outlineOverlayPoffLoc: WebGLUniformLocation
+  private outlineOverlayEntries: { id: string; texture: WebGLTexture; opacity: number; color: [number, number, number, number] }[] = []
 
   // --- Province outline pipeline ---
   private readonly outlineProgram: WebGLProgram
@@ -262,6 +295,24 @@ export class MapRenderer {
     this.overlayMatrixLoc = gl.getUniformLocation(overlayProgram, 'u_matrix')!
     this.overlayTexLoc    = gl.getUniformLocation(overlayProgram, 'u_tex')!
     this.overlayOpacityLoc = gl.getUniformLocation(overlayProgram, 'u_opacity')!
+
+    const outlineOverlayVert = compileShader(gl, gl.VERTEX_SHADER, VERT)
+    const outlineOverlayFrag = compileShader(gl, gl.FRAGMENT_SHADER, OUTLINE_OVERLAY_FRAG)
+    const outlineOverlayProgram = gl.createProgram()!
+    gl.attachShader(outlineOverlayProgram, outlineOverlayVert)
+    gl.attachShader(outlineOverlayProgram, outlineOverlayFrag)
+    gl.linkProgram(outlineOverlayProgram)
+    if (!gl.getProgramParameter(outlineOverlayProgram, gl.LINK_STATUS))
+      throw new Error(`Outline overlay shader link error: ${gl.getProgramInfoLog(outlineOverlayProgram)}`)
+    gl.deleteShader(outlineOverlayVert)
+    gl.deleteShader(outlineOverlayFrag)
+    this.outlineOverlayProgram = outlineOverlayProgram
+    this.outlineOverlayPosLoc = gl.getAttribLocation(outlineOverlayProgram, 'a_pos')
+    this.outlineOverlayMatrixLoc = gl.getUniformLocation(outlineOverlayProgram, 'u_matrix')!
+    this.outlineOverlayTexLoc = gl.getUniformLocation(outlineOverlayProgram, 'u_tex')!
+    this.outlineOverlayOpacityLoc = gl.getUniformLocation(outlineOverlayProgram, 'u_opacity')!
+    this.outlineOverlayColorLoc = gl.getUniformLocation(outlineOverlayProgram, 'u_color')!
+    this.outlineOverlayPoffLoc = gl.getUniformLocation(outlineOverlayProgram, 'u_poff')!
 
     // Province outline program: reuses VERT (map transform) + ID-texture neighbour check.
     const outlineVert = compileShader(gl, gl.VERTEX_SHADER, VERT)
@@ -409,15 +460,18 @@ export class MapRenderer {
     this.provinceCentroid = null
   }
 
-  setOverlayTextures(
-    entries: { id: string; source: ImageBitmap | OffscreenCanvas; opacity: number }[]
-  ): void {
+  setOverlayTextures(input: {
+    bitmapEntries: { id: string; source: ImageBitmap | OffscreenCanvas; opacity: number }[]
+    outlineEntries: { id: string; source: ImageBitmap | OffscreenCanvas; opacity: number; color: [number, number, number, number] }[]
+  }): void {
     const { gl } = this
     // Delete all existing overlay textures before uploading new set.
     for (const entry of this.overlayEntries) gl.deleteTexture(entry.texture)
+    for (const entry of this.outlineOverlayEntries) gl.deleteTexture(entry.texture)
     this.overlayEntries = []
+    this.outlineOverlayEntries = []
 
-    for (const e of entries) {
+    for (const e of input.bitmapEntries) {
       const texture = gl.createTexture()!
       gl.bindTexture(gl.TEXTURE_2D, texture)
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, e.source)
@@ -426,6 +480,19 @@ export class MapRenderer {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
       this.overlayEntries.push({ id: e.id, texture, opacity: e.opacity })
+    }
+
+    for (const e of input.outlineEntries) {
+      const texture = gl.createTexture()!
+      gl.bindTexture(gl.TEXTURE_2D, texture)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, e.source)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      // Linear filtering lets binary seam masks resolve to partial coverage
+      // at subpixel scales instead of stepping between full pixels.
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+      this.outlineOverlayEntries.push({ id: e.id, texture, opacity: e.opacity, color: e.color })
     }
   }
 
@@ -520,6 +587,31 @@ export class MapRenderer {
       gl.disable(gl.BLEND)
     }
 
+    if (this.outlineOverlayEntries.length > 0) {
+      const outlineFilter = scale >= 1 ? gl.NEAREST : gl.LINEAR
+      const { width: iw, height: ih } = this._imageSize
+      gl.enable(gl.BLEND)
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+      gl.useProgram(this.outlineOverlayProgram)
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer)
+      gl.enableVertexAttribArray(this.outlineOverlayPosLoc)
+      gl.vertexAttribPointer(this.outlineOverlayPosLoc, 2, gl.FLOAT, false, 0, 0)
+      gl.uniformMatrix3fv(this.outlineOverlayMatrixLoc, false, matrix)
+      gl.uniform1i(this.outlineOverlayTexLoc, 0)
+      const probeScale = scale >= 1 ? 1 / scale : scale
+      gl.uniform2f(this.outlineOverlayPoffLoc, probeScale / iw, probeScale / ih)
+      gl.activeTexture(gl.TEXTURE0)
+      for (const entry of this.outlineOverlayEntries) {
+        gl.bindTexture(gl.TEXTURE_2D, entry.texture)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, outlineFilter)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, outlineFilter)
+        gl.uniform1f(this.outlineOverlayOpacityLoc, entry.opacity)
+        gl.uniform4f(this.outlineOverlayColorLoc, entry.color[0], entry.color[1], entry.color[2], entry.color[3])
+        gl.drawArrays(gl.TRIANGLES, 0, 6)
+      }
+      gl.disable(gl.BLEND)
+    }
+
     // --- Validation outlines ---
     if ((this.validationWarningCount > 0 && this.validationWarningTexture) || (this.validationErrorCount > 0 && this.validationErrorTexture)) {
       const { width: iw, height: ih } = this._imageSize
@@ -592,7 +684,9 @@ export class MapRenderer {
     this.validationErrorBboxGroups = []
     this.provinceCentroid   = null
     for (const entry of this.overlayEntries) this.gl.deleteTexture(entry.texture)
+    for (const entry of this.outlineOverlayEntries) this.gl.deleteTexture(entry.texture)
     this.overlayEntries = []
+    this.outlineOverlayEntries = []
     gl.clear(gl.COLOR_BUFFER_BIT)
   }
 
@@ -672,10 +766,12 @@ export class MapRenderer {
     if (this.validationWarningTexture) gl.deleteTexture(this.validationWarningTexture)
     if (this.validationErrorTexture) gl.deleteTexture(this.validationErrorTexture)
     for (const entry of this.overlayEntries) gl.deleteTexture(entry.texture)
+    for (const entry of this.outlineOverlayEntries) gl.deleteTexture(entry.texture)
     gl.deleteBuffer(this.quadBuffer)
     gl.deleteBuffer(this.bboxDynBuffer)
     gl.deleteProgram(this.program)
     gl.deleteProgram(this.overlayProgram)
+    gl.deleteProgram(this.outlineOverlayProgram)
     gl.deleteProgram(this.outlineProgram)
     gl.deleteProgram(this.validationOutlineProgram)
     gl.deleteProgram(this.bboxProgram)

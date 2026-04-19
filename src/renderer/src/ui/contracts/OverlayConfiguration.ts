@@ -20,7 +20,15 @@ export interface OverlayFilterRuleTemplate {
 }
 
 export interface OverlayConfiguration {
+  kind: 'bitmap'
   overlayId: OverlayId
   groups: OverlayColorGroup[]
   defaultFilterRules?: OverlayFilterRuleTemplate[]
 }
+
+export interface OutlineOverlayConfiguration {
+  kind: 'outline'
+  overlayId: OverlayId
+}
+
+export type OverlayUiConfiguration = OverlayConfiguration | OutlineOverlayConfiguration

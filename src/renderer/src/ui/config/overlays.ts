@@ -1,11 +1,11 @@
 import type { OverlayId } from '../../core/contracts/MapOverlay'
-import type { OverlayConfiguration } from '../contracts/OverlayConfiguration'
+import type { OverlayUiConfiguration } from '../contracts/OverlayConfiguration'
 import type { MessageKey } from '../i18n/messages/en'
 
 export interface OverlayMeta {
   labelKey: MessageKey
-  configPath: string
-  configuration: OverlayConfiguration
+  configPath: string | null
+  configuration: OverlayUiConfiguration
 }
 
 export const OVERLAY_META: Record<OverlayId, OverlayMeta> = {
@@ -13,6 +13,7 @@ export const OVERLAY_META: Record<OverlayId, OverlayMeta> = {
     labelKey: 'overlay.rivers',
     configPath: '/map/rivers.bmp',
     configuration: {
+      kind: 'bitmap',
       overlayId: 'rivers',
       groups: [
         { id: 'sea', label: 'Sea', colors: ['#7a7a7a'] },
@@ -46,6 +47,30 @@ export const OVERLAY_META: Record<OverlayId, OverlayMeta> = {
           color: '#ffffff'
         }
       ]
+    }
+  },
+  provinces: {
+    labelKey: 'overlay.provinces',
+    configPath: null,
+    configuration: {
+      kind: 'outline',
+      overlayId: 'provinces'
+    }
+  },
+  states: {
+    labelKey: 'overlay.states',
+    configPath: null,
+    configuration: {
+      kind: 'outline',
+      overlayId: 'states'
+    }
+  },
+  strategicRegions: {
+    labelKey: 'overlay.strategicRegions',
+    configPath: null,
+    configuration: {
+      kind: 'outline',
+      overlayId: 'strategicRegions'
     }
   }
 }

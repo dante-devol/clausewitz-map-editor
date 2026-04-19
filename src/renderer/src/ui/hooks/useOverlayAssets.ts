@@ -1,24 +1,39 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { OverlayId, MapOverlayState, OverlayFilterRule } from '../../core/contracts/MapOverlay'
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
+import type { OverlayId, MapOverlayState, BitmapMapOverlayState, OutlineMapOverlayState } from '../../core/contracts/MapOverlay'
 import type { ResolvedPaths } from '../../../../shared/pathTypes'
 import type { MessageKey } from '../i18n/messages/en'
-import type { CanvasOverlay } from '../contracts/CanvasOverlay'
-import type { OverlayConfiguration } from '../contracts/OverlayConfiguration'
+import type { CanvasOverlay, BitmapCanvasOverlay, OutlineCanvasOverlay } from '../contracts/CanvasOverlay'
+import type { OverlayConfiguration, OutlineOverlayConfiguration, OverlayUiConfiguration } from '../contracts/OverlayConfiguration'
 import { OVERLAY_META } from '../config/overlays'
+import { useMapDataStore } from '../../infra/store/mapDataStore'
+import { BmpProvinceMapSource } from '../../infra/lib/BmpProvinceMapSource'
+import { buildProvinceIndex, type ProvinceIndex } from '../../infra/lib/provinceAnalysis'
+import { buildGroupedOutlineGroups, buildProvinceOutlineGroups, type OutlineGroupSource } from '../../infra/lib/overlayOutlineMasks'
 
-export interface OverlayPanelItem {
-  id: OverlayId
-  labelKey: MessageKey
-  configPath: string
-  resolvedPath: string | null
-  fileStateLabelKey: MessageKey
-  visible: boolean
-  opacity: number
-  configuration: OverlayConfiguration
-  filterRules: OverlayFilterRule[]
-}
+export type OverlayPanelItem =
+  | {
+    id: OverlayId
+    kind: 'bitmap'
+    labelKey: MessageKey
+    configPath: string
+    resolvedPath: string | null
+    fileStateLabelKey: MessageKey
+    visible: boolean
+    opacity: number
+    configuration: OverlayConfiguration
+    filterRules: BitmapMapOverlayState['filterRules']
+  }
+  | {
+    id: OverlayId
+    kind: 'outline'
+    labelKey: MessageKey
+    visible: boolean
+    opacity: number
+    configuration: OutlineOverlayConfiguration
+    lineColor: string
+  }
 
-interface OverlayAssetEntry {
+interface BitmapOverlayAssetEntry {
   id: OverlayId
   path: string
   hash: string
@@ -26,14 +41,41 @@ interface OverlayAssetEntry {
   externallyModified: boolean
 }
 
-interface OverlayAssetRecord {
+interface OutlineOverlayAssetEntry {
+  cacheKey: string
+  source: OutlineGroupSource
+}
+
+interface ProvinceIndexCacheEntry {
+  signature: string
+  index: ProvinceIndex
+  width: number
+  height: number
+}
+
+interface BitmapOverlayAssetRecord {
   path: string | null
   fileStateLabelKey: MessageKey
   objectUrl: string | null
 }
 
-const INITIAL_OVERLAY_ASSETS: Record<OverlayId, OverlayAssetRecord> = {
+const INITIAL_BITMAP_OVERLAY_ASSETS: Record<OverlayId, BitmapOverlayAssetRecord> = {
   rivers: {
+    path: null,
+    fileStateLabelKey: 'overlay.fileState.unavailable',
+    objectUrl: null
+  },
+  provinces: {
+    path: null,
+    fileStateLabelKey: 'overlay.fileState.unavailable',
+    objectUrl: null
+  },
+  states: {
+    path: null,
+    fileStateLabelKey: 'overlay.fileState.unavailable',
+    objectUrl: null
+  },
+  strategicRegions: {
     path: null,
     fileStateLabelKey: 'overlay.fileState.unavailable',
     objectUrl: null
@@ -47,28 +89,56 @@ export function useOverlayAssets(
   panelOverlays: OverlayPanelItem[]
   canvasOverlays: CanvasOverlay[]
 } {
-  const cacheRef = useRef(new Map<OverlayId, OverlayAssetEntry>())
+  const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
+  const provincesByColor = useMapDataStore((s) => s.provincesByColor)
+  const stateProvinceToStateId = useMapDataStore((s) => s.stateProvinceToStateId)
+  const strategicRegionProvinceToRegionId = useMapDataStore((s) => s.strategicRegionProvinceToRegionId)
+  const statesStatus = useMapDataStore((s) => s.statesStatus)
+  const strategicRegionsStatus = useMapDataStore((s) => s.strategicRegionsStatus)
+  const statesRevision = useMapDataStore((s) => s.statesRevision)
+  const strategicRegionsRevision = useMapDataStore((s) => s.strategicRegionsRevision)
+
+  const bitmapCacheRef = useRef(new Map<OverlayId, BitmapOverlayAssetEntry>())
+  const outlineCacheRef = useRef(new Map<OverlayId, OutlineOverlayAssetEntry>())
+  const provinceIndexRef = useRef<ProvinceIndexCacheEntry | null>(null)
+  const [provinceBitmapHash, setProvinceBitmapHash] = useState<string | null>(null)
   const [assetStateVersion, setAssetStateVersion] = useState(0)
 
   useEffect(() => {
-    if (!resolvedPaths) return
+    if (!resolvedPaths) {
+      setProvinceBitmapHash(null)
+      return
+    }
+
+    let cancelled = false
+
+    void window.api.files.getHash(resolvedPaths.provinces).then((hash) => {
+      if (!cancelled) setProvinceBitmapHash(hash)
+    })
 
     const unsubscribe = window.api.files.onChanged((event) => {
-      for (const entry of cacheRef.current.values()) {
+      for (const entry of bitmapCacheRef.current.values()) {
         if (entry.path !== event.path) continue
         entry.externallyModified = entry.hash !== event.hash
         setAssetStateVersion((version) => version + 1)
       }
+
+      if (event.path === resolvedPaths.provinces) {
+        setProvinceBitmapHash(event.hash)
+      }
     })
 
     return () => {
+      cancelled = true
       unsubscribe()
 
-      for (const entry of cacheRef.current.values()) {
+      for (const entry of bitmapCacheRef.current.values()) {
         URL.revokeObjectURL(entry.objectUrl)
         void window.api.files.unload(entry.path)
       }
-      cacheRef.current.clear()
+      bitmapCacheRef.current.clear()
+      outlineCacheRef.current.clear()
+      provinceIndexRef.current = null
     }
   }, [resolvedPaths])
 
@@ -80,31 +150,52 @@ export function useOverlayAssets(
     async function ensureVisibleOverlaysLoaded() {
       for (const overlay of overlays) {
         if (!overlay.visible) continue
-        const resolvedPath = resolveOverlayPath(overlay.id, resolvedPaths)
-        if (!resolvedPath) continue
 
-        const existing = cacheRef.current.get(overlay.id)
-        if (existing && existing.path === resolvedPath) continue
+        if (overlay.kind === 'bitmap') {
+          const resolvedPath = resolveOverlayPath(overlay.id, resolvedPaths)
+          if (!resolvedPath) continue
 
-        const result = await window.api.files.load(resolvedPath)
-        if (cancelled) {
-          await window.api.files.unload(result.path)
+          const existing = bitmapCacheRef.current.get(overlay.id)
+          if (existing && existing.path === resolvedPath) continue
+
+          const result = await window.api.files.load(resolvedPath)
+          if (cancelled) {
+            await window.api.files.unload(result.path)
+            continue
+          }
+
+          const previous = bitmapCacheRef.current.get(overlay.id)
+          if (previous && previous.path !== result.path) {
+            URL.revokeObjectURL(previous.objectUrl)
+            await window.api.files.unload(previous.path)
+          }
+
+          bitmapCacheRef.current.set(overlay.id, {
+            id: overlay.id,
+            path: result.path,
+            hash: result.hash,
+            objectUrl: createBmpObjectUrl(result.content),
+            externallyModified: false
+          })
+          setAssetStateVersion((version) => version + 1)
           continue
         }
 
-        const previous = cacheRef.current.get(overlay.id)
-        if (previous && previous.path !== result.path) {
-          URL.revokeObjectURL(previous.objectUrl)
-          await window.api.files.unload(previous.path)
-        }
-
-        cacheRef.current.set(overlay.id, {
-          id: overlay.id,
-          path: result.path,
-          hash: result.hash,
-          objectUrl: createBmpObjectUrl(result.content),
-          externallyModified: false
-        })
+        const outlineAsset = await ensureOutlineOverlayLoaded(
+          overlay,
+          provincesImageB64,
+          provinceBitmapHash,
+          provinceIndexRef,
+          outlineCacheRef,
+          provincesByColor,
+          stateProvinceToStateId,
+          strategicRegionProvinceToRegionId,
+          statesStatus,
+          strategicRegionsStatus,
+          statesRevision,
+          strategicRegionsRevision
+        )
+        if (cancelled || !outlineAsset) continue
         setAssetStateVersion((version) => version + 1)
       }
     }
@@ -114,57 +205,187 @@ export function useOverlayAssets(
     return () => {
       cancelled = true
     }
-  }, [overlays, resolvedPaths])
+  }, [
+    overlays,
+    provincesImageB64,
+    provincesByColor,
+    provinceBitmapHash,
+    resolvedPaths,
+    stateProvinceToStateId,
+    statesRevision,
+    statesStatus,
+    strategicRegionProvinceToRegionId,
+    strategicRegionsRevision,
+    strategicRegionsStatus
+  ])
 
   return useMemo(() => {
-    const assetRecords = buildAssetRecords(cacheRef.current, resolvedPaths)
+    const bitmapAssetRecords = buildBitmapAssetRecords(bitmapCacheRef.current, resolvedPaths)
 
     return {
-      panelOverlays: overlays.map((overlay) => {
-        const meta = OVERLAY_META[overlay.id]
-        const asset = assetRecords[overlay.id]
-        return {
-          id: overlay.id,
-          labelKey: meta.labelKey,
-          configPath: meta.configPath,
-          resolvedPath: asset.path,
-          fileStateLabelKey: asset.fileStateLabelKey,
-          visible: overlay.visible,
-          opacity: overlay.opacity,
-          configuration: meta.configuration,
-          filterRules: overlay.filterRules
+      panelOverlays: overlays.map((overlay) => buildPanelOverlayItem(overlay, bitmapAssetRecords)),
+      canvasOverlays: overlays.flatMap<CanvasOverlay>((overlay) => {
+        if (!overlay.visible) return []
+        if (overlay.kind === 'bitmap') {
+          const asset = bitmapAssetRecords[overlay.id]
+          if (!asset.objectUrl) return []
+          return [{
+            id: overlay.id,
+            kind: 'bitmap',
+            src: asset.objectUrl,
+            visible: overlay.visible,
+            opacity: overlay.opacity / 100,
+            configuration: OVERLAY_META[overlay.id].configuration as OverlayConfiguration,
+            filterRules: overlay.filterRules
+          } satisfies BitmapCanvasOverlay]
         }
-      }),
-      canvasOverlays: overlays.flatMap((overlay) => {
-        const asset = assetRecords[overlay.id]
-        if (!asset.objectUrl) return []
+
+        const asset = outlineCacheRef.current.get(overlay.id)
+        if (!asset) return []
         return [{
           id: overlay.id,
-          src: asset.objectUrl,
+          kind: 'outline',
           visible: overlay.visible,
           opacity: overlay.opacity / 100,
-          configuration: OVERLAY_META[overlay.id].configuration,
-          filterRules: overlay.filterRules
-        }]
+          lineColor: overlay.lineColor,
+          source: asset.source.canvas
+        } satisfies OutlineCanvasOverlay]
       })
     }
   }, [assetStateVersion, overlays, resolvedPaths])
 }
 
-function buildAssetRecords(
-  cache: Map<OverlayId, OverlayAssetEntry>,
-  resolvedPaths: ResolvedPaths | null
-): Record<OverlayId, OverlayAssetRecord> {
+function buildPanelOverlayItem(
+  overlay: MapOverlayState,
+  bitmapAssetRecords: Record<OverlayId, BitmapOverlayAssetRecord>
+): OverlayPanelItem {
+  const meta = OVERLAY_META[overlay.id]
+  if (overlay.kind === 'bitmap') {
+    const asset = bitmapAssetRecords[overlay.id]
+    return {
+      id: overlay.id,
+      kind: 'bitmap',
+      labelKey: meta.labelKey,
+      configPath: meta.configPath ?? '',
+      resolvedPath: asset.path,
+      fileStateLabelKey: asset.fileStateLabelKey,
+      visible: overlay.visible,
+      opacity: overlay.opacity,
+      configuration: meta.configuration as OverlayConfiguration,
+      filterRules: overlay.filterRules
+    }
+  }
+
   return {
-    rivers: buildAssetRecord('rivers', cache, resolvedPaths)
+    id: overlay.id,
+    kind: 'outline',
+    labelKey: meta.labelKey,
+    visible: overlay.visible,
+    opacity: overlay.opacity,
+    configuration: meta.configuration as OutlineOverlayConfiguration,
+    lineColor: overlay.lineColor
   }
 }
 
-function buildAssetRecord(
+async function ensureOutlineOverlayLoaded(
+  overlay: OutlineMapOverlayState,
+  provincesImageB64: string | null,
+  provinceBitmapHash: string | null,
+  provinceIndexRef: MutableRefObject<ProvinceIndexCacheEntry | null>,
+  outlineCacheRef: MutableRefObject<Map<OverlayId, OutlineOverlayAssetEntry>>,
+  provincesByColor: ReadonlyMap<number, number>,
+  stateProvinceToStateId: ReadonlyMap<number, number>,
+  strategicRegionProvinceToRegionId: ReadonlyMap<number, number>,
+  statesStatus: 'idle' | 'loading' | 'ready' | 'error',
+  strategicRegionsStatus: 'idle' | 'loading' | 'ready' | 'error',
+  statesRevision: number,
+  strategicRegionsRevision: number
+): Promise<OutlineOverlayAssetEntry | null> {
+  if (!provincesImageB64) return null
+  if (overlay.id === 'states' && statesStatus !== 'ready') return null
+  if (overlay.id === 'strategicRegions' && strategicRegionsStatus !== 'ready') return null
+
+  const imageSignature = provinceBitmapHash ?? provincesImageB64
+  if (provinceIndexRef.current?.signature !== imageSignature) {
+    const source = await BmpProvinceMapSource.load(`data:image/bmp;base64,${provincesImageB64}`)
+    try {
+      provinceIndexRef.current = {
+        signature: imageSignature,
+        index: buildProvinceIndex({
+          data: source.pixelData,
+          width: source.width,
+          height: source.height
+        }),
+        width: source.width,
+        height: source.height
+      }
+      outlineCacheRef.current.clear()
+    } finally {
+      source.dispose()
+    }
+  }
+
+  const provinceIndexEntry = provinceIndexRef.current
+  if (!provinceIndexEntry) return null
+
+  const cacheKey = getOutlineOverlayCacheKey(
+    overlay.id,
+    imageSignature,
+    statesRevision,
+    strategicRegionsRevision
+  )
+  const cached = outlineCacheRef.current.get(overlay.id)
+  if (cached && cached.cacheKey === cacheKey) return cached
+
+  const source = overlay.id === 'provinces'
+    ? buildProvinceOutlineGroups(provinceIndexEntry.index, provinceIndexEntry.width, provinceIndexEntry.height)
+    : overlay.id === 'states'
+      ? buildGroupedOutlineGroups(
+        provinceIndexEntry.index,
+        provinceIndexEntry.width,
+        provinceIndexEntry.height,
+        remapGroupsToBitmapProvinceIds(provinceIndexEntry.index, provincesByColor, stateProvinceToStateId)
+      )
+      : buildGroupedOutlineGroups(
+        provinceIndexEntry.index,
+        provinceIndexEntry.width,
+        provinceIndexEntry.height,
+        remapGroupsToBitmapProvinceIds(provinceIndexEntry.index, provincesByColor, strategicRegionProvinceToRegionId)
+      )
+
+  const next = { cacheKey, source }
+  outlineCacheRef.current.set(overlay.id, next)
+  return next
+}
+
+function getOutlineOverlayCacheKey(
   overlayId: OverlayId,
-  cache: Map<OverlayId, OverlayAssetEntry>,
+  provinceBitmapHash: string,
+  statesRevision: number,
+  strategicRegionsRevision: number
+): string {
+  if (overlayId === 'states') return `${overlayId}:${provinceBitmapHash}:${statesRevision}`
+  if (overlayId === 'strategicRegions') return `${overlayId}:${provinceBitmapHash}:${strategicRegionsRevision}`
+  return `${overlayId}:${provinceBitmapHash}`
+}
+
+function buildBitmapAssetRecords(
+  cache: Map<OverlayId, BitmapOverlayAssetEntry>,
   resolvedPaths: ResolvedPaths | null
-): OverlayAssetRecord {
+): Record<OverlayId, BitmapOverlayAssetRecord> {
+  return {
+    rivers: buildBitmapAssetRecord('rivers', cache, resolvedPaths),
+    provinces: INITIAL_BITMAP_OVERLAY_ASSETS.provinces,
+    states: INITIAL_BITMAP_OVERLAY_ASSETS.states,
+    strategicRegions: INITIAL_BITMAP_OVERLAY_ASSETS.strategicRegions
+  }
+}
+
+function buildBitmapAssetRecord(
+  overlayId: OverlayId,
+  cache: Map<OverlayId, BitmapOverlayAssetEntry>,
+  resolvedPaths: ResolvedPaths | null
+): BitmapOverlayAssetRecord {
   const cached = cache.get(overlayId)
   if (cached) {
     return {
@@ -175,7 +396,7 @@ function buildAssetRecord(
   }
 
   return {
-    ...INITIAL_OVERLAY_ASSETS[overlayId],
+    ...INITIAL_BITMAP_OVERLAY_ASSETS[overlayId],
     path: resolvedPaths ? resolveOverlayPath(overlayId, resolvedPaths) : null
   }
 }
@@ -193,4 +414,20 @@ function createBmpObjectUrl(base64: string): string {
   }
   const blob = new Blob([bytes], { type: 'image/bmp' })
   return URL.createObjectURL(blob)
+}
+
+function remapGroupsToBitmapProvinceIds(
+  provinceIndex: ProvinceIndex,
+  provincesByColor: ReadonlyMap<number, number>,
+  groupsByProvinceId: ReadonlyMap<number, number>
+): Map<number, number> {
+  const groupsByBitmapProvinceId = new Map<number, number>()
+  for (const [packedColor, bitmapProvinceId] of provinceIndex.colorToId) {
+    const provinceId = provincesByColor.get(packedColor)
+    if (provinceId === undefined) continue
+    const groupId = groupsByProvinceId.get(provinceId)
+    if (groupId === undefined) continue
+    groupsByBitmapProvinceId.set(bitmapProvinceId, groupId)
+  }
+  return groupsByBitmapProvinceId
 }

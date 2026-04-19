@@ -36,7 +36,22 @@ export function handleMapCommand(state: CoreState, command: CoreCommand): CoreSt
         map: {
           ...state.map,
           overlays: state.map.overlays.map((overlay) =>
-            overlay.id === command.overlayId ? { ...overlay, filterRules: command.rules } : overlay
+            overlay.id === command.overlayId && overlay.kind === 'bitmap'
+              ? { ...overlay, filterRules: command.rules }
+              : overlay
+          )
+        }
+      }
+
+    case 'map/setOverlayLineColor':
+      return {
+        ...state,
+        map: {
+          ...state.map,
+          overlays: state.map.overlays.map((overlay) =>
+            overlay.id === command.overlayId && overlay.kind === 'outline'
+              ? { ...overlay, lineColor: command.lineColor }
+              : overlay
           )
         }
       }

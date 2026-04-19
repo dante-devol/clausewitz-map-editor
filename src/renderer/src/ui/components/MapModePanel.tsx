@@ -411,6 +411,7 @@ interface Props {
   onOverlayVisibilityChange: (overlayId: OverlayId, visible: boolean) => void
   onOverlayOpacityChange: (overlayId: OverlayId, opacity: number) => void
   onOverlayFilterRulesChange: (overlayId: OverlayId, rules: OverlayFilterRule[]) => void
+  onOverlayLineColorChange: (overlayId: OverlayId, lineColor: string) => void
 }
 
 export function MapModePanel({
@@ -418,7 +419,8 @@ export function MapModePanel({
   onOverlayMove,
   onOverlayVisibilityChange,
   onOverlayOpacityChange,
-  onOverlayFilterRulesChange
+  onOverlayFilterRulesChange,
+  onOverlayLineColorChange
 }: Props): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
@@ -430,6 +432,11 @@ export function MapModePanel({
   const selectedOverlay = overlays.find((overlay) => overlay.id === overlayDialogId) ?? null
 
   function openOverlayDialog(overlay: OverlayPanelItem) {
+    if (overlay.kind !== 'bitmap') {
+      setOverlayDialogId(overlay.id)
+      return
+    }
+
     const hasDefaults = (overlay.configuration.defaultFilterRules?.length ?? 0) > 0
     const alreadyInitialized = initializedOverlayDefaults.includes(overlay.id)
 
@@ -528,6 +535,7 @@ export function MapModePanel({
         overlay={selectedOverlay}
         onOverlayOpacityChange={onOverlayOpacityChange}
         onOverlayFilterRulesChange={onOverlayFilterRulesChange}
+        onOverlayLineColorChange={onOverlayLineColorChange}
         onClose={() => setOverlayDialogId(null)}
       />
     </>
@@ -538,6 +546,7 @@ interface OverlayOptionsDialogProps {
   overlay: OverlayPanelItem | null
   onOverlayOpacityChange: (overlayId: OverlayId, opacity: number) => void
   onOverlayFilterRulesChange: (overlayId: OverlayId, rules: OverlayFilterRule[]) => void
+  onOverlayLineColorChange: (overlayId: OverlayId, lineColor: string) => void
   onClose: () => void
 }
 
@@ -545,6 +554,7 @@ function OverlayOptionsDialog({
   overlay,
   onOverlayOpacityChange,
   onOverlayFilterRulesChange,
+  onOverlayLineColorChange,
   onClose
 }: OverlayOptionsDialogProps): JSX.Element {
   const styles = useStyles()
@@ -561,28 +571,30 @@ function OverlayOptionsDialog({
             <div className={styles.section}>
               {overlay && (
                 <>
-                  <div className={styles.overlayDialogMeta}>
-                    <div className={styles.overlayChip}>
-                      <Text size={100}>{t('overlay.configPathLabelShort')}</Text>
-                      <span className={styles.overlayChipValue}>{formatPathChipValue(overlay.configPath)}</span>
+                  {overlay.kind === 'bitmap' && (
+                    <div className={styles.overlayDialogMeta}>
+                      <div className={styles.overlayChip}>
+                        <Text size={100}>{t('overlay.configPathLabelShort')}</Text>
+                        <span className={styles.overlayChipValue}>{formatPathChipValue(overlay.configPath)}</span>
+                      </div>
+                      <div className={styles.overlayChip}>
+                        <Text size={100}>{t('overlay.resolvedPathLabelShort')}</Text>
+                        <span className={styles.overlayChipValue}>
+                          {overlay.resolvedPath ? formatPathChipValue(overlay.resolvedPath) : t('overlay.notResolved')}
+                        </span>
+                      </div>
+                      <div className={styles.overlayChip}>
+                        <span
+                          className={mergeClasses(
+                            styles.overlayStateIcon,
+                            overlay.resolvedPath ? styles.overlayStateAvailable : styles.overlayStateUnavailable
+                          )}
+                        >
+                          {overlay.resolvedPath ? <CheckmarkCircleRegular /> : <DismissRegular />}
+                        </span>
+                      </div>
                     </div>
-                    <div className={styles.overlayChip}>
-                      <Text size={100}>{t('overlay.resolvedPathLabelShort')}</Text>
-                      <span className={styles.overlayChipValue}>
-                        {overlay.resolvedPath ? formatPathChipValue(overlay.resolvedPath) : t('overlay.notResolved')}
-                      </span>
-                    </div>
-                    <div className={styles.overlayChip}>
-                      <span
-                        className={mergeClasses(
-                          styles.overlayStateIcon,
-                          overlay.resolvedPath ? styles.overlayStateAvailable : styles.overlayStateUnavailable
-                        )}
-                      >
-                        {overlay.resolvedPath ? <CheckmarkCircleRegular /> : <DismissRegular />}
-                      </span>
-                    </div>
-                  </div>
+                  )}
 
                   <div className={styles.overlayDialogField}>
                     <Text size={100}>{t('overlay.opacity')}</Text>
@@ -603,101 +615,112 @@ function OverlayOptionsDialog({
                     />
                   </div>
 
-                  <div className={styles.overlayDialogField}>
-                    <div className={styles.overlayRuleGroupTop}>
-                      <Text size={200} weight="semibold">{t('overlay.filterRules')}</Text>
-                      <Button
-                        size="small"
-                        appearance="secondary"
-                        className={styles.overlayRuleAddButton}
-                        icon={<Add12Regular />}
-                        aria-label={t('overlay.addRule')}
-                        onClick={() => onOverlayFilterRulesChange(overlay.id, [
-                          ...overlay.filterRules,
-                          createDefaultOverlayFilterRule(overlay)
-                        ])}
-                      />
-                    </div>
-                    {overlay.filterRules.length === 0 ? (
-                      <Text size={100}>{t('overlay.noRules')}</Text>
-                    ) : (
-                      <div className={styles.overlayRuleList}>
-                        {overlay.filterRules.map((rule) => (
-                          <div key={rule.id} className={styles.overlayRuleRow}>
-                            <div className={styles.overlayRuleGroupField}>
-                              <div className={styles.overlayRuleGroupTop}>
-                                <Select
-                                  className={styles.overlayRuleGroupSelect}
-                                  value={rule.target.kind === 'group' ? rule.target.groupId : '__custom__'}
-                                  onChange={(_, data) => {
-                                    const value = data.value
-                                    const nextTarget = value === '__custom__'
-                                      ? { kind: 'custom' as const, colors: [] }
-                                      : { kind: 'group' as const, groupId: value }
-                                    onOverlayFilterRulesChange(
-                                      overlay.id,
-                                      overlay.filterRules.map((candidate) => (
-                                        candidate.id === rule.id ? { ...candidate, target: nextTarget } : candidate
-                                      ))
-                                    )
-                                  }}
-                                >
-                                  {overlay.configuration.groups.map((group) => (
-                                    <option key={group.id} value={group.id}>{group.label}</option>
-                                  ))}
-                                  <option value="__custom__">{t('overlay.targetCustom')}</option>
-                                </Select>
-                                <RuleColorChips
-                                  overlay={overlay}
-                                  rule={rule}
-                                  onChangeRules={(rules) => onOverlayFilterRulesChange(overlay.id, rules)}
+                  {overlay.kind === 'bitmap' ? (
+                    <div className={styles.overlayDialogField}>
+                      <div className={styles.overlayRuleGroupTop}>
+                        <Text size={200} weight="semibold">{t('overlay.filterRules')}</Text>
+                        <Button
+                          size="small"
+                          appearance="secondary"
+                          className={styles.overlayRuleAddButton}
+                          icon={<Add12Regular />}
+                          aria-label={t('overlay.addRule')}
+                          onClick={() => onOverlayFilterRulesChange(overlay.id, [
+                            ...overlay.filterRules,
+                            createDefaultOverlayFilterRule(overlay)
+                          ])}
+                        />
+                      </div>
+                      {overlay.filterRules.length === 0 ? (
+                        <Text size={100}>{t('overlay.noRules')}</Text>
+                      ) : (
+                        <div className={styles.overlayRuleList}>
+                          {overlay.filterRules.map((rule) => (
+                            <div key={rule.id} className={styles.overlayRuleRow}>
+                              <div className={styles.overlayRuleGroupField}>
+                                <div className={styles.overlayRuleGroupTop}>
+                                  <Select
+                                    className={styles.overlayRuleGroupSelect}
+                                    value={rule.target.kind === 'group' ? rule.target.groupId : '__custom__'}
+                                    onChange={(_, data) => {
+                                      const value = data.value
+                                      const nextTarget = value === '__custom__'
+                                        ? { kind: 'custom' as const, colors: [] }
+                                        : { kind: 'group' as const, groupId: value }
+                                      onOverlayFilterRulesChange(
+                                        overlay.id,
+                                        overlay.filterRules.map((candidate) => (
+                                          candidate.id === rule.id ? { ...candidate, target: nextTarget } : candidate
+                                        ))
+                                      )
+                                    }}
+                                  >
+                                    {overlay.configuration.groups.map((group) => (
+                                      <option key={group.id} value={group.id}>{group.label}</option>
+                                    ))}
+                                    <option value="__custom__">{t('overlay.targetCustom')}</option>
+                                  </Select>
+                                  <RuleColorChips
+                                    overlay={overlay}
+                                    rule={rule}
+                                    onChangeRules={(rules) => onOverlayFilterRulesChange(overlay.id, rules)}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className={styles.overlayRuleActions}>
+                                <OverlayRuleColorOverrideControl
+                                  color={rule.color}
+                                  initialColor={getDefaultRuleOverrideColor(rule, overlay)}
+                                  onChangeColor={(color) => onOverlayFilterRulesChange(
+                                    overlay.id,
+                                    overlay.filterRules.map((candidate) => (
+                                      candidate.id === rule.id ? { ...candidate, color } : candidate
+                                    ))
+                                  )}
+                                  onClear={() => onOverlayFilterRulesChange(
+                                    overlay.id,
+                                    overlay.filterRules.map((candidate) => (
+                                      candidate.id === rule.id ? { ...candidate, color: null } : candidate
+                                    ))
+                                  )}
+                                />
+                                <OverlayRuleVisibilityControl
+                                  visible={rule.visible}
+                                  opacity={rule.opacity}
+                                  onChange={(next) => onOverlayFilterRulesChange(
+                                    overlay.id,
+                                    overlay.filterRules.map((candidate) => (
+                                      candidate.id === rule.id ? { ...candidate, ...next } : candidate
+                                    ))
+                                  )}
+                                />
+                                <Button
+                                  size="small"
+                                  appearance="subtle"
+                                  icon={<DismissRegular />}
+                                  aria-label={t('overlay.removeRule')}
+                                  onClick={() => onOverlayFilterRulesChange(
+                                    overlay.id,
+                                    overlay.filterRules.filter((candidate) => candidate.id !== rule.id)
+                                  )}
                                 />
                               </div>
                             </div>
-
-                            <div className={styles.overlayRuleActions}>
-                              <OverlayRuleColorOverrideControl
-                                color={rule.color}
-                                initialColor={getDefaultRuleOverrideColor(rule, overlay)}
-                                onChangeColor={(color) => onOverlayFilterRulesChange(
-                                  overlay.id,
-                                  overlay.filterRules.map((candidate) => (
-                                    candidate.id === rule.id ? { ...candidate, color } : candidate
-                                  ))
-                                )}
-                                onClear={() => onOverlayFilterRulesChange(
-                                  overlay.id,
-                                  overlay.filterRules.map((candidate) => (
-                                    candidate.id === rule.id ? { ...candidate, color: null } : candidate
-                                  ))
-                                )}
-                              />
-                              <OverlayRuleVisibilityControl
-                                visible={rule.visible}
-                                opacity={rule.opacity}
-                                onChange={(next) => onOverlayFilterRulesChange(
-                                  overlay.id,
-                                  overlay.filterRules.map((candidate) => (
-                                    candidate.id === rule.id ? { ...candidate, ...next } : candidate
-                                  ))
-                                )}
-                              />
-                              <Button
-                                size="small"
-                                appearance="subtle"
-                                icon={<DismissRegular />}
-                                aria-label={t('overlay.removeRule')}
-                                onClick={() => onOverlayFilterRulesChange(
-                                  overlay.id,
-                                  overlay.filterRules.filter((candidate) => candidate.id !== rule.id)
-                                )}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className={styles.overlayDialogField}>
+                      <Text size={200} weight="semibold">{t('overlay.lineColor')}</Text>
+                      <OverlayRuleColorOverrideControl
+                        color={overlay.lineColor}
+                        initialColor={overlay.lineColor}
+                        onChangeColor={(color) => onOverlayLineColorChange(overlay.id, color)}
+                      />
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -711,7 +734,7 @@ function OverlayOptionsDialog({
   )
 }
 
-function createDefaultOverlayFilterRule(overlay: OverlayPanelItem): OverlayFilterRule {
+function createDefaultOverlayFilterRule(overlay: Extract<OverlayPanelItem, { kind: 'bitmap' }>): OverlayFilterRule {
   return {
     id: crypto.randomUUID(),
     target: {
@@ -773,7 +796,7 @@ function RuleColorChips({
   rule,
   onChangeRules
 }: {
-  overlay: OverlayPanelItem
+  overlay: Extract<OverlayPanelItem, { kind: 'bitmap' }>
   rule: OverlayFilterRule
   onChangeRules: (rules: OverlayFilterRule[]) => void
 }): JSX.Element {
@@ -853,11 +876,14 @@ function RuleColorChips({
   )
 }
 
-function getDefaultRuleOverrideColor(rule: OverlayFilterRule, overlay: OverlayPanelItem): string {
+function getDefaultRuleOverrideColor(
+  rule: OverlayFilterRule,
+  overlay: Extract<OverlayPanelItem, { kind: 'bitmap' }>
+): string {
   return getRuleColors(rule, overlay)[0] ?? '#ffffff'
 }
 
-function getRuleColors(rule: OverlayFilterRule, overlay: OverlayPanelItem): string[] {
+function getRuleColors(rule: OverlayFilterRule, overlay: Extract<OverlayPanelItem, { kind: 'bitmap' }>): string[] {
   if (rule.target.kind === 'custom') return rule.target.colors
   return overlay.configuration.groups.find((group) => group.id === rule.target.groupId)?.colors ?? []
 }

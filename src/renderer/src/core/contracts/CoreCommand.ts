@@ -16,4 +16,5 @@ export type CoreCommand =
   | { type: 'map/setOverlayVisibility'; overlayId: OverlayId; visible: boolean }
   | { type: 'map/setOverlayOpacity'; overlayId: OverlayId; opacity: number }
   | { type: 'map/setOverlayFilterRules'; overlayId: OverlayId; rules: OverlayFilterRule[] }
+  | { type: 'map/setOverlayLineColor'; overlayId: OverlayId; lineColor: string }
   | { type: 'map/moveOverlay'; overlayId: OverlayId; targetOverlayId: OverlayId }
