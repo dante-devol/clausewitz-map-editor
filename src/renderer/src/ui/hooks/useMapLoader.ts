@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useCoreApi } from '../../bridge/CoreProvider'
 import { sessionCommands } from '../../core/commands/sessionCommands'
 import { useCoreSelector } from '../../bridge/useCoreSelector'
@@ -14,12 +14,18 @@ import type { StateDatasetUpdate, StrategicRegionDatasetUpdate } from '../../../
 import { BmpProvinceMapSource } from '../../infra/lib/BmpProvinceMapSource'
 import { analyzeProvinceBitmapFacts } from '../../infra/lib/provinceBitmapFacts'
 import { useProjectStore } from '../../infra/store/projectStore'
+import { notificationService } from '../../infra/services/notificationService'
+import { useI18n } from '../i18n/I18nProvider'
 
 const provinceBitmapFactsCache = new Map<string, ProvinceBitmapFacts>()
+const MAP_LOAD_TOTAL_STEPS = 4
+const BITMAP_RECONCILE_TOTAL_STEPS = 5
 
 // Loads and keeps map data in sync for the active project session.
 export function useMapLoader(): void {
   const api = useCoreApi()
+  const { t } = useI18n()
+  const tRef = useRef(t)
   const projectId = useCoreSelector(selectCurrentProjectId)
   const displayMode = useCoreSelector(selectDisplayMode)
   const resolvedPaths = useProjectStore((s) => s.resolvedPaths)
@@ -45,28 +51,70 @@ export function useMapLoader(): void {
   const clear = useMapDataStore((s) => s.clear)
 
   useEffect(() => {
+    tRef.current = t
+  }, [t])
+
+  useEffect(() => {
     if (!projectId) return
 
     let cancelled = false
+    let settled = false
+    const loadScope = `map-load:${projectId}`
 
     async function load() {
+      notificationService.beginProgress({
+        scope: loadScope,
+        title: tRef.current('notification.mapLoad.title'),
+        message: tRef.current('notification.mapLoad.step.request'),
+        progress: { current: 1, total: MAP_LOAD_TOTAL_STEPS }
+      })
       api.dispatch(sessionCommands.mapLoadingStarted())
       try {
         const snapshot = await window.api.map.load(projectId)
         if (cancelled) return
+        notificationService.advanceProgress({
+          scope: loadScope,
+          title: tRef.current('notification.mapLoad.title'),
+          message: tRef.current('notification.mapLoad.step.datasets'),
+          progress: { current: 2, total: MAP_LOAD_TOTAL_STEPS }
+        })
         loadContinents(snapshot.continents)
         loadTerrains(snapshot.terrains)
         loadProvincesImage(snapshot.provincesImageB64)
         loadProvinces(snapshot.provinces)
+        notificationService.advanceProgress({
+          scope: loadScope,
+          title: tRef.current('notification.mapLoad.title'),
+          message: tRef.current('notification.mapLoad.step.catalog'),
+          progress: { current: 3, total: MAP_LOAD_TOTAL_STEPS }
+        })
         loadOriginalDefinitions(snapshot.provinces)
         loadProvinceCatalog(snapshot.provinceCatalog)
         setStatesStatus('idle')
         setStrategicRegionsStatus('idle')
         setProvinceBitmapStatus('idle')
+        notificationService.advanceProgress({
+          scope: loadScope,
+          title: tRef.current('notification.mapLoad.title'),
+          message: tRef.current('notification.mapLoad.step.finalize'),
+          progress: { current: 4, total: MAP_LOAD_TOTAL_STEPS }
+        })
         api.dispatch(sessionCommands.mapReady())
+        notificationService.completeProgress({
+          scope: loadScope,
+          title: tRef.current('notification.mapLoad.doneTitle'),
+          message: tRef.current('notification.mapLoad.doneMessage')
+        })
+        settled = true
       } catch (error) {
         if (cancelled) return
         api.dispatch(sessionCommands.failed(error instanceof Error ? error.message : 'Failed to load map'))
+        notificationService.failProgress({
+          scope: loadScope,
+          title: tRef.current('notification.mapLoad.failedTitle'),
+          message: error instanceof Error ? error.message : tRef.current('notification.mapLoad.failedMessage')
+        })
+        settled = true
       }
     }
 
@@ -100,6 +148,7 @@ export function useMapLoader(): void {
 
     return () => {
       cancelled = true
+      if (!settled) notificationService.dismiss(loadScope)
       unsubscribe()
       api.dispatch(sessionCommands.cleared())
       clear()
@@ -128,20 +177,43 @@ export function useMapLoader(): void {
     if (displayMode !== 'state' || statesStatus !== 'idle') return
 
     let cancelled = false
+    let settled = false
+    const statesScope = `states-load:${projectId}`
     setStatesStatus('loading')
     replaceStates([])
+    notificationService.beginProgress({
+      scope: statesScope,
+      title: tRef.current('notification.statesLoad.title'),
+      message: tRef.current('notification.statesLoad.step.request'),
+      progress: { current: 1, total: 2 }
+    })
 
     void window.api.map.loadStates(projectId)
       .then(() => {
         if (cancelled) return
         setStatesStatus('ready')
+        notificationService.completeProgress({
+          scope: statesScope,
+          title: tRef.current('notification.statesLoad.doneTitle'),
+          message: tRef.current('notification.statesLoad.doneMessage')
+        })
+        settled = true
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) setStatesStatus('error')
+        if (!cancelled) {
+          notificationService.failProgress({
+            scope: statesScope,
+            title: tRef.current('notification.statesLoad.failedTitle'),
+            message: error instanceof Error ? error.message : tRef.current('notification.statesLoad.failedMessage')
+          })
+          settled = true
+        }
       })
 
     return () => {
       cancelled = true
+      if (!settled) notificationService.dismiss(statesScope)
     }
   }, [displayMode, projectId, replaceStates, setStatesStatus, statesStatus])
 
@@ -150,20 +222,43 @@ export function useMapLoader(): void {
     if (displayMode !== 'strategicRegion' || strategicRegionsStatus !== 'idle') return
 
     let cancelled = false
+    let settled = false
+    const strategicRegionsScope = `strategic-regions-load:${projectId}`
     setStrategicRegionsStatus('loading')
     replaceStrategicRegions([])
+    notificationService.beginProgress({
+      scope: strategicRegionsScope,
+      title: tRef.current('notification.strategicRegionsLoad.title'),
+      message: tRef.current('notification.strategicRegionsLoad.step.request'),
+      progress: { current: 1, total: 2 }
+    })
 
     void window.api.map.loadStrategicRegions(projectId)
       .then(() => {
         if (cancelled) return
         setStrategicRegionsStatus('ready')
+        notificationService.completeProgress({
+          scope: strategicRegionsScope,
+          title: tRef.current('notification.strategicRegionsLoad.doneTitle'),
+          message: tRef.current('notification.strategicRegionsLoad.doneMessage')
+        })
+        settled = true
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) setStrategicRegionsStatus('error')
+        if (!cancelled) {
+          notificationService.failProgress({
+            scope: strategicRegionsScope,
+            title: tRef.current('notification.strategicRegionsLoad.failedTitle'),
+            message: error instanceof Error ? error.message : tRef.current('notification.strategicRegionsLoad.failedMessage')
+          })
+          settled = true
+        }
       })
 
     return () => {
       cancelled = true
+      if (!settled) notificationService.dismiss(strategicRegionsScope)
     }
   }, [
     displayMode,
@@ -178,16 +273,42 @@ export function useMapLoader(): void {
     if (!projectId || !provincesPath || !provincesImageB64) return
 
     let cancelled = false
+    let settled = false
+    const bitmapScope = `bitmap-reconcile:${projectId}`
 
     async function reconcileWithBitmap(): Promise<void> {
       setProvinceBitmapStatus('loading')
+      notificationService.beginProgress({
+        scope: bitmapScope,
+        title: tRef.current('notification.bitmapLoad.title'),
+        message: tRef.current('notification.bitmapLoad.step.read'),
+        progress: { current: 1, total: BITMAP_RECONCILE_TOTAL_STEPS }
+      })
       const imageRecord = await window.api.files.read(provincesPath)
       if (cancelled) return
 
       const cachedFacts = provinceBitmapFactsCache.get(imageRecord.hash)
+      notificationService.advanceProgress({
+        scope: bitmapScope,
+        title: tRef.current('notification.bitmapLoad.title'),
+        message: tRef.current('notification.bitmapLoad.step.decode'),
+        progress: { current: 2, total: BITMAP_RECONCILE_TOTAL_STEPS }
+      })
       if (cachedFacts) {
+        notificationService.advanceProgress({
+          scope: bitmapScope,
+          title: tRef.current('notification.bitmapLoad.title'),
+          message: tRef.current('notification.bitmapLoad.step.cache'),
+          progress: { current: 3, total: BITMAP_RECONCILE_TOTAL_STEPS }
+        })
         setProvinceCatalog(reconcileProvinceCatalogWithBitmap(baseProvinceCatalog, cachedFacts))
         setProvinceBitmapStatus('ready')
+        notificationService.completeProgress({
+          scope: bitmapScope,
+          title: tRef.current('notification.bitmapLoad.doneTitle'),
+          message: tRef.current('notification.bitmapLoad.doneMessage')
+        })
+        settled = true
         return
       }
 
@@ -195,6 +316,12 @@ export function useMapLoader(): void {
       const source = await BmpProvinceMapSource.load(src)
       try {
         if (cancelled) return
+        notificationService.advanceProgress({
+          scope: bitmapScope,
+          title: tRef.current('notification.bitmapLoad.title'),
+          message: tRef.current('notification.bitmapLoad.step.analyze'),
+          progress: { current: 3, total: BITMAP_RECONCILE_TOTAL_STEPS }
+        })
         const bitmapFacts = analyzeProvinceBitmapFacts({
           data: source.pixelData,
           width: source.width,
@@ -202,6 +329,12 @@ export function useMapLoader(): void {
         })
         provinceBitmapFactsCache.set(imageRecord.hash, bitmapFacts)
         if (cancelled) return
+        notificationService.advanceProgress({
+          scope: bitmapScope,
+          title: tRef.current('notification.bitmapLoad.title'),
+          message: tRef.current('notification.bitmapLoad.step.catalog'),
+          progress: { current: 4, total: BITMAP_RECONCILE_TOTAL_STEPS }
+        })
         const reconciledCatalog = reconcileProvinceCatalogWithBitmap(baseProvinceCatalog, bitmapFacts)
         setProvinceCatalog(reconciledCatalog)
         syncBmpOnlyEntries(
@@ -210,20 +343,39 @@ export function useMapLoader(): void {
             .map((e) => e.color as number)
         )
         setProvinceBitmapStatus('ready')
+        notificationService.advanceProgress({
+          scope: bitmapScope,
+          title: tRef.current('notification.bitmapLoad.title'),
+          message: tRef.current('notification.bitmapLoad.step.sync'),
+          progress: { current: 5, total: BITMAP_RECONCILE_TOTAL_STEPS }
+        })
+        notificationService.completeProgress({
+          scope: bitmapScope,
+          title: tRef.current('notification.bitmapLoad.doneTitle'),
+          message: tRef.current('notification.bitmapLoad.doneMessage')
+        })
+        settled = true
       } finally {
         source.dispose()
       }
     }
 
-    void reconcileWithBitmap().catch(() => {
+    void reconcileWithBitmap().catch((error) => {
       if (!cancelled) {
         setProvinceCatalog(baseProvinceCatalog)
         setProvinceBitmapStatus('error')
+        notificationService.failProgress({
+          scope: bitmapScope,
+          title: tRef.current('notification.bitmapLoad.failedTitle'),
+          message: error instanceof Error ? error.message : tRef.current('notification.bitmapLoad.failedMessage')
+        })
+        settled = true
       }
     })
 
     return () => {
       cancelled = true
+      if (!settled) notificationService.dismiss(bitmapScope)
     }
   }, [baseProvinceCatalog, projectId, provincesImageB64, resolvedPaths, setProvinceBitmapStatus, setProvinceCatalog, syncBmpOnlyEntries])
 }

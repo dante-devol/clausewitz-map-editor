@@ -30,6 +30,8 @@ import {
 import { useProjectStore } from '../../infra/store/projectStore'
 import { useOverlayAssets } from '../hooks/useOverlayAssets'
 import { packColor } from '../../../../shared/mapDataTypes'
+import { notificationService } from '../../infra/services/notificationService'
+import { useNotificationStore } from '../../infra/store/notificationStore'
 import { useProvinceValidationStore } from '../../infra/store/provinceValidationStore'
 import {
   selectEffectiveProvinceCatalog,
@@ -128,6 +130,7 @@ const MapViewportPane = memo(function MapViewportPane({
   const editProvince = useMapDataStore((s) => s.editProvince)
   const editBmpOnlyProvince = useMapDataStore((s) => s.editBmpOnlyProvince)
   const issuesByProvinceKey = useProvinceValidationStore((s) => s.issuesByProvinceKey)
+  const notifications = useNotificationStore((s) => s.notifications)
   const displayModeOverrides = useDisplayModeConfigStore((s) => s.overrides)
   const displayMode = useCoreSelector(selectDisplayMode)
 
@@ -303,6 +306,8 @@ const MapViewportPane = memo(function MapViewportPane({
         bucketEnabled={bucketEnabled}
         sampledValueColor={sampledValuePresentation?.color ?? null}
         sampledValueLabel={sampledValuePresentation?.label ?? null}
+        notifications={notifications}
+        onDismissNotification={(id) => notificationService.dismiss(id)}
         onActiveToolChange={(tool) => {
           if (tool === 'eyedrop' && !eyedropEnabled) return
           if (tool === 'bucket' && !bucketEnabled) return

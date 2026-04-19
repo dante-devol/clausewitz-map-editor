@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
-import { makeStyles, mergeClasses, tokens, Button, Spinner, Text, Tooltip, Skeleton, SkeletonItem } from '@fluentui/react-components'
-import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, PaintBucketRegular, PaintBucketFilled } from '@fluentui/react-icons'
+import { makeStyles, mergeClasses, tokens, Button, Spinner, Text, Tooltip, Skeleton, SkeletonItem, ProgressBar } from '@fluentui/react-components'
+import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, PaintBucketRegular, PaintBucketFilled, DismissRegular } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
 import { MapRenderer } from '../../infra/lib/MapRenderer'
 import { BmpProvinceMapSource } from '../../infra/lib/BmpProvinceMapSource'
 import type { CanvasOverlay } from '../contracts/CanvasOverlay'
 import type { OverlayFilterRule } from '../../core/contracts/MapOverlay'
 import type { ProvinceIndex } from '../../infra/lib/provinceAnalysis'
+import type { NotificationRecord } from '../../infra/store/notificationStore'
 
 const ZOOM_STEP = 1.25
 const ZOOM_MIN = 0.02
@@ -91,6 +92,47 @@ const useStyles = makeStyles({
     alignItems: 'stretch',
     gap: tokens.spacingVerticalXS
   },
+  notificationTray: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: tokens.spacingVerticalXS
+  },
+  notificationCard: {
+    minWidth: '260px',
+    maxWidth: '320px',
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
+    borderRadius: tokens.borderRadiusMedium,
+    boxShadow: tokens.shadow8,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    backgroundColor: tokens.colorNeutralBackground1
+  },
+  notificationHeader: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: tokens.spacingHorizontalS
+  },
+  notificationTitle: {
+    display: 'block'
+  },
+  notificationMessage: {
+    display: 'block',
+    color: tokens.colorNeutralForeground3,
+    marginTop: tokens.spacingVerticalXXS
+  },
+  notificationProgress: {
+    marginTop: tokens.spacingVerticalXS
+  },
+  notificationCardSuccess: {
+    borderColor: tokens.colorPaletteGreenBorder2
+  },
+  notificationCardWarning: {
+    borderColor: tokens.colorPaletteYellowBorder2
+  },
+  notificationCardError: {
+    borderColor: tokens.colorPaletteRedBorder2
+  },
   topRightControls: {
     position: 'absolute',
     top: tokens.spacingVerticalM,
@@ -157,6 +199,8 @@ interface Props {
   bucketEnabled: boolean
   sampledValueColor?: string | null
   sampledValueLabel?: string | null
+  notifications?: NotificationRecord[]
+  onDismissNotification?: (id: string) => void
   onActiveToolChange?: (tool: 'select' | 'eyedrop' | 'bucket') => void
   onMapClick?: (r: number, g: number, b: number, additive: boolean) => void
   hoverTooltipPosition?: HoverTooltipPosition | null
@@ -177,6 +221,8 @@ export function MapCanvas({
   bucketEnabled,
   sampledValueColor,
   sampledValueLabel,
+  notifications = [],
+  onDismissNotification,
   onActiveToolChange,
   onMapClick,
   hoverTooltipPosition,
@@ -603,6 +649,48 @@ export function MapCanvas({
         </div>
       )}
       <div className={styles.controls} onMouseDown={(e) => e.stopPropagation()}>
+        {notifications.length > 0 && (
+          <div className={styles.notificationTray}>
+            {notifications.map((notification) => {
+              const notificationClass = mergeClasses(
+                styles.notificationCard,
+                notification.tone === 'success' && styles.notificationCardSuccess,
+                notification.tone === 'warning' && styles.notificationCardWarning,
+                notification.tone === 'error' && styles.notificationCardError
+              )
+
+              return (
+                <div key={notification.id} className={notificationClass}>
+                  <div className={styles.notificationHeader}>
+                    <Text size={300} weight="semibold" className={styles.notificationTitle}>
+                      {notification.title}
+                    </Text>
+                    {notification.autoCloseAfterMs === null && (
+                      <Button
+                        appearance="subtle"
+                        size="small"
+                        icon={<DismissRegular />}
+                        onClick={() => onDismissNotification?.(notification.id)}
+                        aria-label={t('notification.dismiss')}
+                      />
+                    )}
+                  </div>
+                  {notification.message && (
+                    <Text size={200} className={styles.notificationMessage}>
+                      {notification.message}
+                    </Text>
+                  )}
+                  {notification.kind === 'progress' && notification.progress && (
+                    <ProgressBar
+                      className={styles.notificationProgress}
+                      value={notification.progress.total <= 0 ? 0 : notification.progress.current / notification.progress.total}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
         <div className={styles.widget}>
           <Tooltip content={t('mapCanvas.eyedrop')} relationship="label">
             <Button

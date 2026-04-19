@@ -9,8 +9,11 @@ import {
 } from '../../../../shared/provinceValidation'
 import { selectEffectiveProvinceCatalog } from '../../infra/store/provinceEditSelectors'
 import type { ProvinceCatalogEntry, ProvinceCatalogEntryKey } from '../../../../shared/provinceCatalog'
+import { notificationService } from '../../infra/services/notificationService'
+import { useI18n } from '../i18n/I18nProvider'
 
 export function useProvinceValidation(): void {
+  const { t } = useI18n()
   const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
   const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
   const pendingEdits = useMapDataStore((s) => s.pendingEdits)
@@ -29,6 +32,7 @@ export function useProvinceValidation(): void {
     baseSignature: string
     byKey: Map<ProvinceCatalogEntryKey, ProvinceCatalogEntry>
   } | null>(null)
+  const previousFullValidationSignatureRef = useRef<string | null>(null)
 
   const effectiveCatalog = useMemo(
     () => selectEffectiveProvinceCatalog(
@@ -61,7 +65,21 @@ export function useProvinceValidation(): void {
     const previous = previousValidationRef.current
 
     if (!previous || previous.baseSignature !== baseSignature) {
-      setResult(runValidationForCatalog(snapshot, provinceBitmapStatus === 'ready'))
+      const result = runValidationForCatalog(snapshot, provinceBitmapStatus === 'ready')
+      setResult(result)
+      if (result.phase === 'full') {
+        const signature = `${baseSignature}:${result.summary.infoCount}:${result.summary.warningCount}:${result.summary.errorCount}`
+        if (previousFullValidationSignatureRef.current !== signature) {
+          previousFullValidationSignatureRef.current = signature
+          notificationService.pushAck({
+            id: 'validation:full',
+            scope: 'validation:full',
+            title: t('notification.validation.title'),
+            message: formatValidationSummaryMessage(t, result.summary),
+            tone: result.summary.errorCount > 0 ? 'error' : (result.summary.warningCount > 0 ? 'warning' : 'success')
+          })
+        }
+      }
       previousValidationRef.current = { baseSignature, byKey: new Map(currentByKey) }
       return
     }
@@ -149,4 +167,18 @@ function sameSources(a: readonly string[], b: readonly string[]): boolean {
     if (a[i] !== b[i]) return false
   }
   return true
+}
+
+function formatValidationSummaryMessage(
+  t: (key: string, params?: Record<string, string | number>) => string,
+  summary: { infoCount: number; warningCount: number; errorCount: number }
+): string {
+  if (summary.errorCount === 0 && summary.warningCount === 0) {
+    return t('notification.validation.clean')
+  }
+
+  return t('notification.validation.summary', {
+    errors: summary.errorCount,
+    warnings: summary.warningCount
+  })
 }
