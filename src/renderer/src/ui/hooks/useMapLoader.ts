@@ -27,6 +27,8 @@ export function useMapLoader(): void {
   const loadProvinces = useMapDataStore((s) => s.loadProvinces)
   const loadProvinceCatalog = useMapDataStore((s) => s.loadProvinceCatalog)
   const setProvinceCatalog = useMapDataStore((s) => s.setProvinceCatalog)
+  const loadOriginalDefinitions = useMapDataStore((s) => s.loadOriginalDefinitions)
+  const syncBmpOnlyEntries = useMapDataStore((s) => s.syncBmpOnlyEntries)
   const loadTerrains = useMapDataStore((s) => s.loadTerrains)
   const replaceStates = useMapDataStore((s) => s.replaceStates)
   const appendStates = useMapDataStore((s) => s.appendStates)
@@ -56,6 +58,7 @@ export function useMapLoader(): void {
         loadTerrains(snapshot.terrains)
         loadProvincesImage(snapshot.provincesImageB64)
         loadProvinces(snapshot.provinces)
+        loadOriginalDefinitions(snapshot.provinces)
         loadProvinceCatalog(snapshot.provinceCatalog)
         setStatesStatus('idle')
         setStrategicRegionsStatus('idle')
@@ -105,6 +108,7 @@ export function useMapLoader(): void {
     api,
     clear,
     loadContinents,
+    loadOriginalDefinitions,
     loadProvinceCatalog,
     loadProvinces,
     loadProvincesImage,
@@ -198,7 +202,13 @@ export function useMapLoader(): void {
         })
         provinceBitmapFactsCache.set(imageRecord.hash, bitmapFacts)
         if (cancelled) return
-        setProvinceCatalog(reconcileProvinceCatalogWithBitmap(baseProvinceCatalog, bitmapFacts))
+        const reconciledCatalog = reconcileProvinceCatalogWithBitmap(baseProvinceCatalog, bitmapFacts)
+        setProvinceCatalog(reconciledCatalog)
+        syncBmpOnlyEntries(
+          reconciledCatalog
+            .filter((e) => e.sources.includes('bmp-color') && e.color !== null)
+            .map((e) => e.color as number)
+        )
         setProvinceBitmapStatus('ready')
       } finally {
         source.dispose()
@@ -215,5 +225,5 @@ export function useMapLoader(): void {
     return () => {
       cancelled = true
     }
-  }, [baseProvinceCatalog, projectId, provincesImageB64, resolvedPaths, setProvinceBitmapStatus, setProvinceCatalog])
+  }, [baseProvinceCatalog, projectId, provincesImageB64, resolvedPaths, setProvinceBitmapStatus, setProvinceCatalog, syncBmpOnlyEntries])
 }

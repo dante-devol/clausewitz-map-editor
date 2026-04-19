@@ -7,6 +7,11 @@ import type {
   Continent
 } from '../../../../shared/mapDataTypes'
 import type { ProvinceCatalogEntry } from '../../../../shared/provinceCatalog'
+import type {
+  BmpOnlyEntry,
+  ReassignmentAction,
+  SelectionOrigin
+} from '../../../../shared/provinceEditing'
 
 interface MapDataState {
   // Primary lookups
@@ -29,6 +34,14 @@ interface MapDataState {
   provincesImageB64: string | null
   provinceBitmapStatus: 'idle' | 'loading' | 'ready' | 'error'
 
+  // Province editing state — stable for the session, not reset on file-watch reloads
+  originalDefinitions: Map<number, Province>
+  bmpOnlyEntries: BmpOnlyEntry[]
+  bmpOnlyByColor: Map<number, string>          // color → guid
+  pendingEdits: Map<number, Partial<Province>> // province id → field patch
+  pendingReassignments: Map<string, ReassignmentAction> // guid → action
+  provinceSelection: SelectionOrigin | null
+
   // Bulk loaders — replace the entire table at once
   loadProvinces: (provinces: Province[]) => void
   loadProvinceCatalog: (catalog: ProvinceCatalogEntry[]) => void
@@ -43,7 +56,19 @@ interface MapDataState {
   setStatesStatus: (status: 'idle' | 'loading' | 'ready' | 'error') => void
   setStrategicRegionsStatus: (status: 'idle' | 'loading' | 'ready' | 'error') => void
   setProvinceBitmapStatus: (status: 'idle' | 'loading' | 'ready' | 'error') => void
+  // Editing actions
+  loadOriginalDefinitions: (provinces: Province[]) => void
+  syncBmpOnlyEntries: (colors: number[]) => void
+  editProvince: (id: number, patch: Partial<Province>) => void
+  revertEdit: (id: number) => void
+  assignBmpProvince: (guid: string, action: ReassignmentAction) => void
+  revertReassignment: (guid: string) => void
+  setProvinceSelection: (origin: SelectionOrigin | null) => void
   clear: () => void
+}
+
+function shortGuid(): string {
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 8)
 }
 
 const EMPTY_STATE = {
@@ -62,7 +87,13 @@ const EMPTY_STATE = {
   strategicRegionProvinceToRegionId: new Map<number, number>(),
   strategicRegionsStatus: 'idle' as const,
   provincesImageB64: null as string | null,
-  provinceBitmapStatus: 'idle' as const
+  provinceBitmapStatus: 'idle' as const,
+  originalDefinitions: new Map<number, Province>(),
+  bmpOnlyEntries: [] as BmpOnlyEntry[],
+  bmpOnlyByColor: new Map<number, string>(),
+  pendingEdits: new Map<number, Partial<Province>>(),
+  pendingReassignments: new Map<string, ReassignmentAction>(),
+  provinceSelection: null as SelectionOrigin | null
 }
 
 export const useMapDataStore = create<MapDataState>((set) => ({
@@ -112,6 +143,52 @@ export const useMapDataStore = create<MapDataState>((set) => ({
   setStrategicRegionsStatus: (strategicRegionsStatus) => set({ strategicRegionsStatus }),
 
   setProvinceBitmapStatus: (provinceBitmapStatus) => set({ provinceBitmapStatus }),
+
+  loadOriginalDefinitions: (incoming) => {
+    const originalDefinitions = new Map<number, Province>()
+    for (const p of incoming) originalDefinitions.set(p.id, p)
+    set({ originalDefinitions })
+  },
+
+  syncBmpOnlyEntries: (colors) => set((state) => {
+    const bmpOnlyByColor = new Map(state.bmpOnlyByColor)
+    const bmpOnlyEntries = [...state.bmpOnlyEntries]
+    for (const color of colors) {
+      if (!bmpOnlyByColor.has(color)) {
+        const guid = shortGuid()
+        bmpOnlyByColor.set(color, guid)
+        bmpOnlyEntries.push({ guid, color })
+      }
+    }
+    return { bmpOnlyByColor, bmpOnlyEntries }
+  }),
+
+  editProvince: (id, patch) => set((state) => {
+    const pendingEdits = new Map(state.pendingEdits)
+    const existing = pendingEdits.get(id) ?? {}
+    pendingEdits.set(id, { ...existing, ...patch })
+    return { pendingEdits }
+  }),
+
+  revertEdit: (id) => set((state) => {
+    const pendingEdits = new Map(state.pendingEdits)
+    pendingEdits.delete(id)
+    return { pendingEdits }
+  }),
+
+  assignBmpProvince: (guid, action) => set((state) => {
+    const pendingReassignments = new Map(state.pendingReassignments)
+    pendingReassignments.set(guid, action)
+    return { pendingReassignments }
+  }),
+
+  revertReassignment: (guid) => set((state) => {
+    const pendingReassignments = new Map(state.pendingReassignments)
+    pendingReassignments.delete(guid)
+    return { pendingReassignments }
+  }),
+
+  setProvinceSelection: (provinceSelection) => set({ provinceSelection }),
 
   clear: () => set({ ...EMPTY_STATE })
 }))

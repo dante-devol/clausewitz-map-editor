@@ -6,7 +6,7 @@ import { useCoreSelector } from '../../bridge/useCoreSelector'
 import { DisplayModeControl } from '../components/DisplayModeControl'
 import { MapModePanel } from '../components/MapModePanel'
 import { MapCanvas } from '../components/MapCanvas'
-import { ProvinceList } from '../components/ProvinceList'
+import { ProvincePanel } from '../components/provincePanel/ProvincePanel'
 import { ProvinceDetailPanel } from '../components/ProvinceDetailPanel'
 import { mapCommands } from '../../core/commands/mapCommands'
 import {
@@ -202,12 +202,10 @@ const MapSidebarTop = memo(function MapSidebarTop({
 
 const ProvinceListPane = memo(function ProvinceListPane() {
   const api = useCoreApi()
-  const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
   const selectedProvinceIds = useCoreSelector(selectSelectedProvinceIds)
 
   return (
-    <ProvinceList
-      provinceCatalog={provinceCatalog}
+    <ProvincePanel
       selectedIds={selectedProvinceIds}
       onSelect={(provinceId) => api.dispatch(mapCommands.setSelection([provinceId]))}
     />
