@@ -69,11 +69,15 @@ export interface MapChangedEvent {
 export interface StateDatasetUpdate {
   op: 'replace' | 'append'
   items: StateDefinition[]
+  loadedFiles: number
+  totalFiles: number
 }
 
 export interface StrategicRegionDatasetUpdate {
   op: 'replace' | 'append'
   items: StrategicRegionDefinition[]
+  loadedFiles: number
+  totalFiles: number
 }
 
 export interface ApiContract {

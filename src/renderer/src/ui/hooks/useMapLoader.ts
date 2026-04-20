@@ -131,11 +131,31 @@ export function useMapLoader(): void {
       else if (event.type === 'terrain') loadTerrains(event.data as import('../../../../shared/mapDataTypes').TerrainCategory[])
       else if (event.type === 'states') {
         const update = event.data as StateDatasetUpdate
+        const progress = resolveFileProgress(update.loadedFiles, update.totalFiles, resolvedPaths?.states.length ?? 0)
+        notificationService.advanceProgress({
+          scope: `states-load:${projectId}`,
+          title: tRef.current('notification.statesLoad.title'),
+          message: tRef.current('notification.statesLoad.progress', {
+            loaded: progress.current,
+            total: progress.total
+          }),
+          progress
+        })
         if (update.op === 'replace') replaceStates(update.items)
         else appendStates(update.items)
       }
       else if (event.type === 'strategicRegions') {
         const update = event.data as StrategicRegionDatasetUpdate
+        const progress = resolveFileProgress(update.loadedFiles, update.totalFiles, resolvedPaths?.strategicRegions.length ?? 0)
+        notificationService.advanceProgress({
+          scope: `strategic-regions-load:${projectId}`,
+          title: tRef.current('notification.strategicRegionsLoad.title'),
+          message: tRef.current('notification.strategicRegionsLoad.progress', {
+            loaded: progress.current,
+            total: progress.total
+          }),
+          progress
+        })
         if (update.op === 'replace') replaceStrategicRegions(update.items)
         else appendStrategicRegions(update.items)
       }
@@ -166,6 +186,7 @@ export function useMapLoader(): void {
     appendStrategicRegions,
     loadTerrains,
     projectId,
+    resolvedPaths,
     setProvinceBitmapStatus,
     setStatesStatus,
     setStrategicRegionsStatus
@@ -187,8 +208,14 @@ export function useMapLoader(): void {
     notificationService.beginProgress({
       scope: statesScope,
       title: tRef.current('notification.statesLoad.title'),
-      message: tRef.current('notification.statesLoad.step.request'),
-      progress: { current: 1, total: 2 }
+      message: tRef.current('notification.statesLoad.progress', {
+        loaded: 0,
+        total: resolvedPaths?.states.length ?? 0
+      }),
+      progress: {
+        current: 0,
+        total: Math.max(resolvedPaths?.states.length ?? 0, 1)
+      }
     })
 
     void window.api.map.loadStates(projectId)
@@ -218,7 +245,7 @@ export function useMapLoader(): void {
       cancelled = true
       if (!settled) notificationService.dismiss(statesScope)
     }
-  }, [displayMode, overlays, projectId, replaceStates, setStatesStatus])
+  }, [displayMode, overlays, projectId, replaceStates, resolvedPaths, setStatesStatus])
 
   useEffect(() => {
     if (!projectId) return
@@ -234,8 +261,14 @@ export function useMapLoader(): void {
     notificationService.beginProgress({
       scope: strategicRegionsScope,
       title: tRef.current('notification.strategicRegionsLoad.title'),
-      message: tRef.current('notification.strategicRegionsLoad.step.request'),
-      progress: { current: 1, total: 2 }
+      message: tRef.current('notification.strategicRegionsLoad.progress', {
+        loaded: 0,
+        total: resolvedPaths?.strategicRegions.length ?? 0
+      }),
+      progress: {
+        current: 0,
+        total: Math.max(resolvedPaths?.strategicRegions.length ?? 0, 1)
+      }
     })
 
     void window.api.map.loadStrategicRegions(projectId)
@@ -270,6 +303,7 @@ export function useMapLoader(): void {
     overlays,
     projectId,
     replaceStrategicRegions,
+    resolvedPaths,
     setStrategicRegionsStatus
   ])
 
@@ -383,4 +417,19 @@ export function useMapLoader(): void {
       if (!settled) notificationService.dismiss(bitmapScope)
     }
   }, [baseProvinceCatalog, projectId, provincesImageB64, resolvedPaths, setProvinceBitmapStatus, setProvinceCatalog, syncBmpOnlyEntries])
+}
+
+function resolveFileProgress(
+  loadedFiles: number | undefined,
+  totalFiles: number | undefined,
+  fallbackTotal: number
+): { current: number; total: number } {
+  const safeTotal = normalizeProgressNumber(totalFiles, fallbackTotal)
+  const total = Math.max(safeTotal, 1)
+  const current = Math.min(normalizeProgressNumber(loadedFiles, 0), total)
+  return { current, total }
+}
+
+function normalizeProgressNumber(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }

@@ -59,14 +59,22 @@ export class ProjectLoader {
 
   async loadStatesProgressive(
     project: LoadedProject,
-    onChunk: (items: import('../../../shared/mapDataTypes').StateDefinition[]) => void
+    onChunk: (
+      items: import('../../../shared/mapDataTypes').StateDefinition[],
+      loadedFiles: number,
+      totalFiles: number
+    ) => void
   ): Promise<void> {
     await loadFilesProgressively(project.resolvedPaths.states, StatesTxt.parse, onChunk)
   }
 
   async loadStrategicRegionsProgressive(
     project: LoadedProject,
-    onChunk: (items: import('../../../shared/mapDataTypes').StrategicRegionDefinition[]) => void
+    onChunk: (
+      items: import('../../../shared/mapDataTypes').StrategicRegionDefinition[],
+      loadedFiles: number,
+      totalFiles: number
+    ) => void
   ): Promise<void> {
     await loadFilesProgressively(project.resolvedPaths.strategicRegions, StrategicRegionsTxt.parse, onChunk)
   }
@@ -81,15 +89,24 @@ const FILE_READ_CONCURRENCY = 8
 async function loadFilesProgressively<T>(
   filePaths: string[],
   parse: (content: string) => T[],
-  onChunk: (items: T[]) => void
+  onChunk: (items: T[], loadedFiles: number, totalFiles: number) => void
 ): Promise<void> {
-  for (let i = 0; i < filePaths.length; i += FILE_READ_CONCURRENCY) {
-    const chunkPaths = filePaths.slice(i, i + FILE_READ_CONCURRENCY)
-    const chunkResults = await Promise.all(
-      chunkPaths.map(async (filePath) => parse(await readFile(filePath, 'utf-8')))
-    )
+  const totalFiles = filePaths.length
+  let nextIndex = 0
+  let loadedFiles = 0
 
-    const items = chunkResults.flat()
-    if (items.length > 0) onChunk(items)
+  async function runWorker(): Promise<void> {
+    while (true) {
+      const index = nextIndex
+      if (index >= filePaths.length) return
+      nextIndex += 1
+
+      const items = parse(await readFile(filePaths[index], 'utf-8'))
+      loadedFiles += 1
+      onChunk(items, loadedFiles, totalFiles)
+    }
   }
+
+  const workerCount = Math.min(FILE_READ_CONCURRENCY, filePaths.length)
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()))
 }

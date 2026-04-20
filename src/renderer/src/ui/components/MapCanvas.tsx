@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
-import { makeStyles, mergeClasses, tokens, Button, Spinner, Text, Tooltip, Skeleton, SkeletonItem, ProgressBar } from '@fluentui/react-components'
+import { makeStyles, mergeClasses, tokens, Button, Spinner, Text, Tooltip, Skeleton, SkeletonItem, ProgressBar, shorthands } from '@fluentui/react-components'
 import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, PaintBucketRegular, PaintBucketFilled, DismissRegular } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
 import { MapRenderer } from '../../infra/lib/MapRenderer'
@@ -92,6 +92,12 @@ const useStyles = makeStyles({
     alignItems: 'stretch',
     gap: tokens.spacingVerticalXS
   },
+  topLeftNotifications: {
+    position: 'absolute',
+    top: tokens.spacingVerticalM,
+    left: tokens.spacingHorizontalM,
+    zIndex: 3
+  },
   notificationTray: {
     display: 'flex',
     flexDirection: 'column',
@@ -125,13 +131,13 @@ const useStyles = makeStyles({
     marginTop: tokens.spacingVerticalXS
   },
   notificationCardSuccess: {
-    borderColor: tokens.colorPaletteGreenBorder2
+    ...shorthands.borderColor(tokens.colorPaletteGreenBorder2)
   },
   notificationCardWarning: {
-    borderColor: tokens.colorPaletteYellowBorder2
+    ...shorthands.borderColor(tokens.colorPaletteYellowBorder2)
   },
   notificationCardError: {
-    borderColor: tokens.colorPaletteRedBorder2
+    ...shorthands.borderColor(tokens.colorPaletteRedBorder2)
   },
   topRightControls: {
     position: 'absolute',
@@ -660,8 +666,8 @@ export function MapCanvas({
           {topRightContent}
         </div>
       )}
-      <div className={styles.controls} onMouseDown={(e) => e.stopPropagation()}>
-        {notifications.length > 0 && (
+      {notifications.length > 0 && (
+        <div className={styles.topLeftNotifications} onMouseDown={(e) => e.stopPropagation()}>
           <div className={styles.notificationTray}>
             {notifications.map((notification) => {
               const notificationClass = mergeClasses(
@@ -702,7 +708,9 @@ export function MapCanvas({
               )
             })}
           </div>
-        )}
+        </div>
+      )}
+      <div className={styles.controls} onMouseDown={(e) => e.stopPropagation()}>
         <div className={styles.widget}>
           <Tooltip content={t('mapCanvas.eyedrop')} relationship="label">
             <Button

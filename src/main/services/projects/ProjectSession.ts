@@ -58,9 +58,10 @@ export class ProjectSession {
     if (this.statesLoadPromise) return this.statesLoadPromise
     if (this.statesLoaded) return Promise.resolve()
 
-    this.emit('states', { op: 'replace', items: [] })
-    this.statesLoadPromise = this.loader.loadStatesProgressive(this.project, (items) => {
-      this.emit('states', { op: 'append', items })
+    const totalFiles = this.project.resolvedPaths.states.length
+    this.emit('states', { op: 'replace', items: [], loadedFiles: 0, totalFiles })
+    this.statesLoadPromise = this.loader.loadStatesProgressive(this.project, (items, loadedFiles, totalFiles) => {
+      this.emit('states', { op: 'append', items, loadedFiles, totalFiles })
     }).then(() => {
       this.statesLoaded = true
       this.statesLoadPromise = null
@@ -78,9 +79,10 @@ export class ProjectSession {
     if (this.strategicRegionsLoadPromise) return this.strategicRegionsLoadPromise
     if (this.strategicRegionsLoaded) return Promise.resolve()
 
-    this.emit('strategicRegions', { op: 'replace', items: [] })
-    this.strategicRegionsLoadPromise = this.loader.loadStrategicRegionsProgressive(this.project, (items) => {
-      this.emit('strategicRegions', { op: 'append', items })
+    const totalFiles = this.project.resolvedPaths.strategicRegions.length
+    this.emit('strategicRegions', { op: 'replace', items: [], loadedFiles: 0, totalFiles })
+    this.strategicRegionsLoadPromise = this.loader.loadStrategicRegionsProgressive(this.project, (items, loadedFiles, totalFiles) => {
+      this.emit('strategicRegions', { op: 'append', items, loadedFiles, totalFiles })
     }).then(() => {
       this.strategicRegionsLoaded = true
       this.strategicRegionsLoadPromise = null
