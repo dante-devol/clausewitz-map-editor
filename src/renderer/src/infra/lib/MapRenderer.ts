@@ -488,10 +488,8 @@ export class MapRenderer {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, e.source)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-      // Linear filtering lets binary seam masks resolve to partial coverage
-      // at subpixel scales instead of stepping between full pixels.
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
       this.outlineOverlayEntries.push({ id: e.id, texture, opacity: e.opacity, color: e.color })
     }
   }
@@ -588,7 +586,6 @@ export class MapRenderer {
     }
 
     if (this.outlineOverlayEntries.length > 0) {
-      const outlineFilter = scale >= 1 ? gl.NEAREST : gl.LINEAR
       const { width: iw, height: ih } = this._imageSize
       gl.enable(gl.BLEND)
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
@@ -598,13 +595,12 @@ export class MapRenderer {
       gl.vertexAttribPointer(this.outlineOverlayPosLoc, 2, gl.FLOAT, false, 0, 0)
       gl.uniformMatrix3fv(this.outlineOverlayMatrixLoc, false, matrix)
       gl.uniform1i(this.outlineOverlayTexLoc, 0)
-      const probeScale = scale >= 1 ? 1 / scale : scale
-      gl.uniform2f(this.outlineOverlayPoffLoc, probeScale / iw, probeScale / ih)
+      gl.uniform2f(this.outlineOverlayPoffLoc, 1 / iw, 1 / ih)
       gl.activeTexture(gl.TEXTURE0)
       for (const entry of this.outlineOverlayEntries) {
         gl.bindTexture(gl.TEXTURE_2D, entry.texture)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, outlineFilter)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, outlineFilter)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
         gl.uniform1f(this.outlineOverlayOpacityLoc, entry.opacity)
         gl.uniform4f(this.outlineOverlayColorLoc, entry.color[0], entry.color[1], entry.color[2], entry.color[3])
         gl.drawArrays(gl.TRIANGLES, 0, 6)

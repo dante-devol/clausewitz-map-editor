@@ -44,8 +44,6 @@ export function useMapLoader(): void {
   const loadProvincesImage = useMapDataStore((s) => s.loadProvincesImage)
   const setStatesStatus = useMapDataStore((s) => s.setStatesStatus)
   const setStrategicRegionsStatus = useMapDataStore((s) => s.setStrategicRegionsStatus)
-  const statesStatus = useMapDataStore((s) => s.statesStatus)
-  const strategicRegionsStatus = useMapDataStore((s) => s.strategicRegionsStatus)
   const setProvinceBitmapStatus = useMapDataStore((s) => s.setProvinceBitmapStatus)
   const baseProvinceCatalog = useMapDataStore((s) => s.baseProvinceCatalog)
   const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
@@ -176,7 +174,10 @@ export function useMapLoader(): void {
   useEffect(() => {
     if (!projectId) return
     const stateOverlayVisible = overlays.some((overlay) => overlay.id === 'states' && overlay.visible)
-    if ((displayMode !== 'state' && !stateOverlayVisible) || statesStatus !== 'idle') return
+    if (displayMode !== 'state' && !stateOverlayVisible) return
+    // Read status without subscribing so this effect doesn't self-cancel when
+    // setStatesStatus('loading') changes the dep and triggers immediate cleanup.
+    if (useMapDataStore.getState().statesStatus !== 'idle') return
 
     let cancelled = false
     let settled = false
@@ -217,12 +218,13 @@ export function useMapLoader(): void {
       cancelled = true
       if (!settled) notificationService.dismiss(statesScope)
     }
-  }, [displayMode, overlays, projectId, replaceStates, setStatesStatus, statesStatus])
+  }, [displayMode, overlays, projectId, replaceStates, setStatesStatus])
 
   useEffect(() => {
     if (!projectId) return
     const strategicRegionOverlayVisible = overlays.some((overlay) => overlay.id === 'strategicRegions' && overlay.visible)
-    if ((displayMode !== 'strategicRegion' && !strategicRegionOverlayVisible) || strategicRegionsStatus !== 'idle') return
+    if (displayMode !== 'strategicRegion' && !strategicRegionOverlayVisible) return
+    if (useMapDataStore.getState().strategicRegionsStatus !== 'idle') return
 
     let cancelled = false
     let settled = false
@@ -268,8 +270,7 @@ export function useMapLoader(): void {
     overlays,
     projectId,
     replaceStrategicRegions,
-    setStrategicRegionsStatus,
-    strategicRegionsStatus
+    setStrategicRegionsStatus
   ])
 
   useEffect(() => {

@@ -47,7 +47,10 @@ interface OutlineOverlayAssetEntry {
 }
 
 interface ProvinceIndexCacheEntry {
-  signature: string
+  // The provincesImageB64 string this index was built from.
+  // Using the raw base64 (not the hash) so that hash arrival never triggers a rebuild.
+  sourceb64: string
+  revision: number
   index: ProvinceIndex
   width: number
   height: number
@@ -101,20 +104,11 @@ export function useOverlayAssets(
   const bitmapCacheRef = useRef(new Map<OverlayId, BitmapOverlayAssetEntry>())
   const outlineCacheRef = useRef(new Map<OverlayId, OutlineOverlayAssetEntry>())
   const provinceIndexRef = useRef<ProvinceIndexCacheEntry | null>(null)
-  const [provinceBitmapHash, setProvinceBitmapHash] = useState<string | null>(null)
+  const provinceIndexRevisionRef = useRef(0)
   const [assetStateVersion, setAssetStateVersion] = useState(0)
 
   useEffect(() => {
-    if (!resolvedPaths) {
-      setProvinceBitmapHash(null)
-      return
-    }
-
-    let cancelled = false
-
-    void window.api.files.getHash(resolvedPaths.provinces).then((hash) => {
-      if (!cancelled) setProvinceBitmapHash(hash)
-    })
+    if (!resolvedPaths) return
 
     const unsubscribe = window.api.files.onChanged((event) => {
       for (const entry of bitmapCacheRef.current.values()) {
@@ -122,14 +116,9 @@ export function useOverlayAssets(
         entry.externallyModified = entry.hash !== event.hash
         setAssetStateVersion((version) => version + 1)
       }
-
-      if (event.path === resolvedPaths.provinces) {
-        setProvinceBitmapHash(event.hash)
-      }
     })
 
     return () => {
-      cancelled = true
       unsubscribe()
 
       for (const entry of bitmapCacheRef.current.values()) {
@@ -148,6 +137,15 @@ export function useOverlayAssets(
     let cancelled = false
 
     async function ensureVisibleOverlaysLoaded() {
+      // Evict cached canvases for hidden overlays so their OffscreenCanvas backing
+      // stores can be GC'd.  Outline canvases are large (full map × 4 bytes each)
+      // and holding multiple simultaneously causes significant memory pressure.
+      for (const overlay of overlays) {
+        if (!overlay.visible && overlay.kind === 'outline') {
+          outlineCacheRef.current.delete(overlay.id)
+        }
+      }
+
       for (const overlay of overlays) {
         if (!overlay.visible) continue
 
@@ -184,8 +182,8 @@ export function useOverlayAssets(
         const outlineAsset = await ensureOutlineOverlayLoaded(
           overlay,
           provincesImageB64,
-          provinceBitmapHash,
           provinceIndexRef,
+          provinceIndexRevisionRef,
           outlineCacheRef,
           provincesByColor,
           stateProvinceToStateId,
@@ -209,7 +207,6 @@ export function useOverlayAssets(
     overlays,
     provincesImageB64,
     provincesByColor,
-    provinceBitmapHash,
     resolvedPaths,
     stateProvinceToStateId,
     statesRevision,
@@ -290,8 +287,8 @@ function buildPanelOverlayItem(
 async function ensureOutlineOverlayLoaded(
   overlay: OutlineMapOverlayState,
   provincesImageB64: string | null,
-  provinceBitmapHash: string | null,
   provinceIndexRef: MutableRefObject<ProvinceIndexCacheEntry | null>,
+  provinceIndexRevisionRef: MutableRefObject<number>,
   outlineCacheRef: MutableRefObject<Map<OverlayId, OutlineOverlayAssetEntry>>,
   provincesByColor: ReadonlyMap<number, number>,
   stateProvinceToStateId: ReadonlyMap<number, number>,
@@ -305,12 +302,16 @@ async function ensureOutlineOverlayLoaded(
   if (overlay.id === 'states' && statesStatus !== 'ready') return null
   if (overlay.id === 'strategicRegions' && strategicRegionsStatus !== 'ready') return null
 
-  const imageSignature = provinceBitmapHash ?? provincesImageB64
-  if (provinceIndexRef.current?.signature !== imageSignature) {
+  // Rebuild the province index only when the actual image content changes (provincesImageB64),
+  // NOT when just the file hash arrives.  Using the hash as the key caused a full reload +
+  // index rebuild every time the async hash resolved, even though the data was identical.
+  if (provinceIndexRef.current?.sourceb64 !== provincesImageB64) {
     const source = await BmpProvinceMapSource.load(`data:image/bmp;base64,${provincesImageB64}`)
     try {
+      provinceIndexRevisionRef.current++
       provinceIndexRef.current = {
-        signature: imageSignature,
+        sourceb64: provincesImageB64,
+        revision: provinceIndexRevisionRef.current,
         index: buildProvinceIndex({
           data: source.pixelData,
           width: source.width,
@@ -330,7 +331,7 @@ async function ensureOutlineOverlayLoaded(
 
   const cacheKey = getOutlineOverlayCacheKey(
     overlay.id,
-    imageSignature,
+    provinceIndexEntry.revision,
     statesRevision,
     strategicRegionsRevision
   )
@@ -360,13 +361,13 @@ async function ensureOutlineOverlayLoaded(
 
 function getOutlineOverlayCacheKey(
   overlayId: OverlayId,
-  provinceBitmapHash: string,
+  provinceIndexRevision: number,
   statesRevision: number,
   strategicRegionsRevision: number
 ): string {
-  if (overlayId === 'states') return `${overlayId}:${provinceBitmapHash}:${statesRevision}`
-  if (overlayId === 'strategicRegions') return `${overlayId}:${provinceBitmapHash}:${strategicRegionsRevision}`
-  return `${overlayId}:${provinceBitmapHash}`
+  if (overlayId === 'states') return `${overlayId}:${provinceIndexRevision}:${statesRevision}`
+  if (overlayId === 'strategicRegions') return `${overlayId}:${provinceIndexRevision}:${strategicRegionsRevision}`
+  return `${overlayId}:${provinceIndexRevision}`
 }
 
 function buildBitmapAssetRecords(
