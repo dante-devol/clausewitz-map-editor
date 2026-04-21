@@ -158,6 +158,8 @@ export function useMapCanvas({
       if (cancelled) return
       const cm = colorMapRef.current
       if (cm && cm.size > 0) rendererRef.current?.recolorTexture(cm)
+      rendererRef.current?.setHighlightColors(highlightColorsRef.current)
+      rendererRef.current?.setValidationHighlightColors({ warningColors: validationWarningColorsRef.current, errorColors: validationErrorColorsRef.current })
       syncSelectionStructure(rendererRef.current, provinceIndexRef.current, highlightColorsRef.current, transformRef.current.scale)
       syncValidationStructure(rendererRef.current, provinceIndexRef.current, validationWarningColorsRef.current, validationErrorColorsRef.current, transformRef.current.scale)
       fit()
