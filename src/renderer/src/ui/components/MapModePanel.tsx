@@ -37,8 +37,10 @@ import {
 } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
 import type { OverlayFilterRule, OverlayId } from '../../core/contracts/MapOverlay'
-import type { OverlayPanelItem } from '../hooks/useOverlayAssets'
-import type { OverlayFilterRuleTemplate } from '../contracts/OverlayConfiguration'
+import { type HsvColor, normalizeHexCandidate, hexToHsv, hsvToHex } from '../lib/colorUtils'
+import { useOverlayPanelState } from '../hooks/useOverlayPanelState'
+import { usePanelOverlays } from '../hooks/useOverlayAssets'
+import { useCoreStore } from '../../infra/store/coreStore'
 
 const useStyles = makeStyles({
   root: {
@@ -405,55 +407,26 @@ const useStyles = makeStyles({
   }
 })
 
-interface Props {
-  overlays: OverlayPanelItem[]
-  onOverlayMove: (draggedId: OverlayId, targetId: OverlayId) => void
-  onOverlayVisibilityChange: (overlayId: OverlayId, visible: boolean) => void
-  onOverlayOpacityChange: (overlayId: OverlayId, opacity: number) => void
-  onOverlayFilterRulesChange: (overlayId: OverlayId, rules: OverlayFilterRule[]) => void
-  onOverlayLineColorChange: (overlayId: OverlayId, lineColor: string) => void
-}
-
-export function MapModePanel({
-  overlays,
-  onOverlayMove,
-  onOverlayVisibilityChange,
-  onOverlayOpacityChange,
-  onOverlayFilterRulesChange,
-  onOverlayLineColorChange
-}: Props): JSX.Element {
+export function MapModePanel(): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
-  const [overlayDialogId, setOverlayDialogId] = useState<OverlayId | null>(null)
-  const [draggedOverlayId, setDraggedOverlayId] = useState<OverlayId | null>(null)
-  const [dropTargetOverlayId, setDropTargetOverlayId] = useState<OverlayId | null>(null)
-  const [initializedOverlayDefaults, setInitializedOverlayDefaults] = useState<OverlayId[]>([])
+  const overlays = usePanelOverlays()
+  const onOverlayMove = useCoreStore((s) => s.moveOverlay)
+  const onOverlayVisibilityChange = useCoreStore((s) => s.setOverlayVisibility)
+  const onOverlayOpacityChange = useCoreStore((s) => s.setOverlayOpacity)
+  const onOverlayFilterRulesChange = useCoreStore((s) => s.setOverlayFilterRules)
+  const onOverlayLineColorChange = useCoreStore((s) => s.setOverlayLineColor)
+  const {
+    overlayDialogId,
+    draggedOverlayId,
+    dropTargetOverlayId,
+    setOverlayDialogId,
+    setDraggedOverlayId,
+    setDropTargetOverlayId,
+    openOverlayDialog
+  } = useOverlayPanelState(overlays, onOverlayFilterRulesChange)
 
   const selectedOverlay = overlays.find((overlay) => overlay.id === overlayDialogId) ?? null
-
-  function openOverlayDialog(overlay: OverlayPanelItem) {
-    if (overlay.kind !== 'bitmap') {
-      setOverlayDialogId(overlay.id)
-      return
-    }
-
-    const hasDefaults = (overlay.configuration.defaultFilterRules?.length ?? 0) > 0
-    const alreadyInitialized = initializedOverlayDefaults.includes(overlay.id)
-
-    if (!alreadyInitialized) {
-      setInitializedOverlayDefaults((current) => (
-        current.includes(overlay.id) ? current : [...current, overlay.id]
-      ))
-    }
-
-    if (!alreadyInitialized && overlay.filterRules.length === 0 && hasDefaults) {
-      onOverlayFilterRulesChange(overlay.id, createOverlayFilterRulesFromTemplates(
-        overlay.configuration.defaultFilterRules ?? []
-      ))
-    }
-
-    setOverlayDialogId(overlay.id)
-  }
 
   return (
     <>
@@ -745,24 +718,6 @@ function createDefaultOverlayFilterRule(overlay: Extract<OverlayPanelItem, { kin
     opacity: 100,
     color: null
   }
-}
-
-function createOverlayFilterRulesFromTemplates(templates: OverlayFilterRuleTemplate[]): OverlayFilterRule[] {
-  return templates.map((template) => ({
-    id: crypto.randomUUID(),
-    target: template.target.kind === 'group'
-      ? {
-        kind: 'group',
-        groupId: template.target.groupId
-      }
-      : {
-        kind: 'custom',
-        colors: [...template.target.colors]
-      },
-    visible: template.visible ?? true,
-    opacity: template.opacity ?? 100,
-    color: template.color ?? null
-  }))
 }
 
 function formatPathChipValue(path: string): string {
@@ -1101,69 +1056,3 @@ function CustomOverlayColorPopover({
   )
 }
 
-type HsvColor = {
-  h: number
-  s: number
-  v: number
-  a?: number
-}
-
-function normalizeHexCandidate(value: string): string | null {
-  const normalized = value.trim().replace(/^#/, '').toLowerCase()
-  if (!/^[0-9a-f]{6}$/.test(normalized)) return null
-  return `#${normalized}`
-}
-
-function hexToHsv(hex: string): HsvColor {
-  const normalized = normalizeHexCandidate(hex) ?? '#ffffff'
-  const r = parseInt(normalized.slice(1, 3), 16) / 255
-  const g = parseInt(normalized.slice(3, 5), 16) / 255
-  const b = parseInt(normalized.slice(5, 7), 16) / 255
-
-  const max = Math.max(r, g, b)
-  const min = Math.min(r, g, b)
-  const delta = max - min
-
-  let h = 0
-  if (delta !== 0) {
-    if (max === r) h = 60 * (((g - b) / delta) % 6)
-    else if (max === g) h = 60 * (((b - r) / delta) + 2)
-    else h = 60 * (((r - g) / delta) + 4)
-  }
-
-  return {
-    h: (h + 360) % 360,
-    s: max === 0 ? 0 : delta / max,
-    v: max,
-    a: 1
-  }
-}
-
-function hsvToHex(color: HsvColor): string {
-  const h = ((color.h % 360) + 360) % 360
-  const s = clamp01(color.s)
-  const v = clamp01(color.v)
-  const c = v * s
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1))
-  const m = v - c
-
-  let r = 0
-  let g = 0
-  let b = 0
-  if (h < 60) { r = c; g = x; b = 0 }
-  else if (h < 120) { r = x; g = c; b = 0 }
-  else if (h < 180) { r = 0; g = c; b = x }
-  else if (h < 240) { r = 0; g = x; b = c }
-  else if (h < 300) { r = x; g = 0; b = c }
-  else { r = c; g = 0; b = x }
-
-  return `#${toHexChannel((r + m) * 255)}${toHexChannel((g + m) * 255)}${toHexChannel((b + m) * 255)}`
-}
-
-function clamp01(value: number): number {
-  return Math.min(1, Math.max(0, value))
-}
-
-function toHexChannel(value: number): string {
-  return Math.round(value).toString(16).padStart(2, '0')
-}

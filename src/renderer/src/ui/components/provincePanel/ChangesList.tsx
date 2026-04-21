@@ -12,6 +12,7 @@ import { unpackColor } from '../../../../../shared/mapDataTypes'
 import type { PendingChange } from '../../../../../shared/provinceEditing'
 import { useI18n } from '../../i18n/I18nProvider'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
+import { useCrossSelection } from './useCrossSelection'
 
 const useStyles = makeStyles({
   section: {
@@ -173,26 +174,36 @@ const useStyles = makeStyles({
 interface Props {
   collapsed: boolean
   onToggleCollapse: () => void
-  changes: PendingChange[]
-  crossSelectedChangeId: string | undefined
-  onRevert: (changeId: string) => void
 }
 
-export function ChangesList({
-  collapsed,
-  onToggleCollapse,
-  changes,
-  crossSelectedChangeId,
-  onRevert
-}: Props): JSX.Element {
+export function ChangesList({ collapsed, onToggleCollapse }: Props): JSX.Element {
   const styles = useStyles()
   const { t, formatNumber } = useI18n()
   const lastClickedChangeIdRef = useRef<string | null>(null)
 
+  const { changes, crossSelectedChangeId } = useCrossSelection()
   const setSelection = useMapDataStore((s) => s.setSelection)
   const extendSelection = useMapDataStore((s) => s.extendSelection)
   const setSelectedBmpGuids = useMapDataStore((s) => s.setSelectedBmpGuids)
   const toggleBmpGuid = useMapDataStore((s) => s.toggleBmpGuid)
+  const revertEdit = useMapDataStore((s) => s.revertEdit)
+  const revertBmpOnlyEdit = useMapDataStore((s) => s.revertBmpOnlyEdit)
+  const revertBmpReplacement = useMapDataStore((s) => s.revertBmpReplacement)
+  const revertNewProvince = useMapDataStore((s) => s.revertNewProvince)
+  const clearAllSelection = useMapDataStore((s) => s.clearAllSelection)
+
+  const handleRevert = (changeId: string) => {
+    if (changeId.startsWith('field-edit:')) {
+      revertEdit(parseInt(changeId.slice('field-edit:'.length), 10))
+    } else if (changeId.startsWith('bmp-field-edit:')) {
+      revertBmpOnlyEdit(changeId.slice('bmp-field-edit:'.length))
+    } else if (changeId.startsWith('bmp-replacement:')) {
+      revertBmpReplacement(parseInt(changeId.slice('bmp-replacement:'.length), 10))
+    } else if (changeId.startsWith('new-province:')) {
+      revertNewProvince(changeId.slice('new-province:'.length))
+    }
+    clearAllSelection()
+  }
 
   const handleChangeClick = (change: PendingChange, e: React.MouseEvent) => {
     if (e.shiftKey) {
@@ -267,7 +278,7 @@ export function ChangesList({
                       aria-label={t('provincePanel.changes.revert')}
                       onClick={(e) => {
                         e.stopPropagation()
-                        onRevert(change.changeId)
+                        handleRevert(change.changeId)
                       }}
                     />
                   </div>

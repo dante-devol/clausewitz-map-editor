@@ -12,8 +12,7 @@ import {
   Text
 } from '@fluentui/react-components'
 import { SaveRegular } from '@fluentui/react-icons'
-import { useCoreSelector } from '../../../bridge/useCoreSelector'
-import { selectCurrentProjectId } from '../../../core/selectors/sessionSelectors'
+import { useCoreStore } from '../../../infra/store/coreStore'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import {
   selectEffectiveProvincesForSave,
@@ -22,8 +21,6 @@ import {
 import { CanonicalProvinceList } from './CanonicalProvinceList'
 import { BmpOnlyList } from './BmpOnlyList'
 import { ChangesList } from './ChangesList'
-import { useCrossSelection } from './useCrossSelection'
-import type { BmpAssignment } from '../../../../../shared/provinceEditing'
 import { useI18n } from '../../i18n/I18nProvider'
 
 const useStyles = makeStyles({
@@ -58,9 +55,8 @@ const useStyles = makeStyles({
 export function ProvincePanel(): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
-  const projectId = useCoreSelector(selectCurrentProjectId)
+  const projectId = useCoreStore((s) => s.projectId)
 
-  const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
   const continents = useMapDataStore((s) => s.continents)
   const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
   const bmpOnlyEntries = useMapDataStore((s) => s.bmpOnlyEntries)
@@ -70,13 +66,6 @@ export function ProvincePanel(): JSX.Element {
   const pendingNewProvinces = useMapDataStore((s) => s.pendingNewProvinces)
   const loadOriginalDefinitions = useMapDataStore((s) => s.loadOriginalDefinitions)
   const clearSavedChanges = useMapDataStore((s) => s.clearSavedChanges)
-  const revertEdit = useMapDataStore((s) => s.revertEdit)
-  const revertBmpOnlyEdit = useMapDataStore((s) => s.revertBmpOnlyEdit)
-  const revertBmpReplacement = useMapDataStore((s) => s.revertBmpReplacement)
-  const revertNewProvince = useMapDataStore((s) => s.revertNewProvince)
-  const clearAllSelection = useMapDataStore((s) => s.clearAllSelection)
-
-  const { changes, crossSelectedProvinceIds, crossSelectedBmpGuids, crossSelectedChangeId } = useCrossSelection()
 
   const [canonicalCollapsed, setCanonicalCollapsed] = useState(false)
   const [bmpCollapsed, setBmpCollapsed] = useState(false)
@@ -85,17 +74,7 @@ export function ProvincePanel(): JSX.Element {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [showSaveBlocker, setShowSaveBlocker] = useState(false)
 
-  // Derive a guid-keyed assignment map for BmpOnlyList display
-  const bmpAssignments = useMemo(() => {
-    const map = new Map<string, BmpAssignment>()
-    for (const [provinceId, guid] of bmpReplacements) {
-      map.set(guid, { kind: 'replace', targetId: provinceId })
-    }
-    for (const [guid, assignedId] of pendingNewProvinces) {
-      map.set(guid, { kind: 'register', assignedId })
-    }
-    return map
-  }, [bmpReplacements, pendingNewProvinces])
+  const changeCount = pendingEdits.size + pendingBmpOnlyEdits.size + bmpReplacements.size + pendingNewProvinces.size
 
   const normalizedProvinces = useMemo(
     () => selectEffectiveProvincesForSave(
@@ -122,7 +101,7 @@ export function ProvincePanel(): JSX.Element {
   )
 
   const continentList = useMemo(() => [...continents.values()], [continents])
-  const hasPendingChanges = changes.length > 0
+  const hasPendingChanges = changeCount > 0
 
   const persistSave = async (provincesToSave: typeof normalizedProvinces) => {
     if (!projectId || !hasPendingChanges || isSaving) return
@@ -158,24 +137,11 @@ export function ProvincePanel(): JSX.Element {
     ))
   }
 
-  const handleRevert = (id: string) => {
-    if (id.startsWith('field-edit:')) {
-      revertEdit(parseInt(id.slice('field-edit:'.length), 10))
-    } else if (id.startsWith('bmp-field-edit:')) {
-      revertBmpOnlyEdit(id.slice('bmp-field-edit:'.length))
-    } else if (id.startsWith('bmp-replacement:')) {
-      revertBmpReplacement(parseInt(id.slice('bmp-replacement:'.length), 10))
-    } else if (id.startsWith('new-province:')) {
-      revertNewProvince(id.slice('new-province:'.length))
-    }
-    clearAllSelection()
-  }
-
   return (
     <div className={styles.panel}>
       <div className={styles.header}>
         <Text size={100} className={styles.headerText}>
-          {t('provincePanel.save.summary', { count: changes.length })}
+          {t('provincePanel.save.summary', { count: changeCount })}
         </Text>
         <div className={styles.headerActions}>
           {saveError && (
@@ -197,22 +163,14 @@ export function ProvincePanel(): JSX.Element {
       <CanonicalProvinceList
         collapsed={canonicalCollapsed}
         onToggleCollapse={() => setCanonicalCollapsed((c) => !c)}
-        provinceCatalog={provinceCatalog}
-        crossSelectedIds={crossSelectedProvinceIds}
       />
       <BmpOnlyList
         collapsed={bmpCollapsed}
         onToggleCollapse={() => setBmpCollapsed((c) => !c)}
-        entries={bmpOnlyEntries}
-        bmpAssignments={bmpAssignments}
-        crossSelectedGuids={crossSelectedBmpGuids}
       />
       <ChangesList
         collapsed={changesCollapsed}
         onToggleCollapse={() => setChangesCollapsed((c) => !c)}
-        changes={changes}
-        crossSelectedChangeId={crossSelectedChangeId}
-        onRevert={handleRevert}
       />
       <Dialog open={showSaveBlocker}>
         <DialogSurface>

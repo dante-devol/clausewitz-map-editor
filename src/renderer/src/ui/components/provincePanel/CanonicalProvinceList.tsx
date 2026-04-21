@@ -28,6 +28,7 @@ import { TYPE_COLORS, continentColor } from '../../../infra/config/displayModes'
 import { useI18n } from '../../i18n/I18nProvider'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import { useProvinceValidationStore } from '../../../infra/store/provinceValidationStore'
+import { useCrossSelection } from './useCrossSelection'
 import type { ProvinceValidationIssue, ProvinceValidationSeverity } from '../../../../../shared/provinceValidation'
 
 const ROW_H = 36
@@ -416,21 +417,15 @@ const useStyles = makeStyles({
 interface Props {
   collapsed: boolean
   onToggleCollapse: () => void
-  provinceCatalog: readonly ProvinceCatalogEntry[]
-  crossSelectedIds: number[]
 }
 
-export function CanonicalProvinceList({
-  collapsed,
-  onToggleCollapse,
-  provinceCatalog,
-  crossSelectedIds
-}: Props): JSX.Element {
+export function CanonicalProvinceList({ collapsed, onToggleCollapse }: Props): JSX.Element {
   const styles = useStyles()
   const { t, formatNumber } = useI18n()
   const scrollRef = useRef<HTMLDivElement>(null)
   const lastClickedIndexRef = useRef<number | null>(null)
 
+  const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
   const terrains = useMapDataStore((s) => s.terrains)
   const continents = useMapDataStore((s) => s.continents)
   const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
@@ -441,6 +436,7 @@ export function CanonicalProvinceList({
   const setSelection = useMapDataStore((s) => s.setSelection)
   const extendSelection = useMapDataStore((s) => s.extendSelection)
   const toggleProvinceId = useMapDataStore((s) => s.toggleProvinceId)
+  const { crossSelectedProvinceIds } = useCrossSelection()
 
   const bmpOnlyByGuid = useMemo(
     () => new Map(bmpOnlyEntries.map((e) => [e.guid, e])),
@@ -484,7 +480,7 @@ export function CanonicalProvinceList({
   })
 
   const selectedIdSet = useMemo(() => new Set(selectedProvinceIds), [selectedProvinceIds])
-  const crossSelectedIdSet = useMemo(() => new Set(crossSelectedIds), [crossSelectedIds])
+  const crossSelectedIdSet = useMemo(() => new Set(crossSelectedProvinceIds), [crossSelectedProvinceIds])
 
   const scrollTargetId = selectedProvinceIds.length > 0 ? selectedProvinceIds[selectedProvinceIds.length - 1] : null
   const selectedIndex = useMemo(() => {

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   Button,
@@ -19,6 +19,7 @@ import type { BmpAssignment, BmpOnlyEntry } from '../../../../../shared/province
 import { useI18n } from '../../i18n/I18nProvider'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import { BmpAssignPopover } from './BmpAssignPopover'
+import { useCrossSelection } from './useCrossSelection'
 
 const ROW_H = 36
 
@@ -189,33 +190,39 @@ const useStyles = makeStyles({
 interface Props {
   collapsed: boolean
   onToggleCollapse: () => void
-  entries: BmpOnlyEntry[]
-  bmpAssignments: Map<string, BmpAssignment>
-  crossSelectedGuids: string[]
 }
 
-export function BmpOnlyList({
-  collapsed,
-  onToggleCollapse,
-  entries,
-  bmpAssignments,
-  crossSelectedGuids
-}: Props): JSX.Element {
+export function BmpOnlyList({ collapsed, onToggleCollapse }: Props): JSX.Element {
   const styles = useStyles()
   const { t, formatNumber } = useI18n()
   const scrollRef = useRef<HTMLDivElement>(null)
   const lastSelectedIndexRef = useRef<number | null>(null)
 
+  const entries = useMapDataStore((s) => s.bmpOnlyEntries)
+  const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
+  const pendingNewProvinces = useMapDataStore((s) => s.pendingNewProvinces)
   const selectedBmpGuids = useMapDataStore((s) => s.selectedBmpGuids)
   const setSelectedBmpGuids = useMapDataStore((s) => s.setSelectedBmpGuids)
   const setSelection = useMapDataStore((s) => s.setSelection)
+  const { crossSelectedBmpGuids } = useCrossSelection()
+
+  const bmpAssignments = useMemo(() => {
+    const map = new Map<string, BmpAssignment>()
+    for (const [provinceId, guid] of bmpReplacements) {
+      map.set(guid, { kind: 'replace', targetId: provinceId })
+    }
+    for (const [guid, assignedId] of pendingNewProvinces) {
+      map.set(guid, { kind: 'register', assignedId })
+    }
+    return map
+  }, [bmpReplacements, pendingNewProvinces])
 
   const [openGuid, setOpenGuid] = useState<string | null>(null)
   const [multiPopoverOpen, setMultiPopoverOpen] = useState(false)
 
   const unresolvedCount = entries.filter((e) => !bmpAssignments.has(e.guid)).length
   const selectedSet = new Set(selectedBmpGuids)
-  const crossSelectedSet = new Set(crossSelectedGuids)
+  const crossSelectedSet = new Set(crossSelectedBmpGuids)
 
   const rowVirtualizer = useVirtualizer({
     count: entries.length,

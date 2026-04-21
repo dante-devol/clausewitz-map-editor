@@ -1,9 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useCoreApi } from '../../bridge/CoreProvider'
-import { sessionCommands } from '../../core/commands/sessionCommands'
-import { useCoreSelector } from '../../bridge/useCoreSelector'
-import { selectDisplayMode, selectMapOverlays } from '../../core/selectors/mapSelectors'
-import { selectCurrentProjectId } from '../../core/selectors/sessionSelectors'
+import { useCoreStore } from '../../infra/store/coreStore'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
 import {
   buildProvinceCatalog,
@@ -21,14 +17,18 @@ const provinceBitmapFactsCache = new Map<string, ProvinceBitmapFacts>()
 const MAP_LOAD_TOTAL_STEPS = 4
 const BITMAP_RECONCILE_TOTAL_STEPS = 5
 
-// Loads and keeps map data in sync for the active project session.
 export function useMapLoader(): void {
-  const api = useCoreApi()
   const { t } = useI18n()
   const tRef = useRef(t)
-  const projectId = useCoreSelector(selectCurrentProjectId)
-  const displayMode = useCoreSelector(selectDisplayMode)
-  const overlays = useCoreSelector(selectMapOverlays)
+
+  const projectId = useCoreStore((s) => s.projectId)
+  const displayMode = useCoreStore((s) => s.displayMode)
+  const overlays = useCoreStore((s) => s.overlays)
+  const mapLoadingStarted = useCoreStore((s) => s.mapLoadingStarted)
+  const mapReady = useCoreStore((s) => s.mapReady)
+  const sessionFailed = useCoreStore((s) => s.sessionFailed)
+  const sessionCleared = useCoreStore((s) => s.sessionCleared)
+
   const resolvedPaths = useProjectStore((s) => s.resolvedPaths)
   const loadContinents = useMapDataStore((s) => s.loadContinents)
   const loadProvinces = useMapDataStore((s) => s.loadProvinces)
@@ -67,7 +67,7 @@ export function useMapLoader(): void {
         message: tRef.current('notification.mapLoad.step.request'),
         progress: { current: 1, total: MAP_LOAD_TOTAL_STEPS }
       })
-      api.dispatch(sessionCommands.mapLoadingStarted())
+      mapLoadingStarted()
       try {
         const snapshot = await window.api.map.load(projectId)
         if (cancelled) return
@@ -98,7 +98,7 @@ export function useMapLoader(): void {
           message: tRef.current('notification.mapLoad.step.finalize'),
           progress: { current: 4, total: MAP_LOAD_TOTAL_STEPS }
         })
-        api.dispatch(sessionCommands.mapReady())
+        mapReady()
         notificationService.completeProgress({
           scope: loadScope,
           title: tRef.current('notification.mapLoad.doneTitle'),
@@ -107,7 +107,7 @@ export function useMapLoader(): void {
         settled = true
       } catch (error) {
         if (cancelled) return
-        api.dispatch(sessionCommands.failed(error instanceof Error ? error.message : 'Failed to load map'))
+        sessionFailed(error instanceof Error ? error.message : 'Failed to load map')
         notificationService.failProgress({
           scope: loadScope,
           title: tRef.current('notification.mapLoad.failedTitle'),
@@ -169,11 +169,15 @@ export function useMapLoader(): void {
       cancelled = true
       if (!settled) notificationService.dismiss(loadScope)
       unsubscribe()
-      api.dispatch(sessionCommands.cleared())
+      sessionCleared()
       clear()
     }
   }, [
-    api,
+    projectId,
+    mapLoadingStarted,
+    mapReady,
+    sessionFailed,
+    sessionCleared,
     clear,
     loadContinents,
     loadOriginalDefinitions,
@@ -185,7 +189,6 @@ export function useMapLoader(): void {
     replaceStrategicRegions,
     appendStrategicRegions,
     loadTerrains,
-    projectId,
     resolvedPaths,
     setProvinceBitmapStatus,
     setStatesStatus,
@@ -196,8 +199,6 @@ export function useMapLoader(): void {
     if (!projectId) return
     const stateOverlayVisible = overlays.some((overlay) => overlay.id === 'states' && overlay.visible)
     if (displayMode !== 'state' && !stateOverlayVisible) return
-    // Read status without subscribing so this effect doesn't self-cancel when
-    // setStatesStatus('loading') changes the dep and triggers immediate cleanup.
     if (useMapDataStore.getState().statesStatus !== 'idle') return
 
     let cancelled = false

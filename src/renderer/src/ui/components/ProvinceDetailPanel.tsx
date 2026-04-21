@@ -12,7 +12,6 @@ import {
 } from '@fluentui/react-components'
 import { unpackColor } from '../../../../shared/mapDataTypes'
 import type { Province } from '../../../../shared/mapDataTypes'
-import type { ProvinceCatalogEntry } from '../../../../shared/provinceCatalog'
 import type { ProvinceDraftFields, ProvinceDraftTarget } from '../../../../shared/provinceEditing'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
 import { selectProvinceDraftTargetMaps } from '../../infra/store/provinceEditSelectors'
@@ -134,15 +133,12 @@ const useStyles = makeStyles({
 
 const TAB_SHOW_LIMIT = 5
 
-interface Props {
-  selectedProvinceIds: number[]
-  selectedBmpGuids: string[]
-  provinceCatalog: readonly ProvinceCatalogEntry[]
-}
-
-export function ProvinceDetailPanel({ selectedProvinceIds, selectedBmpGuids }: Props): JSX.Element {
+export function ProvinceDetailPanel(): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
+
+  const selectedProvinceIds = useMapDataStore((s) => s.selectedProvinceIds)
+  const selectedBmpGuids = useMapDataStore((s) => s.selectedBmpGuids)
 
   const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
   const pendingEdits = useMapDataStore((s) => s.pendingEdits)

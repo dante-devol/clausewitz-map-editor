@@ -5,6 +5,8 @@ import type { MessageKey } from '../i18n/messages/en'
 import type { CanvasOverlay, BitmapCanvasOverlay, OutlineCanvasOverlay } from '../contracts/CanvasOverlay'
 import type { OverlayConfiguration, OutlineOverlayConfiguration, OverlayUiConfiguration } from '../contracts/OverlayConfiguration'
 import { OVERLAY_META } from '../config/overlays'
+import { useCoreStore } from '../../infra/store/coreStore'
+import { useProjectStore } from '../../infra/store/projectStore'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
 import { BmpProvinceMapSource } from '../../infra/lib/BmpProvinceMapSource'
 import { buildProvinceIndex, type ProvinceIndex } from '../../infra/lib/provinceAnalysis'
@@ -85,13 +87,45 @@ const INITIAL_BITMAP_OVERLAY_ASSETS: Record<OverlayId, BitmapOverlayAssetRecord>
   }
 }
 
-export function useOverlayAssets(
-  overlays: MapOverlayState[],
-  resolvedPaths: ResolvedPaths | null
-): {
+export function usePanelOverlays(): OverlayPanelItem[] {
+  const overlays = useCoreStore((s) => s.overlays)
+  const resolvedPaths = useProjectStore((s) => s.resolvedPaths)
+
+  return useMemo(() => overlays.map((overlay) => {
+    const meta = OVERLAY_META[overlay.id]
+    if (overlay.kind === 'bitmap') {
+      return {
+        id: overlay.id,
+        kind: 'bitmap' as const,
+        labelKey: meta.labelKey,
+        configPath: meta.configPath ?? '',
+        resolvedPath: resolvedPaths ? resolveOverlayPath(overlay.id, resolvedPaths) : null,
+        fileStateLabelKey: 'overlay.fileState.unavailable' as MessageKey,
+        visible: overlay.visible,
+        opacity: overlay.opacity,
+        configuration: meta.configuration as OverlayConfiguration,
+        filterRules: (overlay as BitmapMapOverlayState).filterRules
+      }
+    }
+    return {
+      id: overlay.id,
+      kind: 'outline' as const,
+      labelKey: meta.labelKey,
+      visible: overlay.visible,
+      opacity: overlay.opacity,
+      configuration: meta.configuration as OutlineOverlayConfiguration,
+      lineColor: (overlay as OutlineMapOverlayState).lineColor
+    }
+  }), [overlays, resolvedPaths])
+}
+
+export function useOverlayAssets(): {
   panelOverlays: OverlayPanelItem[]
   canvasOverlays: CanvasOverlay[]
 } {
+  const overlays = useCoreStore((s) => s.overlays)
+  const resolvedPaths = useProjectStore((s) => s.resolvedPaths)
+
   const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
   const provincesByColor = useMapDataStore((s) => s.provincesByColor)
   const stateProvinceToStateId = useMapDataStore((s) => s.stateProvinceToStateId)

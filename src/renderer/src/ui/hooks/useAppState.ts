@@ -1,27 +1,12 @@
-import { useCoreApi } from '../../bridge/CoreProvider'
-import { useCoreSelector } from '../../bridge/useCoreSelector'
-import { appCommands } from '../../core/commands/appCommands'
-import { selectActiveView, selectTheme } from '../../core/selectors/appSelectors'
-import type { Theme, View } from '../../core/contracts/CoreState'
+import { useCoreStore } from '../../infra/store/coreStore'
+
+export type { Theme, View } from '../../infra/store/slices/appSlice'
 
 export function useAppState() {
-  const api = useCoreApi()
-  const theme = useCoreSelector(selectTheme)
-  const activeView = useCoreSelector(selectActiveView)
-
-  function setTheme(nextTheme: Theme) {
-    api.dispatch(appCommands.setTheme(nextTheme))
-  }
-
-  function setActiveView(view: View) {
-    api.dispatch(appCommands.setActiveView(view))
-  }
-
-  function toggleTheme() {
-    api.dispatch(appCommands.toggleTheme())
-  }
-
+  const theme = useCoreStore((s) => s.theme)
+  const activeView = useCoreStore((s) => s.activeView)
+  const setTheme = useCoreStore((s) => s.setTheme)
+  const setActiveView = useCoreStore((s) => s.setActiveView)
+  const toggleTheme = useCoreStore((s) => s.toggleTheme)
   return { theme, activeView, setTheme, setActiveView, toggleTheme }
 }
-
-export type { Theme, View }

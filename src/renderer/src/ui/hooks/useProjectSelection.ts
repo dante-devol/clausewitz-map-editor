@@ -1,14 +1,14 @@
 import { useEffect } from 'react'
-import { useCoreApi } from '../../bridge/CoreProvider'
-import { sessionCommands } from '../../core/commands/sessionCommands'
-import { useCoreSelector } from '../../bridge/useCoreSelector'
-import { selectCurrentProjectId, selectCurrentProjectPath } from '../../core/selectors/sessionSelectors'
+import { useCoreStore } from '../../infra/store/coreStore'
 import { useProjectStore } from '../../infra/store/projectStore'
 
 export function useProjectSelection() {
-  const api = useCoreApi()
-  const currentProjectId = useCoreSelector(selectCurrentProjectId)
-  const currentProject = useCoreSelector(selectCurrentProjectPath)
+  const projectId = useCoreStore((s) => s.projectId)
+  const currentProject = useCoreStore((s) => s.projectPath)
+  const openProjectStarted = useCoreStore((s) => s.openProjectStarted)
+  const projectOpened = useCoreStore((s) => s.projectOpened)
+  const sessionFailed = useCoreStore((s) => s.sessionFailed)
+
   const recentProjects = useProjectStore((s) => s.recentProjects)
   const gamePath = useProjectStore((s) => s.gamePath)
   const gameVerification = useProjectStore((s) => s.gameVerification)
@@ -41,7 +41,6 @@ export function useProjectSelection() {
   async function selectProject(path: string) {
     const modVerification = await window.api.projects.verifyModPath(path)
     if (!modVerification.hasAny) {
-      // No recognized paths — hold as pending and let the UI prompt the user.
       setPendingProject({ path, verification: modVerification })
       return
     }
@@ -59,16 +58,16 @@ export function useProjectSelection() {
   }
 
   async function loadProject(path: string) {
-    api.dispatch(sessionCommands.openProjectStarted(path))
+    openProjectStarted(path)
     try {
       const opened = await window.api.projects.open({ gamePath: gamePath!, modPath: path })
       setResolvedPaths(opened.resolvedPaths)
-      api.dispatch(sessionCommands.projectOpened(opened.projectId, path))
+      projectOpened(opened.projectId, path)
       await window.api.projects.addRecent(path)
       setRecentProjects(await window.api.projects.getRecent())
       await window.api.window.enterEditor()
     } catch (error) {
-      api.dispatch(sessionCommands.failed(error instanceof Error ? error.message : 'Failed to open project'))
+      sessionFailed(error instanceof Error ? error.message : 'Failed to open project')
       throw error
     }
   }
@@ -86,7 +85,7 @@ export function useProjectSelection() {
   const gamePathValid = gameVerification?.valid ?? null
 
   return {
-    currentProjectId,
+    currentProjectId: projectId,
     currentProject,
     recentProjects,
     gamePath,
