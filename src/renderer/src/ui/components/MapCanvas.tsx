@@ -1,15 +1,12 @@
-import type { ReactNode } from 'react'
 import { makeStyles, mergeClasses, tokens, Button, Spinner, Text, Tooltip, Skeleton, SkeletonItem, ProgressBar, shorthands } from '@fluentui/react-components'
 import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, PaintBucketRegular, PaintBucketFilled, DismissRegular } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
 import { useMapCanvas } from '../hooks/useMapCanvas'
-import type { CanvasOverlay } from '../contracts/CanvasOverlay'
-import type { NotificationRecord } from '../../infra/store/notificationStore'
-import type { HoveredColor } from '../hooks/useMapCanvas'
+import { useOverlayAssets } from '../hooks/useOverlayAssets'
+import { useMapViewportState } from '../hooks/useMapViewportState'
+import { DisplayModeControl } from './DisplayModeControl'
 
 const ZOOM_STEP = 1.25
-
-interface HoverTooltipPosition { x: number; y: number }
 
 const useStyles = makeStyles({
   root: {
@@ -161,53 +158,19 @@ const useStyles = makeStyles({
   }
 })
 
-interface Props {
-  src: string | null
-  overlays?: CanvasOverlay[]
-  highlightColors: number[]
-  validationWarningColors: number[]
-  validationErrorColors: number[]
-  colorMap?: Map<number, number> | null
-  activeTool: 'select' | 'eyedrop' | 'bucket'
-  eyedropEnabled: boolean
-  bucketEnabled: boolean
-  sampledValueColor?: string | null
-  sampledValueLabel?: string | null
-  notifications?: NotificationRecord[]
-  onDismissNotification?: (id: string) => void
-  onActiveToolChange?: (tool: 'select' | 'eyedrop' | 'bucket') => void
-  onMapClick?: (r: number, g: number, b: number, additive: boolean) => void
-  hoverTooltipPosition?: HoverTooltipPosition | null
-  hoverTooltip?: { label: string; value: string } | null
-  onHoverColorChange?: (color: HoveredColor | null) => void
-  topRightContent?: ReactNode
-}
-
-export function MapCanvas({
-  src,
-  overlays = [],
-  highlightColors,
-  validationWarningColors,
-  validationErrorColors,
-  colorMap,
-  activeTool,
-  eyedropEnabled,
-  bucketEnabled,
-  sampledValueColor,
-  sampledValueLabel,
-  notifications = [],
-  onDismissNotification,
-  onActiveToolChange,
-  onMapClick,
-  hoverTooltipPosition,
-  hoverTooltip,
-  onHoverColorChange,
-  topRightContent
-}: Props): JSX.Element {
+export function MapCanvas(): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
+  const { canvasOverlays } = useOverlayAssets()
+  const {
+    src, colorMap, highlightColors, validationWarningColors, validationErrorColors,
+    activeTool, eyedropEnabled, bucketEnabled, sampledValueColor, sampledValueLabel,
+    notifications, displayMode, modeValuesByMode,
+    onDismissNotification, onActiveToolChange, onMapClick,
+    hoverTooltipPosition, hoverTooltip, onHoverColorChange, onDisplayModeChange,
+  } = useMapViewportState()
   const { containerRef, canvasRef, dragging, displayScale, imageLoaded, isCanvasLoading, onMouseDown, onMouseMove, stopDrag, zoomBy, fit } = useMapCanvas({
-    src, overlays, highlightColors, validationWarningColors, validationErrorColors, colorMap, activeTool, onMapClick, onHoverColorChange
+    src, overlays: canvasOverlays, highlightColors, validationWarningColors, validationErrorColors, colorMap, activeTool, onMapClick, onHoverColorChange
   })
 
   const rootClass = mergeClasses(
@@ -251,11 +214,13 @@ export function MapCanvas({
           <Text size={200} weight="semibold" className={styles.hoverTooltipValue}>{hoverTooltip.value}</Text>
         </div>
       )}
-      {topRightContent && (
-        <div className={styles.topRightControls} onMouseDown={(e) => e.stopPropagation()}>
-          {topRightContent}
-        </div>
-      )}
+      <div className={styles.topRightControls} onMouseDown={(e) => e.stopPropagation()}>
+        <DisplayModeControl
+          mode={displayMode}
+          onModeChange={onDisplayModeChange}
+          valuesByMode={modeValuesByMode}
+        />
+      </div>
       {notifications.length > 0 && (
         <div className={styles.topLeftNotifications} onMouseDown={(e) => e.stopPropagation()}>
           <div className={styles.notificationTray}>

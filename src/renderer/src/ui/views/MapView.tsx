@@ -1,12 +1,9 @@
 import { memo } from 'react'
 import { makeStyles, tokens } from '@fluentui/react-components'
-import { DisplayModeControl } from '../components/DisplayModeControl'
 import { MapModePanel } from '../components/MapModePanel'
 import { MapCanvas } from '../components/MapCanvas'
 import { ProvincePanel } from '../components/provincePanel/ProvincePanel'
 import { ProvinceDetailPanel } from '../components/ProvinceDetailPanel'
-import { useOverlayAssets } from '../hooks/useOverlayAssets'
-import { useMapViewportState } from '../hooks/useMapViewportState'
 
 const useStyles = makeStyles({
   root: {
@@ -55,60 +52,9 @@ export function MapView() {
 }
 
 const MapViewportPane = memo(function MapViewportPane({ className }: { className: string }) {
-  const { canvasOverlays } = useOverlayAssets()
-
-  const {
-    src,
-    colorMap,
-    highlightColors,
-    validationWarningColors,
-    validationErrorColors,
-    activeTool,
-    eyedropEnabled,
-    bucketEnabled,
-    sampledValueColor,
-    sampledValueLabel,
-    notifications,
-    displayMode,
-    modeValuesByMode,
-    onDismissNotification,
-    onActiveToolChange,
-    onMapClick,
-    hoverTooltipPosition,
-    hoverTooltip,
-    onHoverColorChange,
-    onDisplayModeChange,
-  } = useMapViewportState()
-
   return (
     <div className={className}>
-      <MapCanvas
-        src={src}
-        overlays={canvasOverlays}
-        highlightColors={highlightColors}
-        validationWarningColors={validationWarningColors}
-        validationErrorColors={validationErrorColors}
-        colorMap={colorMap}
-        activeTool={activeTool}
-        eyedropEnabled={eyedropEnabled}
-        bucketEnabled={bucketEnabled}
-        sampledValueColor={sampledValueColor}
-        sampledValueLabel={sampledValueLabel}
-        notifications={notifications}
-        onDismissNotification={onDismissNotification}
-        onActiveToolChange={onActiveToolChange}
-        onMapClick={onMapClick}
-        hoverTooltipPosition={hoverTooltipPosition}
-        hoverTooltip={hoverTooltip}
-        onHoverColorChange={onHoverColorChange}
-        topRightContent={(
-          <DisplayModeControl
-            mode={displayMode}
-            onModeChange={onDisplayModeChange}
-            valuesByMode={modeValuesByMode}
-          />
-        )}
-      />
+      <MapCanvas />
     </div>
   )
 })
