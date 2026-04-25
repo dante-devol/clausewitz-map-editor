@@ -128,8 +128,6 @@ export function useOverlayAssets(): {
 
   const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
   const provincesByColor = useMapDataStore((s) => s.provincesByColor)
-  const stateProvinceToStateId = useMapDataStore((s) => s.stateProvinceToStateId)
-  const strategicRegionProvinceToRegionId = useMapDataStore((s) => s.strategicRegionProvinceToRegionId)
   const statesStatus = useMapDataStore((s) => s.statesStatus)
   const strategicRegionsStatus = useMapDataStore((s) => s.strategicRegionsStatus)
   const statesRevision = useMapDataStore((s) => s.statesRevision)
@@ -213,6 +211,8 @@ export function useOverlayAssets(): {
           continue
         }
 
+        const { stateProvinceToStateId, strategicRegionProvinceToRegionId, statesRevision, strategicRegionsRevision } = useMapDataStore.getState()
+        const previousAsset = outlineCacheRef.current.get(overlay.id)
         const outlineAsset = await ensureOutlineOverlayLoaded(
           overlay,
           provincesImageB64,
@@ -228,7 +228,7 @@ export function useOverlayAssets(): {
           strategicRegionsRevision
         )
         if (cancelled || !outlineAsset) continue
-        setAssetStateVersion((version) => version + 1)
+        if (outlineAsset !== previousAsset) setAssetStateVersion((version) => version + 1)
       }
     }
 
@@ -242,10 +242,8 @@ export function useOverlayAssets(): {
     provincesImageB64,
     provincesByColor,
     resolvedPaths,
-    stateProvinceToStateId,
     statesRevision,
     statesStatus,
-    strategicRegionProvinceToRegionId,
     strategicRegionsRevision,
     strategicRegionsStatus
   ])

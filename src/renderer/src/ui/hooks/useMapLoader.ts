@@ -22,8 +22,6 @@ export function useMapLoader(): void {
   const tRef = useRef(t)
 
   const projectId = useCoreStore((s) => s.projectId)
-  const displayMode = useCoreStore((s) => s.displayMode)
-  const overlays = useCoreStore((s) => s.overlays)
   const mapLoadingStarted = useCoreStore((s) => s.mapLoadingStarted)
   const mapReady = useCoreStore((s) => s.mapReady)
   const sessionFailed = useCoreStore((s) => s.sessionFailed)
@@ -49,6 +47,8 @@ export function useMapLoader(): void {
   const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
   const clear = useMapDataStore((s) => s.clear)
 
+  const startDatasetsRef = useRef<(() => void) | null>(null)
+
   useEffect(() => {
     tRef.current = t
   }, [t])
@@ -58,7 +58,86 @@ export function useMapLoader(): void {
 
     let cancelled = false
     let settled = false
+    let statesSettled = false
+    let strategicRegionsSettled = false
     const loadScope = `map-load:${projectId}`
+    const statesScope = `states-load:${projectId}`
+    const strategicRegionsScope = `strategic-regions-load:${projectId}`
+
+    async function loadStatesAsync() {
+      if (cancelled || useMapDataStore.getState().statesStatus !== 'idle') return
+      setStatesStatus('loading')
+      replaceStates([])
+      notificationService.beginProgress({
+        scope: statesScope,
+        title: tRef.current('notification.statesLoad.title'),
+        message: tRef.current('notification.statesLoad.progress', {
+          loaded: 0,
+          total: resolvedPaths?.states.length ?? 0
+        }),
+        progress: { current: 0, total: Math.max(resolvedPaths?.states.length ?? 0, 1) }
+      })
+      try {
+        await window.api.map.loadStates(projectId)
+        if (cancelled) return
+        setStatesStatus('ready')
+        notificationService.completeProgress({
+          scope: statesScope,
+          title: tRef.current('notification.statesLoad.doneTitle'),
+          message: tRef.current('notification.statesLoad.doneMessage')
+        })
+      } catch (error) {
+        if (cancelled) return
+        setStatesStatus('error')
+        notificationService.failProgress({
+          scope: statesScope,
+          title: tRef.current('notification.statesLoad.failedTitle'),
+          message: error instanceof Error ? error.message : tRef.current('notification.statesLoad.failedMessage')
+        })
+      } finally {
+        statesSettled = true
+      }
+    }
+
+    async function loadStrategicRegionsAsync() {
+      if (cancelled || useMapDataStore.getState().strategicRegionsStatus !== 'idle') return
+      setStrategicRegionsStatus('loading')
+      replaceStrategicRegions([])
+      notificationService.beginProgress({
+        scope: strategicRegionsScope,
+        title: tRef.current('notification.strategicRegionsLoad.title'),
+        message: tRef.current('notification.strategicRegionsLoad.progress', {
+          loaded: 0,
+          total: resolvedPaths?.strategicRegions.length ?? 0
+        }),
+        progress: { current: 0, total: Math.max(resolvedPaths?.strategicRegions.length ?? 0, 1) }
+      })
+      try {
+        await window.api.map.loadStrategicRegions(projectId)
+        if (cancelled) return
+        setStrategicRegionsStatus('ready')
+        notificationService.completeProgress({
+          scope: strategicRegionsScope,
+          title: tRef.current('notification.strategicRegionsLoad.doneTitle'),
+          message: tRef.current('notification.strategicRegionsLoad.doneMessage')
+        })
+      } catch (error) {
+        if (cancelled) return
+        setStrategicRegionsStatus('error')
+        notificationService.failProgress({
+          scope: strategicRegionsScope,
+          title: tRef.current('notification.strategicRegionsLoad.failedTitle'),
+          message: error instanceof Error ? error.message : tRef.current('notification.strategicRegionsLoad.failedMessage')
+        })
+      } finally {
+        strategicRegionsSettled = true
+      }
+    }
+
+    startDatasetsRef.current = () => {
+      void loadStatesAsync()
+      void loadStrategicRegionsAsync()
+    }
 
     async function load() {
       notificationService.beginProgress({
@@ -89,8 +168,6 @@ export function useMapLoader(): void {
         })
         loadOriginalDefinitions(snapshot.provinces)
         loadProvinceCatalog(snapshot.provinceCatalog)
-        setStatesStatus('idle')
-        setStrategicRegionsStatus('idle')
         setProvinceBitmapStatus('idle')
         notificationService.advanceProgress({
           scope: loadScope,
@@ -133,7 +210,7 @@ export function useMapLoader(): void {
         const update = event.data as StateDatasetUpdate
         const progress = resolveFileProgress(update.loadedFiles, update.totalFiles, resolvedPaths?.states.length ?? 0)
         notificationService.advanceProgress({
-          scope: `states-load:${projectId}`,
+          scope: statesScope,
           title: tRef.current('notification.statesLoad.title'),
           message: tRef.current('notification.statesLoad.progress', {
             loaded: progress.current,
@@ -148,7 +225,7 @@ export function useMapLoader(): void {
         const update = event.data as StrategicRegionDatasetUpdate
         const progress = resolveFileProgress(update.loadedFiles, update.totalFiles, resolvedPaths?.strategicRegions.length ?? 0)
         notificationService.advanceProgress({
-          scope: `strategic-regions-load:${projectId}`,
+          scope: strategicRegionsScope,
           title: tRef.current('notification.strategicRegionsLoad.title'),
           message: tRef.current('notification.strategicRegionsLoad.progress', {
             loaded: progress.current,
@@ -167,7 +244,10 @@ export function useMapLoader(): void {
 
     return () => {
       cancelled = true
+      startDatasetsRef.current = null
       if (!settled) notificationService.dismiss(loadScope)
+      if (!statesSettled) notificationService.dismiss(statesScope)
+      if (!strategicRegionsSettled) notificationService.dismiss(strategicRegionsScope)
       unsubscribe()
       sessionCleared()
       clear()
@@ -192,119 +272,6 @@ export function useMapLoader(): void {
     resolvedPaths,
     setProvinceBitmapStatus,
     setStatesStatus,
-    setStrategicRegionsStatus
-  ])
-
-  useEffect(() => {
-    if (!projectId) return
-    const stateOverlayVisible = overlays.some((overlay) => overlay.id === 'states' && overlay.visible)
-    if (displayMode !== 'state' && !stateOverlayVisible) return
-    if (useMapDataStore.getState().statesStatus !== 'idle') return
-
-    let cancelled = false
-    let settled = false
-    const statesScope = `states-load:${projectId}`
-    setStatesStatus('loading')
-    replaceStates([])
-    notificationService.beginProgress({
-      scope: statesScope,
-      title: tRef.current('notification.statesLoad.title'),
-      message: tRef.current('notification.statesLoad.progress', {
-        loaded: 0,
-        total: resolvedPaths?.states.length ?? 0
-      }),
-      progress: {
-        current: 0,
-        total: Math.max(resolvedPaths?.states.length ?? 0, 1)
-      }
-    })
-
-    void window.api.map.loadStates(projectId)
-      .then(() => {
-        if (cancelled) return
-        setStatesStatus('ready')
-        notificationService.completeProgress({
-          scope: statesScope,
-          title: tRef.current('notification.statesLoad.doneTitle'),
-          message: tRef.current('notification.statesLoad.doneMessage')
-        })
-        settled = true
-      })
-      .catch((error) => {
-        if (!cancelled) setStatesStatus('error')
-        if (!cancelled) {
-          notificationService.failProgress({
-            scope: statesScope,
-            title: tRef.current('notification.statesLoad.failedTitle'),
-            message: error instanceof Error ? error.message : tRef.current('notification.statesLoad.failedMessage')
-          })
-          settled = true
-        }
-      })
-
-    return () => {
-      cancelled = true
-      if (!settled) notificationService.dismiss(statesScope)
-    }
-  }, [displayMode, overlays, projectId, replaceStates, resolvedPaths, setStatesStatus])
-
-  useEffect(() => {
-    if (!projectId) return
-    const strategicRegionOverlayVisible = overlays.some((overlay) => overlay.id === 'strategicRegions' && overlay.visible)
-    if (displayMode !== 'strategicRegion' && !strategicRegionOverlayVisible) return
-    if (useMapDataStore.getState().strategicRegionsStatus !== 'idle') return
-
-    let cancelled = false
-    let settled = false
-    const strategicRegionsScope = `strategic-regions-load:${projectId}`
-    setStrategicRegionsStatus('loading')
-    replaceStrategicRegions([])
-    notificationService.beginProgress({
-      scope: strategicRegionsScope,
-      title: tRef.current('notification.strategicRegionsLoad.title'),
-      message: tRef.current('notification.strategicRegionsLoad.progress', {
-        loaded: 0,
-        total: resolvedPaths?.strategicRegions.length ?? 0
-      }),
-      progress: {
-        current: 0,
-        total: Math.max(resolvedPaths?.strategicRegions.length ?? 0, 1)
-      }
-    })
-
-    void window.api.map.loadStrategicRegions(projectId)
-      .then(() => {
-        if (cancelled) return
-        setStrategicRegionsStatus('ready')
-        notificationService.completeProgress({
-          scope: strategicRegionsScope,
-          title: tRef.current('notification.strategicRegionsLoad.doneTitle'),
-          message: tRef.current('notification.strategicRegionsLoad.doneMessage')
-        })
-        settled = true
-      })
-      .catch((error) => {
-        if (!cancelled) setStrategicRegionsStatus('error')
-        if (!cancelled) {
-          notificationService.failProgress({
-            scope: strategicRegionsScope,
-            title: tRef.current('notification.strategicRegionsLoad.failedTitle'),
-            message: error instanceof Error ? error.message : tRef.current('notification.strategicRegionsLoad.failedMessage')
-          })
-          settled = true
-        }
-      })
-
-    return () => {
-      cancelled = true
-      if (!settled) notificationService.dismiss(strategicRegionsScope)
-    }
-  }, [
-    displayMode,
-    overlays,
-    projectId,
-    replaceStrategicRegions,
-    resolvedPaths,
     setStrategicRegionsStatus
   ])
 
@@ -400,18 +367,22 @@ export function useMapLoader(): void {
       }
     }
 
-    void reconcileWithBitmap().catch((error) => {
-      if (!cancelled) {
-        setProvinceCatalog(baseProvinceCatalog)
-        setProvinceBitmapStatus('error')
-        notificationService.failProgress({
-          scope: bitmapScope,
-          title: tRef.current('notification.bitmapLoad.failedTitle'),
-          message: error instanceof Error ? error.message : tRef.current('notification.bitmapLoad.failedMessage')
-        })
-        settled = true
-      }
-    })
+    void reconcileWithBitmap()
+      .catch((error) => {
+        if (!cancelled) {
+          setProvinceCatalog(baseProvinceCatalog)
+          setProvinceBitmapStatus('error')
+          notificationService.failProgress({
+            scope: bitmapScope,
+            title: tRef.current('notification.bitmapLoad.failedTitle'),
+            message: error instanceof Error ? error.message : tRef.current('notification.bitmapLoad.failedMessage')
+          })
+          settled = true
+        }
+      })
+      .finally(() => {
+        startDatasetsRef.current?.()
+      })
 
     return () => {
       cancelled = true
