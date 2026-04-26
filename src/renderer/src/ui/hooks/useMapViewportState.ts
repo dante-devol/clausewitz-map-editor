@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMapQueryApi } from '../../bridge/MapQueryProvider'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
-import { useNotificationStore } from '../../infra/store/notificationStore'
-import { notificationService } from '../../infra/services/notificationService'
 import {
   getDisplayModeSampleColor,
   isEditableDisplayMode,
@@ -68,7 +66,6 @@ export function useMapViewportState() {
   // — Hover state —
   const [hoveredProvince, setHoveredProvince] = useState<HoveredProvince | null>(null)
 
-  const notifications = useNotificationStore((s) => s.notifications)
   const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
 
   // — Derived tool props —
@@ -189,10 +186,8 @@ export function useMapViewportState() {
     bucketEnabled,
     sampledValueColor: sampledValuePresentation?.color ?? null,
     sampledValueLabel: sampledValuePresentation?.label ?? null,
-    notifications,
     displayMode,
     modeValuesByMode,
-    onDismissNotification: notificationService.dismiss,
     onActiveToolChange,
     onMapClick,
     hoverTooltipPosition: hoveredProvince ? { x: hoveredProvince.x, y: hoveredProvince.y } : null,

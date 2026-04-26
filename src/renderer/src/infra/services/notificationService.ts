@@ -28,6 +28,17 @@ interface AckInput {
 const AUTO_DISMISS_TIMERS = new Map<string, ReturnType<typeof setTimeout>>()
 const DEFAULT_ACK_TIMEOUT_MS = 2200
 
+// Buffer advanceProgress calls and flush once per animation frame to avoid
+// overwhelming React's update scheduler when IPC events arrive in rapid bursts.
+const PENDING_ADVANCES = new Map<string, Omit<NotificationRecord, 'createdAt' | 'updatedAt'>>()
+let advanceFlushId: ReturnType<typeof requestAnimationFrame> | null = null
+
+function flushAdvances(): void {
+  advanceFlushId = null
+  for (const input of PENDING_ADVANCES.values()) upsertNotification(input)
+  PENDING_ADVANCES.clear()
+}
+
 export const notificationService = {
   beginProgress({ scope, title, message = null, progress, tone = 'neutral' }: ProgressInput): void {
     upsertNotification({
@@ -43,16 +54,8 @@ export const notificationService = {
   },
 
   advanceProgress({ scope, title, message = null, progress, tone = 'neutral' }: ProgressInput): void {
-    upsertNotification({
-      id: scope,
-      scope,
-      kind: 'progress',
-      tone,
-      title,
-      message,
-      progress,
-      autoCloseAfterMs: null
-    })
+    PENDING_ADVANCES.set(scope, { id: scope, scope, kind: 'progress', tone, title, message, progress, autoCloseAfterMs: null })
+    advanceFlushId ??= requestAnimationFrame(flushAdvances)
   },
 
   completeProgress({

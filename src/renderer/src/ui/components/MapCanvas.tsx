@@ -5,6 +5,8 @@ import { useMapCanvas } from '../hooks/useMapCanvas'
 import { useOverlayAssets } from '../hooks/useOverlayAssets'
 import { useMapViewportState } from '../hooks/useMapViewportState'
 import { DisplayModeControl } from './DisplayModeControl'
+import { useNotificationStore } from '../../infra/store/notificationStore'
+import { notificationService } from '../../infra/services/notificationService'
 
 const ZOOM_STEP = 1.25
 
@@ -158,6 +160,54 @@ const useStyles = makeStyles({
   }
 })
 
+function NotificationTray(): JSX.Element | null {
+  const styles = useStyles()
+  const { t } = useI18n()
+  const notifications = useNotificationStore((s) => s.notifications)
+  if (notifications.length === 0) return null
+  return (
+    <div className={styles.topLeftNotifications} onMouseDown={(e) => e.stopPropagation()}>
+      <div className={styles.notificationTray}>
+        {notifications.map((notification) => {
+          const notificationClass = mergeClasses(
+            styles.notificationCard,
+            notification.tone === 'success' && styles.notificationCardSuccess,
+            notification.tone === 'warning' && styles.notificationCardWarning,
+            notification.tone === 'error' && styles.notificationCardError
+          )
+          return (
+            <div key={notification.id} className={notificationClass}>
+              <div className={styles.notificationHeader}>
+                <Text size={300} weight="semibold" className={styles.notificationTitle}>
+                  {notification.title}
+                </Text>
+                {notification.autoCloseAfterMs === null && (
+                  <Button
+                    appearance="subtle"
+                    size="small"
+                    icon={<DismissRegular />}
+                    onClick={() => notificationService.dismiss(notification.id)}
+                    aria-label={t('notification.dismiss')}
+                  />
+                )}
+              </div>
+              {notification.message && (
+                <Text size={200} className={styles.notificationMessage}>{notification.message}</Text>
+              )}
+              {notification.kind === 'progress' && notification.progress && (
+                <ProgressBar
+                  className={styles.notificationProgress}
+                  value={notification.progress.total <= 0 ? 0 : notification.progress.current / notification.progress.total}
+                />
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export function MapCanvas(): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
@@ -165,8 +215,8 @@ export function MapCanvas(): JSX.Element {
   const {
     src, colorMap, highlightColors, validationWarningColors, validationErrorColors,
     activeTool, eyedropEnabled, bucketEnabled, sampledValueColor, sampledValueLabel,
-    notifications, displayMode, modeValuesByMode,
-    onDismissNotification, onActiveToolChange, onMapClick,
+    displayMode, modeValuesByMode,
+    onActiveToolChange, onMapClick,
     hoverTooltipPosition, hoverTooltip, onHoverColorChange, onDisplayModeChange,
   } = useMapViewportState()
   const { containerRef, canvasRef, dragging, displayScale, imageLoaded, isCanvasLoading, onMouseDown, onMouseMove, stopDrag, zoomBy, fit } = useMapCanvas({
@@ -221,47 +271,7 @@ export function MapCanvas(): JSX.Element {
           valuesByMode={modeValuesByMode}
         />
       </div>
-      {notifications.length > 0 && (
-        <div className={styles.topLeftNotifications} onMouseDown={(e) => e.stopPropagation()}>
-          <div className={styles.notificationTray}>
-            {notifications.map((notification) => {
-              const notificationClass = mergeClasses(
-                styles.notificationCard,
-                notification.tone === 'success' && styles.notificationCardSuccess,
-                notification.tone === 'warning' && styles.notificationCardWarning,
-                notification.tone === 'error' && styles.notificationCardError
-              )
-              return (
-                <div key={notification.id} className={notificationClass}>
-                  <div className={styles.notificationHeader}>
-                    <Text size={300} weight="semibold" className={styles.notificationTitle}>
-                      {notification.title}
-                    </Text>
-                    {notification.autoCloseAfterMs === null && (
-                      <Button
-                        appearance="subtle"
-                        size="small"
-                        icon={<DismissRegular />}
-                        onClick={() => onDismissNotification?.(notification.id)}
-                        aria-label={t('notification.dismiss')}
-                      />
-                    )}
-                  </div>
-                  {notification.message && (
-                    <Text size={200} className={styles.notificationMessage}>{notification.message}</Text>
-                  )}
-                  {notification.kind === 'progress' && notification.progress && (
-                    <ProgressBar
-                      className={styles.notificationProgress}
-                      value={notification.progress.total <= 0 ? 0 : notification.progress.current / notification.progress.total}
-                    />
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
+      <NotificationTray />
       <div className={styles.controls} onMouseDown={(e) => e.stopPropagation()}>
         <div className={styles.widget}>
           <Tooltip content={t('mapCanvas.eyedrop')} relationship="label">
