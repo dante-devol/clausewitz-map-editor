@@ -125,11 +125,42 @@ async function loadFilesProgressively<K extends 'states' | 'strategicRegions'>(
   if (totalFiles === 0) return
 
   let loadedFiles = 0
+  let pendingItems: ParserOutputMap[K][] = []
+  let flushHandle: NodeJS.Immediate | null = null
+
+  // Coalesce results that arrive within the same Node.js event-loop tick into
+  // a single onChunk call. Without this, a fast worker pool fires onChunk for
+  // every file in rapid succession, flooding the IPC channel and saturating
+  // the renderer's event loop — which delays the bitmap Web Worker's onmessage
+  // callback and makes bitmap reconciliation appear to stall.
+  const scheduleFlush = () => {
+    if (flushHandle !== null) return
+    flushHandle = setImmediate(() => {
+      flushHandle = null
+      if (pendingItems.length === 0) return
+      const items = pendingItems
+      pendingItems = []
+      onChunk(items, loadedFiles, totalFiles)
+    })
+  }
+
   await Promise.all(
     filePaths.map(async (filePath) => {
       const items = await pool.dispatch(filePath, key)
+      pendingItems.push(...(items as ParserOutputMap[K][]))
       loadedFiles++
-      onChunk(items as ParserOutputMap[K][], loadedFiles, totalFiles)
+      scheduleFlush()
     })
   )
+
+  // Promise.all resolves via microtasks before any scheduled setImmediate fires.
+  // Cancel the pending flush and emit the final batch synchronously so the
+  // caller can be sure all items have been delivered when this promise resolves.
+  if (flushHandle !== null) {
+    clearImmediate(flushHandle)
+    flushHandle = null
+  }
+  if (pendingItems.length > 0) {
+    onChunk(pendingItems, loadedFiles, totalFiles)
+  }
 }
