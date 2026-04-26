@@ -8,6 +8,7 @@ import {
 import { SaveRegular } from '@fluentui/react-icons'
 import { useCoreStore } from '../../../infra/store/coreStore'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
+import { applyStatePatch } from '../../../infra/store/slices/stateEditSlice'
 import { useI18n } from '../../i18n/I18nProvider'
 
 const useStyles = makeStyles({
@@ -57,16 +58,7 @@ export function StateSaveBar(): JSX.Element {
       const statesToSave = [...pendingStateEdits.entries()].map(([id, patch]) => {
         const original = statesById.get(id)
         if (!original) throw new Error(`State ${id} not found`)
-        return {
-          ...original,
-          name: patch.name ?? original.name,
-          stateCategory: patch.stateCategory ?? original.stateCategory,
-          manpower: patch.manpower ?? original.manpower,
-          history: {
-            ...original.history,
-            owner: 'owner' in patch ? (patch.owner ?? undefined) : original.history.owner,
-          }
-        }
+        return applyStatePatch(original, patch)
       })
       await window.api.map.saveStates(projectId, statesToSave)
       clearStateSavedChanges()

@@ -73,11 +73,17 @@ export interface ProvinceBuildingDefinition extends BuildingDefinition {
   province: number
 }
 
+export interface GenericEffect {
+  key: string
+  value: string
+}
+
 export interface HistoryDef {
   owner?: string
   coreOf: string[]
   buildings: (StateBuildingDefinition | ProvinceBuildingDefinition)[]
   victoryPoints: VictoryPoint[]
+  effects: GenericEffect[]
 }
 
 export interface DateHistory extends HistoryDef {

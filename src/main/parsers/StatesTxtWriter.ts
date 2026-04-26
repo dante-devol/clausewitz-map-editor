@@ -1,5 +1,6 @@
 import { writeFileSync } from 'fs'
 import type {
+  GenericEffect,
   StateDefinition,
   StateBuildingDefinition,
   ProvinceBuildingDefinition
@@ -41,6 +42,7 @@ function serialize(s: StateDefinition): string {
     lines.push(`\t\tvictory_points = { ${vp.province} ${vp.value} }`)
   }
   serializeBuildings(s.history.buildings, lines)
+  serializeEffects(s.history.effects, lines)
   for (const dh of s.history.dateHistory) {
     const d = dh.date
     lines.push(`\t\t${d.year}.${d.month}.${d.day} = {`)
@@ -50,6 +52,7 @@ function serialize(s: StateDefinition): string {
       lines.push(`\t\t\tvictory_points = { ${vp.province} ${vp.value} }`)
     }
     serializeBuildings(dh.buildings, lines, '\t\t\t')
+    serializeEffects(dh.effects, lines, '\t\t\t')
     lines.push(`\t\t}`)
   }
   lines.push(`\t}`)
@@ -57,6 +60,18 @@ function serialize(s: StateDefinition): string {
   lines.push('}')
   lines.push('')
   return lines.join('\n')
+}
+
+function serializeEffects(
+  effects: GenericEffect[],
+  lines: string[],
+  indent = '\t\t'
+): void {
+  for (const e of effects) {
+    const needsQuotes = /\s/.test(e.value)
+    const val = needsQuotes ? `"${e.value}"` : e.value
+    lines.push(`${indent}${e.key} = ${val}`)
+  }
 }
 
 function serializeBuildings(

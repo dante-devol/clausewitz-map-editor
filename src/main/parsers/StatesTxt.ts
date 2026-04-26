@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs'
 import type {
   DateHistory,
+  GenericEffect,
   HistoryDef,
   ProvinceBuildingDefinition,
   StateBuildingDefinition,
@@ -38,7 +39,7 @@ export class StatesTxt {
       const historyBlockContent = parseBlockContent(blockContent, 'history')
       const history: StateHistory = historyBlockContent
         ? { ...parseHistoryDef(historyBlockContent), dateHistory: parseDateHistories(historyBlockContent) }
-        : { owner: undefined, coreOf: [], buildings: [], victoryPoints: [], dateHistory: [] }
+        : { owner: undefined, coreOf: [], buildings: [], victoryPoints: [], effects: [], dateHistory: [] }
 
       const resources = parseResources(blockContent)
 
@@ -72,13 +73,61 @@ function mergeStates(target: Map<number, StateDefinition>, source: StateDefiniti
   }
 }
 
-function parseHistoryDef(content: string): Omit<HistoryDef, never> {
+function parseHistoryDef(content: string): HistoryDef {
   return {
     owner: parseScalarString(content, 'owner') ?? undefined,
     coreOf: parseCoreOf(content),
     buildings: parseHistoryBuildings(content),
-    victoryPoints: parseVictoryPoints(content)
+    victoryPoints: parseVictoryPoints(content),
+    effects: parseGenericEffects(content)
   }
+}
+
+const KNOWN_HISTORY_KEYS = new Set(['owner', 'core_of', 'add_core_of', 'victory_points', 'buildings'])
+const DATE_KEY_RE = /^\d{4}\.\d{1,2}\.\d{1,2}$/
+
+function parseGenericEffects(content: string): GenericEffect[] {
+  const results: GenericEffect[] = []
+  let i = 0
+
+  while (i < content.length) {
+    const c = content[i]
+    if (isWhitespace(c)) { i++; continue }
+    if (c === '#') { i = skipComment(content, i); continue }
+
+    const keyStart = i
+    while (i < content.length && /[\w.]/.test(content[i])) i++
+    if (i === keyStart) { i++; continue }
+    const key = content.slice(keyStart, i)
+
+    while (i < content.length && (content[i] === ' ' || content[i] === '\t')) i++
+    if (content[i] !== '=') { i = skipLine(content, i); continue }
+    i++ // consume '='
+    while (i < content.length && (content[i] === ' ' || content[i] === '\t')) i++
+
+    let value: string
+    if (content[i] === '{') {
+      const block = extractBlock(content, i)
+      if (!block) { i++; continue }
+      value = content.slice(i, block.end)
+      i = block.end
+    } else if (content[i] === '"') {
+      const closeIdx = content.indexOf('"', i + 1)
+      if (closeIdx < 0) { i = skipLine(content, i); continue }
+      value = content.slice(i + 1, closeIdx) // strip quotes; re-added on write
+      i = closeIdx + 1
+    } else {
+      const m = content.slice(i).match(/^([^\s#\n]+)/)
+      if (!m) { i = skipLine(content, i); continue }
+      value = m[1]
+      i += m[0].length
+    }
+
+    if (KNOWN_HISTORY_KEYS.has(key) || DATE_KEY_RE.test(key)) continue
+    results.push({ key, value })
+  }
+
+  return results
 }
 
 function parseDateHistories(historyContent: string): DateHistory[] {
