@@ -42,6 +42,7 @@ export interface MapDataSnapshot {
   provinceCatalog: ProvinceCatalogEntry[]
   terrains: TerrainCategory[]
   provincesImageB64: string
+  provincesImageHash: string
 }
 
 export interface ProjectOpenRequest {
@@ -63,7 +64,7 @@ export interface MapChangedEvent {
     | TerrainCategory[]
     | StateDatasetUpdate
     | StrategicRegionDatasetUpdate
-    | string
+    | ImageChangedData
 }
 
 export interface StateDatasetUpdate {
@@ -78,6 +79,11 @@ export interface StrategicRegionDatasetUpdate {
   items: StrategicRegionDefinition[]
   loadedFiles: number
   totalFiles: number
+}
+
+export interface ImageChangedData {
+  b64: string
+  hash: string
 }
 
 export interface ApiContract {

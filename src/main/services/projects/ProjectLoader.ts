@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs'
 import { readFile } from 'fs/promises'
+import { computeHash } from '../../fileManager'
 import { join } from 'path'
 import { getConfig } from '../../config'
 import { resolvePaths } from '../../pathResolver'
@@ -29,19 +30,27 @@ export class ProjectLoader {
     }
   }
 
-  loadSnapshot(project: LoadedProject): MapDataSnapshot {
-    const continents = this.loadContinents(project)
-    const terrains = new TerrainTxt(project.resolvedPaths.provinceTerrain).load()
-    const provinces = this.loadDefinitions(project, continents)
+  async loadSnapshot(project: LoadedProject): Promise<MapDataSnapshot> {
+    const [continentContent, terrainContents, provincesBuffer] = await Promise.all([
+      readFile(project.resolvedPaths.continent, 'utf-8'),
+      Promise.all(project.resolvedPaths.provinceTerrain.map((p) => readFile(p, 'utf-8'))),
+      readFile(project.resolvedPaths.provinces),
+    ])
+
+    const continents = ContinentTxt.parse(continentContent)
+    const terrains = terrainContents.flatMap((c) => TerrainTxt.parse(c))
+    const provinces = new DefinitionsCsv(project.resolvedPaths.definitions).load(continents)
     const provinceCatalog = buildProvinceCatalog(provinces)
-    const provincesImageB64 = readFileSync(project.resolvedPaths.provinces).toString('base64')
+    const provincesImageHash = computeHash(provincesBuffer)
+    const provincesImageB64 = provincesBuffer.toString('base64')
 
     return {
       continents,
       terrains,
       provinces,
       provinceCatalog,
-      provincesImageB64
+      provincesImageB64,
+      provincesImageHash
     }
   }
 
@@ -79,8 +88,9 @@ export class ProjectLoader {
     await loadFilesProgressively(project.resolvedPaths.strategicRegions, StrategicRegionsTxt.parse, onChunk)
   }
 
-  loadImageBase64(project: LoadedProject): string {
-    return readFileSync(project.resolvedPaths.provinces).toString('base64')
+  loadImageBase64(project: LoadedProject): { b64: string; hash: string } {
+    const buffer = readFileSync(project.resolvedPaths.provinces)
+    return { b64: buffer.toString('base64'), hash: computeHash(buffer) }
   }
 }
 

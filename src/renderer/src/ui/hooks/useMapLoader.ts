@@ -6,16 +6,29 @@ import {
   reconcileProvinceCatalogWithBitmap,
   type ProvinceBitmapFacts
 } from '../../../../shared/provinceCatalog'
-import type { StateDatasetUpdate, StrategicRegionDatasetUpdate } from '../../../../shared/contract/api'
-import { BmpProvinceMapSource } from '../../infra/lib/BmpProvinceMapSource'
-import { analyzeProvinceBitmapFacts } from '../../infra/lib/provinceBitmapFacts'
+import type { ImageChangedData, StateDatasetUpdate, StrategicRegionDatasetUpdate } from '../../../../shared/contract/api'
+import type { BitmapAnalysisOutput } from '../../infra/workers/bitmapAnalysis.worker'
 import { useProjectStore } from '../../infra/store/projectStore'
 import { notificationService } from '../../infra/services/notificationService'
 import { useI18n } from '../i18n/I18nProvider'
 
 const provinceBitmapFactsCache = new Map<string, ProvinceBitmapFacts>()
 const MAP_LOAD_TOTAL_STEPS = 4
-const BITMAP_RECONCILE_TOTAL_STEPS = 5
+const BITMAP_RECONCILE_TOTAL_STEPS = 4
+
+function runBitmapAnalysis(b64: string, signal: AbortSignal): Promise<ProvinceBitmapFacts> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(
+      new URL('../infra/workers/bitmapAnalysis.worker.ts', import.meta.url),
+      { type: 'module' }
+    )
+    const cleanup = () => worker.terminate()
+    worker.onmessage = (e: MessageEvent<BitmapAnalysisOutput>) => { cleanup(); resolve(e.data.facts) }
+    worker.onerror = (e) => { cleanup(); reject(new Error(e.message)) }
+    signal.addEventListener('abort', () => { cleanup(); reject(new DOMException('Cancelled', 'AbortError')) }, { once: true })
+    worker.postMessage({ b64 })
+  })
+}
 
 export function useMapLoader(): void {
   const { t } = useI18n()
@@ -45,6 +58,7 @@ export function useMapLoader(): void {
   const setProvinceBitmapStatus = useMapDataStore((s) => s.setProvinceBitmapStatus)
   const baseProvinceCatalog = useMapDataStore((s) => s.baseProvinceCatalog)
   const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
+  const provincesImageHash = useMapDataStore((s) => s.provincesImageHash)
   const clear = useMapDataStore((s) => s.clear)
 
   const startDatasetsRef = useRef<(() => void) | null>(null)
@@ -158,7 +172,7 @@ export function useMapLoader(): void {
         })
         loadContinents(snapshot.continents)
         loadTerrains(snapshot.terrains)
-        loadProvincesImage(snapshot.provincesImageB64)
+        loadProvincesImage(snapshot.provincesImageB64, snapshot.provincesImageHash)
         loadProvinces(snapshot.provinces)
         notificationService.advanceProgress({
           scope: loadScope,
@@ -176,6 +190,7 @@ export function useMapLoader(): void {
           progress: { current: 4, total: MAP_LOAD_TOTAL_STEPS }
         })
         mapReady()
+        startDatasetsRef.current?.()
         notificationService.completeProgress({
           scope: loadScope,
           title: tRef.current('notification.mapLoad.doneTitle'),
@@ -237,7 +252,8 @@ export function useMapLoader(): void {
         else appendStrategicRegions(update.items)
       }
       else if (event.type === 'image') {
-        loadProvincesImage(event.data as string)
+        const imageData = event.data as ImageChangedData
+        loadProvincesImage(imageData.b64, imageData.hash)
         setProvinceBitmapStatus('idle')
       }
     })
@@ -276,37 +292,29 @@ export function useMapLoader(): void {
   ])
 
   useEffect(() => {
-    const provincesPath = resolvedPaths?.provinces
-    if (!projectId || !provincesPath || !provincesImageB64) return
+    if (!projectId || !provincesImageB64 || !provincesImageHash) return
 
     let cancelled = false
     let settled = false
     const bitmapScope = `bitmap-reconcile:${projectId}`
+    const abortController = new AbortController()
 
     async function reconcileWithBitmap(): Promise<void> {
       setProvinceBitmapStatus('loading')
       notificationService.beginProgress({
         scope: bitmapScope,
         title: tRef.current('notification.bitmapLoad.title'),
-        message: tRef.current('notification.bitmapLoad.step.read'),
+        message: tRef.current('notification.bitmapLoad.step.decode'),
         progress: { current: 1, total: BITMAP_RECONCILE_TOTAL_STEPS }
       })
-      const imageRecord = await window.api.files.read(provincesPath)
-      if (cancelled) return
 
-      const cachedFacts = provinceBitmapFactsCache.get(imageRecord.hash)
-      notificationService.advanceProgress({
-        scope: bitmapScope,
-        title: tRef.current('notification.bitmapLoad.title'),
-        message: tRef.current('notification.bitmapLoad.step.decode'),
-        progress: { current: 2, total: BITMAP_RECONCILE_TOTAL_STEPS }
-      })
+      const cachedFacts = provinceBitmapFactsCache.get(provincesImageHash)
       if (cachedFacts) {
         notificationService.advanceProgress({
           scope: bitmapScope,
           title: tRef.current('notification.bitmapLoad.title'),
           message: tRef.current('notification.bitmapLoad.step.cache'),
-          progress: { current: 3, total: BITMAP_RECONCILE_TOTAL_STEPS }
+          progress: { current: 2, total: BITMAP_RECONCILE_TOTAL_STEPS }
         })
         setProvinceCatalog(reconcileProvinceCatalogWithBitmap(baseProvinceCatalog, cachedFacts))
         setProvinceBitmapStatus('ready')
@@ -319,52 +327,42 @@ export function useMapLoader(): void {
         return
       }
 
-      const src = `data:image/bmp;base64,${provincesImageB64}`
-      const source = await BmpProvinceMapSource.load(src)
-      try {
-        if (cancelled) return
-        notificationService.advanceProgress({
-          scope: bitmapScope,
-          title: tRef.current('notification.bitmapLoad.title'),
-          message: tRef.current('notification.bitmapLoad.step.analyze'),
-          progress: { current: 3, total: BITMAP_RECONCILE_TOTAL_STEPS }
-        })
-        const bitmapFacts = analyzeProvinceBitmapFacts({
-          data: source.pixelData,
-          width: source.width,
-          height: source.height
-        })
-        provinceBitmapFactsCache.set(imageRecord.hash, bitmapFacts)
-        if (cancelled) return
-        notificationService.advanceProgress({
-          scope: bitmapScope,
-          title: tRef.current('notification.bitmapLoad.title'),
-          message: tRef.current('notification.bitmapLoad.step.catalog'),
-          progress: { current: 4, total: BITMAP_RECONCILE_TOTAL_STEPS }
-        })
-        const reconciledCatalog = reconcileProvinceCatalogWithBitmap(baseProvinceCatalog, bitmapFacts)
-        setProvinceCatalog(reconciledCatalog)
-        syncBmpOnlyEntries(
-          reconciledCatalog
-            .filter((e) => e.sources.includes('bmp-color') && e.color !== null)
-            .map((e) => e.color as number)
-        )
-        setProvinceBitmapStatus('ready')
-        notificationService.advanceProgress({
-          scope: bitmapScope,
-          title: tRef.current('notification.bitmapLoad.title'),
-          message: tRef.current('notification.bitmapLoad.step.sync'),
-          progress: { current: 5, total: BITMAP_RECONCILE_TOTAL_STEPS }
-        })
-        notificationService.completeProgress({
-          scope: bitmapScope,
-          title: tRef.current('notification.bitmapLoad.doneTitle'),
-          message: tRef.current('notification.bitmapLoad.doneMessage')
-        })
-        settled = true
-      } finally {
-        source.dispose()
-      }
+      notificationService.advanceProgress({
+        scope: bitmapScope,
+        title: tRef.current('notification.bitmapLoad.title'),
+        message: tRef.current('notification.bitmapLoad.step.analyze'),
+        progress: { current: 2, total: BITMAP_RECONCILE_TOTAL_STEPS }
+      })
+      const bitmapFacts = await runBitmapAnalysis(provincesImageB64, abortController.signal)
+      if (cancelled) return
+      provinceBitmapFactsCache.set(provincesImageHash, bitmapFacts)
+
+      notificationService.advanceProgress({
+        scope: bitmapScope,
+        title: tRef.current('notification.bitmapLoad.title'),
+        message: tRef.current('notification.bitmapLoad.step.catalog'),
+        progress: { current: 3, total: BITMAP_RECONCILE_TOTAL_STEPS }
+      })
+      const reconciledCatalog = reconcileProvinceCatalogWithBitmap(baseProvinceCatalog, bitmapFacts)
+      setProvinceCatalog(reconciledCatalog)
+      syncBmpOnlyEntries(
+        reconciledCatalog
+          .filter((e) => e.sources.includes('bmp-color') && e.color !== null)
+          .map((e) => e.color as number)
+      )
+      setProvinceBitmapStatus('ready')
+      notificationService.advanceProgress({
+        scope: bitmapScope,
+        title: tRef.current('notification.bitmapLoad.title'),
+        message: tRef.current('notification.bitmapLoad.step.sync'),
+        progress: { current: 4, total: BITMAP_RECONCILE_TOTAL_STEPS }
+      })
+      notificationService.completeProgress({
+        scope: bitmapScope,
+        title: tRef.current('notification.bitmapLoad.doneTitle'),
+        message: tRef.current('notification.bitmapLoad.doneMessage')
+      })
+      settled = true
     }
 
     void reconcileWithBitmap()
@@ -380,15 +378,13 @@ export function useMapLoader(): void {
           settled = true
         }
       })
-      .finally(() => {
-        startDatasetsRef.current?.()
-      })
 
     return () => {
       cancelled = true
+      abortController.abort()
       if (!settled) notificationService.dismiss(bitmapScope)
     }
-  }, [baseProvinceCatalog, projectId, provincesImageB64, resolvedPaths, setProvinceBitmapStatus, setProvinceCatalog, syncBmpOnlyEntries])
+  }, [baseProvinceCatalog, projectId, provincesImageB64, provincesImageHash, setProvinceBitmapStatus, setProvinceCatalog, syncBmpOnlyEntries])
 }
 
 function resolveFileProgress(

@@ -43,10 +43,10 @@ export class ProjectSession {
     return this.project
   }
 
-  loadSnapshot() {
+  async loadSnapshot() {
     if (!this.project) throw new Error('Project not open')
 
-    const snapshot = this.loader.loadSnapshot(this.project)
+    const snapshot = await this.loader.loadSnapshot(this.project)
     this.continents = snapshot.continents
     this.watchCoreProjectFiles()
     return snapshot
