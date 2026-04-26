@@ -1,7 +1,7 @@
 import { readFileSync, watch, type FSWatcher } from 'fs'
 import type { BrowserWindow } from 'electron'
 import { channels } from '../../../shared/contract/events'
-import type { Continent, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
+import type { Continent, Resource, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
 import type { LoadedProject, ProjectLoader } from './ProjectLoader'
 import { WorkerParsePool } from '../../workers/WorkerParsePool'
 
@@ -19,6 +19,7 @@ export class ProjectSession {
   private strategicRegionsLoaded = false
   private statesLoadPromise: Promise<void> | null = null
   private strategicRegionsLoadPromise: Promise<void> | null = null
+  private resourcesLoadPromise: Promise<Resource[]> | null = null
 
   constructor(
     private readonly window: BrowserWindow,
@@ -35,6 +36,7 @@ export class ProjectSession {
     this.strategicRegionsLoaded = false
     this.statesLoadPromise = null
     this.strategicRegionsLoadPromise = null
+    this.resourcesLoadPromise = null
     return project
   }
 
@@ -82,6 +84,23 @@ export class ProjectSession {
     })
 
     return this.statesLoadPromise
+  }
+
+  loadResources(): Promise<Resource[]> {
+    if (!this.project) throw new Error('Project not open')
+    if (!this.pool) throw new Error('Project not open')
+    if (this.resourcesLoadPromise) return this.resourcesLoadPromise
+
+    const pool = this.pool
+    this.resourcesLoadPromise = this.loader.loadResources(this.project, pool).then((resources) => {
+      this.resourcesLoadPromise = null
+      return resources
+    }).catch((error) => {
+      this.resourcesLoadPromise = null
+      throw error
+    })
+
+    return this.resourcesLoadPromise
   }
 
   loadStrategicRegions(): Promise<void> {
@@ -188,7 +207,7 @@ export class ProjectSession {
   }
 
   private emit(
-    type: 'continents' | 'definitions' | 'terrain' | 'image' | 'states' | 'strategicRegions',
+    type: 'continents' | 'definitions' | 'terrain' | 'image' | 'states' | 'strategicRegions' | 'stateCategories' | 'buildings',
     data: unknown
   ): void {
     if (!this.project) return
@@ -208,6 +227,7 @@ export class ProjectSession {
     this.strategicRegionsLoaded = false
     this.statesLoadPromise = null
     this.strategicRegionsLoadPromise = null
+    this.resourcesLoadPromise = null
   }
 
   private disposePool(): void {

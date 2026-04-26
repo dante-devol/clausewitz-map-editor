@@ -48,6 +48,8 @@ export function useMapLoader(): void {
   const loadOriginalDefinitions = useMapDataStore((s) => s.loadOriginalDefinitions)
   const syncBmpOnlyEntries = useMapDataStore((s) => s.syncBmpOnlyEntries)
   const loadTerrains = useMapDataStore((s) => s.loadTerrains)
+  const loadStateCategories = useMapDataStore((s) => s.loadStateCategories)
+  const loadBuildings = useMapDataStore((s) => s.loadBuildings)
   const replaceStates = useMapDataStore((s) => s.replaceStates)
   const appendStates = useMapDataStore((s) => s.appendStates)
   const replaceStrategicRegions = useMapDataStore((s) => s.replaceStrategicRegions)
@@ -172,6 +174,8 @@ export function useMapLoader(): void {
         })
         loadContinents(snapshot.continents)
         loadTerrains(snapshot.terrains)
+        loadStateCategories(snapshot.stateCategories)
+        loadBuildings(snapshot.buildings)
         loadProvincesImage(snapshot.provincesImageB64, snapshot.provincesImageHash)
         loadProvinces(snapshot.provinces)
         notificationService.advanceProgress({
@@ -221,6 +225,8 @@ export function useMapLoader(): void {
         setProvinceBitmapStatus('idle')
       }
       else if (event.type === 'terrain') loadTerrains(event.data as import('../../../../shared/mapDataTypes').TerrainCategory[])
+      else if (event.type === 'stateCategories') loadStateCategories(event.data as import('../../../../shared/mapDataTypes').StateCategory[])
+      else if (event.type === 'buildings') loadBuildings(event.data as import('../../../../shared/mapDataTypes').Building[])
       else if (event.type === 'states') {
         const update = event.data as StateDatasetUpdate
         const progress = resolveFileProgress(update.loadedFiles, update.totalFiles, resolvedPaths?.states.length ?? 0)
@@ -285,6 +291,8 @@ export function useMapLoader(): void {
     replaceStrategicRegions,
     appendStrategicRegions,
     loadTerrains,
+    loadStateCategories,
+    loadBuildings,
     resolvedPaths,
     setProvinceBitmapStatus,
     setStatesStatus,

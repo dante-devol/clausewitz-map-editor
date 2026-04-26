@@ -268,7 +268,19 @@ export const enMessages = {
   'debug.column.provinceCount': 'Province Count',
   'debug.column.provinces': 'Provinces',
   'debug.column.severity': 'Severity',
-  'debug.column.message': 'Message'
+  'debug.column.message': 'Message',
+  'debug.tab.stateCategories': 'State Categories',
+  'debug.tab.buildings': 'Buildings',
+  'debug.stateCategoriesLoaded': '{count} state categories loaded',
+  'debug.buildingsLoaded': '{count} buildings loaded',
+  'debug.column.localBuildingSlots': 'Building Slots',
+  'debug.column.sharesSlots': 'Shares Slots',
+  'debug.column.provinceMax': 'Province Max',
+  'debug.column.stateMax': 'State Max',
+  'debug.column.name': 'Name',
+  'debug.column.manpower': 'Manpower',
+  'debug.column.stateCategory': 'Category',
+  'debug.column.owner': 'Owner'
 } as const
 
 export type MessageKey = keyof typeof enMessages

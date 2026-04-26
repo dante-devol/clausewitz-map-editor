@@ -52,6 +52,9 @@ export function resolvePaths(gamePath: string, modPath: string, replacePaths: re
     provinceTerrain: resolveFolder(gamePath, modPath, p.provinceTerrain, replacePaths),
     states:          resolveFolder(gamePath, modPath, p.states, replacePaths),
     strategicRegions: resolveFolder(gamePath, modPath, p.strategicRegions, replacePaths),
-    rivers:          resolveFile(gamePath, modPath, p.rivers, replacePaths)
+    rivers:          resolveFile(gamePath, modPath, p.rivers, replacePaths),
+    stateCategories: resolveFolder(gamePath, modPath, p.stateCategories, replacePaths),
+    resources:       resolveFolder(gamePath, modPath, p.resources, replacePaths),
+    buildings:       resolveFolder(gamePath, modPath, p.buildings, replacePaths)
   }
 }

@@ -1,6 +1,9 @@
 import type {
+  Building,
   Continent,
   Province,
+  Resource,
+  StateCategory,
   StateDefinition,
   StrategicRegionDefinition,
   TerrainCategory
@@ -21,6 +24,9 @@ export interface AppConfig {
     states: string
     strategicRegions: string
     rivers: string
+    stateCategories: string
+    resources: string
+    buildings: string
   }
   displayModeOverrides: Partial<Record<string, Partial<Record<string, string>>>>
 }
@@ -41,6 +47,8 @@ export interface MapDataSnapshot {
   provinces: Province[]
   provinceCatalog: ProvinceCatalogEntry[]
   terrains: TerrainCategory[]
+  stateCategories: StateCategory[]
+  buildings: Building[]
   provincesImageB64: string
   provincesImageHash: string
 }
@@ -57,11 +65,13 @@ export interface ProjectOpenResult {
 
 export interface MapChangedEvent {
   projectId: string
-  type: 'continents' | 'definitions' | 'terrain' | 'image' | 'states' | 'strategicRegions'
+  type: 'continents' | 'definitions' | 'terrain' | 'image' | 'states' | 'strategicRegions' | 'stateCategories' | 'buildings'
   data:
     | Continent[]
     | Province[]
     | TerrainCategory[]
+    | StateCategory[]
+    | Building[]
     | StateDatasetUpdate
     | StrategicRegionDatasetUpdate
     | ImageChangedData
@@ -117,6 +127,7 @@ export interface ApiContract {
     save: (projectId: string, provinces: Province[], continents: Continent[]) => Promise<void>
     loadStates: (projectId: string) => Promise<void>
     loadStrategicRegions: (projectId: string) => Promise<void>
+    loadResources: (projectId: string) => Promise<Resource[]>
     onChanged: (callback: (event: MapChangedEvent) => void) => () => void
   }
   settings: {

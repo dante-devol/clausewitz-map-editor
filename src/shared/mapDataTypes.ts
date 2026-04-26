@@ -29,9 +29,76 @@ export interface Province {
   continent: string | undefined // Continent.codeName — empty string for provinces with no continent (sea, lake)
 }
 
+export interface StateCategory {
+  codeName: string
+  localBuildingSlots: number
+  color: Color
+}
+
+export interface Resource {
+  codeName: string
+}
+
+export interface StateResource {
+  type: string   // Resource.codeName
+  amount: number
+}
+
+export interface LevelCap {
+  sharesSlots: boolean
+  provinceMax?: number
+  stateMax?: number
+  groupBy?: string
+  exclusiveWith?: string  // Building.codeName
+}
+
+export interface Building {
+  codeName: string
+  levelCap: LevelCap
+}
+
+export interface VictoryPoint {
+  province: number
+  value: number
+}
+
+export interface BuildingDefinition {
+  type: string   // Building.codeName
+  amount: number
+}
+
+export interface StateBuildingDefinition extends BuildingDefinition {}
+
+export interface ProvinceBuildingDefinition extends BuildingDefinition {
+  province: number
+}
+
+export interface HistoryDef {
+  owner?: string
+  coreOf: string[]
+  buildings: (StateBuildingDefinition | ProvinceBuildingDefinition)[]
+  victoryPoints: VictoryPoint[]
+}
+
+export interface DateHistory extends HistoryDef {
+  date: { year: number; month: number; day: number }
+}
+
+export interface StateHistory extends HistoryDef {
+  dateHistory: DateHistory[]
+}
+
 export interface StateDefinition {
   id: number
+  name: string
   provinceIds: number[]
+  manpower: number
+  stateCategory: string   // StateCategory.codeName
+  resources?: StateResource[]
+  isImpassable?: boolean
+  localSupplies?: number
+  buildingsMaxLevelFactor?: number
+  history: StateHistory
 }
 
 export interface StrategicRegionDefinition {

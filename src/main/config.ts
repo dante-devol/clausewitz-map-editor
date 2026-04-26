@@ -18,7 +18,10 @@ export const DEFAULT_CONFIG: Config = {
     provinceTerrain: '/common/terrain',
     states: '/history/states',
     strategicRegions: '/map/strategicregions',
-    rivers: '/map/rivers.bmp'
+    rivers: '/map/rivers.bmp',
+    stateCategories: '/common/state_category',
+    resources: '/common/resources',
+    buildings: '/common/buildings'
   },
   displayModeOverrides: {}
 }

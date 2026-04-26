@@ -29,6 +29,7 @@ export const channels = {
     save: 'map:save',
     loadStates: 'map:loadStates',
     loadStrategicRegions: 'map:loadStrategicRegions',
+    loadResources: 'map:loadResources',
     changed: 'map:changed'
   },
   settings: {

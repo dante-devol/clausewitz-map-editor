@@ -249,6 +249,10 @@ function StatesTab() {
           <thead>
             <tr>
               <th className={styles.th}>{t('debug.column.id')}</th>
+              <th className={styles.th}>{t('debug.column.name')}</th>
+              <th className={styles.th}>{t('debug.column.stateCategory')}</th>
+              <th className={styles.th}>{t('debug.column.manpower')}</th>
+              <th className={styles.th}>{t('debug.column.owner')}</th>
               <th className={styles.th}>{t('debug.column.provinceCount')}</th>
               <th className={styles.th}>{t('debug.column.provinces')}</th>
             </tr>
@@ -257,8 +261,92 @@ function StatesTab() {
             {rows.map((state, i) => (
               <tr key={state.id} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
                 <td className={styles.td}>{state.id}</td>
+                <td className={styles.td}>{state.name || '—'}</td>
+                <td className={styles.td}>{state.stateCategory || '—'}</td>
+                <td className={styles.td}>{formatNumber(state.manpower)}</td>
+                <td className={styles.td}>{state.history.owner ?? '—'}</td>
                 <td className={styles.td}>{formatNumber(state.provinceIds.length)}</td>
                 <td className={styles.td}>{formatProvincePreview(state.provinceIds)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+function StateCategoriesTab() {
+  const styles = useStyles()
+  const { t, formatNumber } = useI18n()
+  const stateCategories = useMapDataStore((s) => s.stateCategories)
+  const rows = Array.from(stateCategories.values())
+
+  return (
+    <>
+      <div className={styles.summary}>
+        <Badge appearance="filled" color="informative">{formatNumber(rows.length)}</Badge>
+        <Text size={200}>{t('debug.stateCategoriesLoaded', { count: formatNumber(rows.length) })}</Text>
+      </div>
+      <div className={styles.tableWrap}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th className={styles.th}>{t('debug.column.codeName')}</th>
+              <th className={styles.th}>{t('debug.column.localBuildingSlots')}</th>
+              <th className={styles.th}>{t('debug.column.color')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((cat, i) => {
+              const { r, g, b } = unpackColor(cat.color)
+              return (
+                <tr key={cat.codeName} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
+                  <td className={styles.td}>{cat.codeName}</td>
+                  <td className={styles.td}>{cat.localBuildingSlots}</td>
+                  <td className={styles.td}>
+                    <Swatch color={cat.color} />
+                    {r}, {g}, {b}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+function BuildingsTab() {
+  const styles = useStyles()
+  const { t, formatNumber } = useI18n()
+  const buildings = useMapDataStore((s) => s.buildings)
+  const rows = Array.from(buildings.values())
+
+  return (
+    <>
+      <div className={styles.summary}>
+        <Badge appearance="filled" color="informative">{formatNumber(rows.length)}</Badge>
+        <Text size={200}>{t('debug.buildingsLoaded', { count: formatNumber(rows.length) })}</Text>
+      </div>
+      <div className={styles.tableWrap}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th className={styles.th}>{t('debug.column.codeName')}</th>
+              <th className={styles.th}>{t('debug.column.sharesSlots')}</th>
+              <th className={styles.th}>{t('debug.column.provinceMax')}</th>
+              <th className={styles.th}>{t('debug.column.stateMax')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((b, i) => (
+              <tr key={b.codeName} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
+                <td className={styles.td}>{b.codeName}</td>
+                <td className={styles.td}>{b.levelCap.sharesSlots ? '✓' : '—'}</td>
+                <td className={styles.td}>{b.levelCap.provinceMax ?? '—'}</td>
+                <td className={styles.td}>{b.levelCap.stateMax ?? '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -359,7 +447,7 @@ function ValidationTab() {
   )
 }
 
-type TabId = 'provinces' | 'terrain' | 'continents' | 'states' | 'strategicRegions' | 'validation'
+type TabId = 'provinces' | 'terrain' | 'continents' | 'states' | 'strategicRegions' | 'stateCategories' | 'buildings' | 'validation'
 
 interface DebugPanelProps {
   open: boolean
@@ -376,6 +464,8 @@ export function DebugPanel({ open, onClose }: DebugPanelProps) {
   const continents = useMapDataStore((s) => s.continents)
   const states = useMapDataStore((s) => s.states)
   const strategicRegions = useMapDataStore((s) => s.strategicRegions)
+  const stateCategories = useMapDataStore((s) => s.stateCategories)
+  const buildings = useMapDataStore((s) => s.buildings)
   const validationSummary = useProvinceValidationStore((s) => s.summary)
 
   return (
@@ -402,17 +492,25 @@ export function DebugPanel({ open, onClose }: DebugPanelProps) {
             <Tab value="strategicRegions">
               {t('debug.tab.strategicRegions')} <Badge appearance="tint">{formatNumber(strategicRegions.length)}</Badge>
             </Tab>
+            <Tab value="stateCategories">
+              {t('debug.tab.stateCategories')} <Badge appearance="tint">{formatNumber(stateCategories.size)}</Badge>
+            </Tab>
+            <Tab value="buildings">
+              {t('debug.tab.buildings')} <Badge appearance="tint">{formatNumber(buildings.size)}</Badge>
+            </Tab>
             <Tab value="validation">
               {t('debug.tab.validation')} <Badge appearance="tint">{formatNumber(validationSummary.errorCount + validationSummary.warningCount + validationSummary.infoCount)}</Badge>
             </Tab>
           </TabList>
           <DialogContent>
-            {tab === 'provinces'  && <ProvincesTab />}
-            {tab === 'terrain'    && <TerrainsTab />}
-            {tab === 'continents' && <ContinentsTab />}
-            {tab === 'states' && <StatesTab />}
+            {tab === 'provinces'       && <ProvincesTab />}
+            {tab === 'terrain'         && <TerrainsTab />}
+            {tab === 'continents'      && <ContinentsTab />}
+            {tab === 'states'          && <StatesTab />}
             {tab === 'strategicRegions' && <StrategicRegionsTab />}
-            {tab === 'validation' && <ValidationTab />}
+            {tab === 'stateCategories' && <StateCategoriesTab />}
+            {tab === 'buildings'       && <BuildingsTab />}
+            {tab === 'validation'      && <ValidationTab />}
           </DialogContent>
         </DialogBody>
       </DialogSurface>

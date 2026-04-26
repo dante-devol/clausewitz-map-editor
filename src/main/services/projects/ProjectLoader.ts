@@ -10,8 +10,11 @@ import { DefinitionsCsv } from '../../parsers/DefinitionsCsv'
 import { StrategicRegionsTxt } from '../../parsers/StrategicRegionsTxt'
 import { StatesTxt } from '../../parsers/StatesTxt'
 import { TerrainTxt } from '../../parsers/TerrainTxt'
+import { StateCategoryTxt } from '../../parsers/StateCategoryTxt'
+import { BuildingsTxt } from '../../parsers/BuildingsTxt'
+import { ResourcesTxt } from '../../parsers/ResourcesTxt'
 import type { MapDataSnapshot, ProjectOpenRequest, ProjectOpenResult } from '../../../shared/contract/api'
-import type { Continent } from '../../../shared/mapDataTypes'
+import type { Building, Continent, Resource, StateCategory } from '../../../shared/mapDataTypes'
 import { buildProvinceCatalog } from '../../../shared/provinceCatalog'
 import type { WorkerParsePool } from '../../workers/WorkerParsePool'
 import type { ParserOutputMap } from '../../workers/parserRegistry'
@@ -33,10 +36,16 @@ export class ProjectLoader {
   }
 
   async loadSnapshot(project: LoadedProject, pool: WorkerParsePool): Promise<MapDataSnapshot> {
-    // Start BMP read and terrain dispatches immediately — no dependencies.
+    // Start BMP read and terrain/category/building dispatches immediately — no dependencies.
     const provincesBufferPromise = readFile(project.resolvedPaths.provinces)
     const terrainPromise = Promise.all(
       project.resolvedPaths.provinceTerrain.map((p) => pool.dispatch(p, 'terrain'))
+    ).then((results) => results.flat())
+    const stateCategoriesPromise = Promise.all(
+      project.resolvedPaths.stateCategories.map((p) => pool.dispatch(p, 'stateCategory'))
+    ).then((results) => results.flat())
+    const buildingsPromise = Promise.all(
+      project.resolvedPaths.buildings.map((p) => pool.dispatch(p, 'buildings'))
     ).then((results) => results.flat())
 
     // Continent must be parsed before definitions can be dispatched.
@@ -48,9 +57,11 @@ export class ProjectLoader {
       { continents }
     )
 
-    const [provincesBuffer, terrains, provinces] = await Promise.all([
+    const [provincesBuffer, terrains, stateCategories, buildings, provinces] = await Promise.all([
       provincesBufferPromise,
       terrainPromise,
+      stateCategoriesPromise,
+      buildingsPromise,
       definitionsPromise,
     ])
 
@@ -61,6 +72,8 @@ export class ProjectLoader {
     return {
       continents,
       terrains,
+      stateCategories,
+      buildings,
       provinces,
       provinceCatalog,
       provincesImageB64,
@@ -78,6 +91,21 @@ export class ProjectLoader {
 
   loadTerrain(project: LoadedProject) {
     return new TerrainTxt(project.resolvedPaths.provinceTerrain).load()
+  }
+
+  loadStateCategories(project: LoadedProject): StateCategory[] {
+    return new StateCategoryTxt(project.resolvedPaths.stateCategories).load()
+  }
+
+  loadBuildings(project: LoadedProject): Building[] {
+    return new BuildingsTxt(project.resolvedPaths.buildings).load()
+  }
+
+  async loadResources(project: LoadedProject, pool: WorkerParsePool): Promise<Resource[]> {
+    const results = await Promise.all(
+      project.resolvedPaths.resources.map((p) => pool.dispatch(p, 'resources'))
+    )
+    return results.flat()
   }
 
   async loadStatesProgressive(

@@ -25,4 +25,9 @@ export function registerMapHandlers(context: IpcContext): void {
     const window = getEventWindow(event)
     return context.sessions.loadStrategicRegionsForWindow(window, projectId)
   })
+
+  ipcMain.handle(channels.map.loadResources, (event, projectId: string) => {
+    const window = getEventWindow(event)
+    return context.sessions.loadResourcesForWindow(window, projectId)
+  })
 }

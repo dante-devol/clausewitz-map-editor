@@ -51,6 +51,14 @@ export class ProjectSessionRegistry {
     return session.loadStrategicRegions()
   }
 
+  loadResourcesForWindow(window: BrowserWindow, projectId: string) {
+    const session = this.forWindow(window)
+    if (session.projectId !== projectId) {
+      throw new Error('Project session mismatch')
+    }
+    return session.loadResources()
+  }
+
   projectForWindow(window: BrowserWindow, projectId: string): LoadedProject {
     const session = this.forWindow(window)
     if (session.projectId !== projectId) {

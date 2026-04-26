@@ -1,5 +1,5 @@
 import { type StateCreator } from 'zustand'
-import type { Province, TerrainCategory, Continent } from '../../../../../shared/mapDataTypes'
+import type { Building, Continent, Province, StateCategory, TerrainCategory } from '../../../../../shared/mapDataTypes'
 import type { ProvinceCatalogEntry } from '../../../../../shared/provinceCatalog'
 
 export interface ProvinceDataSlice {
@@ -9,11 +9,15 @@ export interface ProvinceDataSlice {
   provinceCatalog: ProvinceCatalogEntry[]
   terrains: Map<string, TerrainCategory>
   continents: Map<string, Continent>
+  stateCategories: Map<string, StateCategory>
+  buildings: Map<string, Building>
   loadProvinces: (provinces: Province[]) => void
   loadProvinceCatalog: (catalog: ProvinceCatalogEntry[]) => void
   setProvinceCatalog: (catalog: ProvinceCatalogEntry[]) => void
   loadTerrains: (terrains: TerrainCategory[]) => void
   loadContinents: (continents: Continent[]) => void
+  loadStateCategories: (categories: StateCategory[]) => void
+  loadBuildings: (buildings: Building[]) => void
 }
 
 export const PROVINCE_DATA_EMPTY = {
@@ -23,6 +27,8 @@ export const PROVINCE_DATA_EMPTY = {
   provinceCatalog: [] as ProvinceCatalogEntry[],
   terrains: new Map<string, TerrainCategory>(),
   continents: new Map<string, Continent>(),
+  stateCategories: new Map<string, StateCategory>(),
+  buildings: new Map<string, Building>(),
 }
 
 export const createProvinceDataSlice: StateCreator<ProvinceDataSlice, [], [], ProvinceDataSlice> = (set) => ({
@@ -55,5 +61,17 @@ export const createProvinceDataSlice: StateCreator<ProvinceDataSlice, [], [], Pr
     const continents = new Map<string, Continent>()
     for (const c of incoming) continents.set(c.codeName, c)
     set({ continents })
+  },
+
+  loadStateCategories: (incoming) => {
+    const stateCategories = new Map<string, StateCategory>()
+    for (const c of incoming) stateCategories.set(c.codeName, c)
+    set({ stateCategories })
+  },
+
+  loadBuildings: (incoming) => {
+    const buildings = new Map<string, Building>()
+    for (const b of incoming) buildings.set(b.codeName, b)
+    set({ buildings })
   },
 })

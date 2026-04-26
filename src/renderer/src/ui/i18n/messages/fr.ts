@@ -270,5 +270,17 @@ export const frMessages: Record<MessageKey, string> = {
   'debug.column.provinceCount': 'Nombre de provinces',
   'debug.column.provinces': 'Provinces',
   'debug.column.severity': 'Severite',
-  'debug.column.message': 'Message'
+  'debug.column.message': 'Message',
+  'debug.tab.stateCategories': 'Categories d\'etat',
+  'debug.tab.buildings': 'Batiments',
+  'debug.stateCategoriesLoaded': '{count} categories d\'etat chargees',
+  'debug.buildingsLoaded': '{count} batiments charges',
+  'debug.column.localBuildingSlots': 'Emplacements de batiments',
+  'debug.column.sharesSlots': 'Emplacements partages',
+  'debug.column.provinceMax': 'Max province',
+  'debug.column.stateMax': 'Max etat',
+  'debug.column.name': 'Nom',
+  'debug.column.manpower': 'Main-d\'oeuvre',
+  'debug.column.stateCategory': 'Categorie',
+  'debug.column.owner': 'Proprietaire'
 }
