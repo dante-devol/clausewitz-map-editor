@@ -282,5 +282,22 @@ export const frMessages: Record<MessageKey, string> = {
   'debug.column.name': 'Nom',
   'debug.column.manpower': 'Main-d\'oeuvre',
   'debug.column.stateCategory': 'Categorie',
-  'debug.column.owner': 'Proprietaire'
+  'debug.column.owner': 'Proprietaire',
+  'mode.provinces': 'Provinces',
+  'mode.states': 'Etats',
+  'statePanel.save.summary': '{count} changements d\'etat',
+  'statePanel.save.action': 'Enregistrer',
+  'statePanel.save.saving': 'Enregistrement...',
+  'statePanel.save.error': 'Echec de l\'enregistrement',
+  'statePanel.list.searchPlaceholder': 'Rechercher des etats...',
+  'statePanel.list.empty': 'Aucun etat charge',
+  'statePanel.detail.noSelection': 'Selectionnez un etat',
+  'statePanel.detail.title': 'Etat {id}',
+  'statePanel.detail.name': 'Nom',
+  'statePanel.detail.category': 'Categorie',
+  'statePanel.detail.manpower': 'Main-d\'oeuvre',
+  'statePanel.detail.owner': 'Proprietaire',
+  'statePanel.changes.title': 'Changements en attente',
+  'statePanel.changes.empty': 'Aucun changement d\'etat en attente',
+  'statePanel.changes.fieldCount': '{count} champ(s) modifie(s)'
 }

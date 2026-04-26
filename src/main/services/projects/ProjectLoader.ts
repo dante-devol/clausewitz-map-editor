@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs'
 import { readFile } from 'fs/promises'
+import { StatesTxtWriter } from '../../parsers/StatesTxtWriter'
 import { computeHash } from '../../fileManager'
 import { join } from 'path'
 import { getConfig } from '../../config'
@@ -14,7 +15,7 @@ import { StateCategoryTxt } from '../../parsers/StateCategoryTxt'
 import { BuildingsTxt } from '../../parsers/BuildingsTxt'
 import { ResourcesTxt } from '../../parsers/ResourcesTxt'
 import type { MapDataSnapshot, ProjectOpenRequest, ProjectOpenResult } from '../../../shared/contract/api'
-import type { Building, Continent, Resource, StateCategory } from '../../../shared/mapDataTypes'
+import type { Building, Continent, Resource, StateCategory, StateDefinition } from '../../../shared/mapDataTypes'
 import { buildProvinceCatalog } from '../../../shared/provinceCatalog'
 import type { WorkerParsePool } from '../../workers/WorkerParsePool'
 import type { ParserOutputMap } from '../../workers/parserRegistry'
@@ -135,6 +136,11 @@ export class ProjectLoader {
       pool,
       onChunk
     )
+  }
+
+  saveStates(states: StateDefinition[]): void {
+    const writer = new StatesTxtWriter()
+    for (const state of states) writer.write(state)
   }
 
   loadImageBase64(project: LoadedProject): { b64: string; hash: string } {

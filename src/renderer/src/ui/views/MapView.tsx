@@ -3,7 +3,9 @@ import { makeStyles, tokens } from '@fluentui/react-components'
 import { MapModePanel } from '../components/MapModePanel'
 import { MapCanvas } from '../components/MapCanvas'
 import { ProvincePanel } from '../components/provincePanel/ProvincePanel'
-import { ProvinceDetailPanel } from '../components/ProvinceDetailPanel'
+import { StatePanel } from '../components/statePanel/StatePanel'
+import { ModeTabs } from '../components/ModeTabs'
+import { useMapDataStore } from '../../infra/store/mapDataStore'
 
 const useStyles = makeStyles({
   root: {
@@ -36,12 +38,13 @@ const useStyles = makeStyles({
 
 export function MapView() {
   const styles = useStyles()
+  const editorMode = useMapDataStore((s) => s.editorMode)
 
   return (
     <div className={styles.root}>
       <div className={styles.leftPanel}>
-        <ProvincePanel />
-        <ProvinceDetailPanel />
+        <ModeTabs />
+        {editorMode === 'provinces' ? <ProvincePanel /> : <StatePanel />}
       </div>
       <MapViewportPane className={styles.viewport} />
       <div className={styles.sidebar}>
@@ -50,6 +53,7 @@ export function MapView() {
     </div>
   )
 }
+
 
 const MapViewportPane = memo(function MapViewportPane({ className }: { className: string }) {
   return (

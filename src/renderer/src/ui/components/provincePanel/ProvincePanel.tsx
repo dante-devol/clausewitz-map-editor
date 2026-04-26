@@ -21,21 +21,23 @@ import {
 import { CanonicalProvinceList } from './CanonicalProvinceList'
 import { BmpOnlyList } from './BmpOnlyList'
 import { ChangesList } from './ChangesList'
+import { ProvinceDetailPanel } from '../ProvinceDetailPanel'
 import { useI18n } from '../../i18n/I18nProvider'
 
 const useStyles = makeStyles({
-  header: {
+  saveBar: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: tokens.spacingHorizontalS,
     padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalS}`,
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    flexShrink: 0
   },
-  headerText: {
+  saveBarText: {
     color: tokens.colorNeutralForeground3
   },
-  headerActions: {
+  saveBarActions: {
     display: 'flex',
     alignItems: 'center',
     gap: tokens.spacingHorizontalS
@@ -139,11 +141,24 @@ export function ProvincePanel(): JSX.Element {
 
   return (
     <div className={styles.panel}>
-      <div className={styles.header}>
-        <Text size={100} className={styles.headerText}>
+      <CanonicalProvinceList
+        collapsed={canonicalCollapsed}
+        onToggleCollapse={() => setCanonicalCollapsed((c) => !c)}
+      />
+      <BmpOnlyList
+        collapsed={bmpCollapsed}
+        onToggleCollapse={() => setBmpCollapsed((c) => !c)}
+      />
+      <ProvinceDetailPanel />
+      <ChangesList
+        collapsed={changesCollapsed}
+        onToggleCollapse={() => setChangesCollapsed((c) => !c)}
+      />
+      <div className={styles.saveBar}>
+        <Text size={100} className={styles.saveBarText}>
           {t('provincePanel.save.summary', { count: changeCount })}
         </Text>
-        <div className={styles.headerActions}>
+        <div className={styles.saveBarActions}>
           {saveError && (
             <Text size={100} className={styles.errorText}>
               {saveError}
@@ -160,18 +175,6 @@ export function ProvincePanel(): JSX.Element {
           </Button>
         </div>
       </div>
-      <CanonicalProvinceList
-        collapsed={canonicalCollapsed}
-        onToggleCollapse={() => setCanonicalCollapsed((c) => !c)}
-      />
-      <BmpOnlyList
-        collapsed={bmpCollapsed}
-        onToggleCollapse={() => setBmpCollapsed((c) => !c)}
-      />
-      <ChangesList
-        collapsed={changesCollapsed}
-        onToggleCollapse={() => setChangesCollapsed((c) => !c)}
-      />
       <Dialog open={showSaveBlocker}>
         <DialogSurface>
           <DialogBody>

@@ -1,7 +1,7 @@
 import { readFileSync, watch, type FSWatcher } from 'fs'
 import type { BrowserWindow } from 'electron'
 import { channels } from '../../../shared/contract/events'
-import type { Continent, Resource, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
+import type { Continent, Resource, StateDefinition } from '../../../shared/mapDataTypes'
 import type { LoadedProject, ProjectLoader } from './ProjectLoader'
 import { WorkerParsePool } from '../../workers/WorkerParsePool'
 
@@ -84,6 +84,10 @@ export class ProjectSession {
     })
 
     return this.statesLoadPromise
+  }
+
+  saveStates(states: StateDefinition[]): void {
+    this.loader.saveStates(states)
   }
 
   loadResources(): Promise<Resource[]> {

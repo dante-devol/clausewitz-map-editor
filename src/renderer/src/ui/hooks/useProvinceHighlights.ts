@@ -69,12 +69,25 @@ export function useProvinceHighlights(
   const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
   const selectedProvinceIds = useMapDataStore((s) => s.selectedProvinceIds)
   const selectedBmpGuids = useMapDataStore((s) => s.selectedBmpGuids)
+  const editorMode = useMapDataStore((s) => s.editorMode)
+  const selectedStateId = useMapDataStore((s) => s.selectedStateId)
+  const statesById = useMapDataStore((s) => s.statesById)
   const issuesByProvinceKey = useProvinceValidationStore((s) => s.issuesByProvinceKey)
 
-  const highlightColors = useMemo(
-    () => computeHighlightColors(selectedProvinceIds, selectedBmpGuids, provinces, bmpOnlyEntries, bmpReplacements),
-    [selectedProvinceIds, selectedBmpGuids, provinces, bmpOnlyEntries, bmpReplacements]
-  )
+  const highlightColors = useMemo(() => {
+    if (editorMode === 'states') {
+      if (selectedStateId === null) return []
+      const state = statesById.get(selectedStateId)
+      if (!state) return []
+      const colors: number[] = []
+      for (const provinceId of state.provinceIds) {
+        const color = provinces.get(provinceId)?.color
+        if (color !== undefined) colors.push(color)
+      }
+      return colors
+    }
+    return computeHighlightColors(selectedProvinceIds, selectedBmpGuids, provinces, bmpOnlyEntries, bmpReplacements)
+  }, [editorMode, selectedStateId, statesById, selectedProvinceIds, selectedBmpGuids, provinces, bmpOnlyEntries, bmpReplacements])
 
   const validationHighlightColors = useMemo(
     () => computeValidationHighlightColors(effectiveCatalog, issuesByProvinceKey),

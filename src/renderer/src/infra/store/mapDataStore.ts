@@ -24,13 +24,25 @@ import {
   IMAGE_EMPTY,
   type ImageSlice
 } from './slices/imageSlice'
+import {
+  createEditorModeSlice,
+  EDITOR_MODE_EMPTY,
+  type EditorModeSlice
+} from './slices/editorModeSlice'
+import {
+  createStateEditSlice,
+  STATE_EDIT_EMPTY,
+  type StateEditSlice
+} from './slices/stateEditSlice'
 
 export type MapDataState =
   ProvinceDataSlice &
   ProvinceEditSlice &
   SelectionSlice &
   DatasetSlice &
-  ImageSlice & {
+  ImageSlice &
+  EditorModeSlice &
+  StateEditSlice & {
     clear: () => void
   }
 
@@ -42,12 +54,16 @@ export const useMapDataStore = create<MapDataState>()((...a) => {
     ...createSelectionSlice(...a),
     ...createDatasetSlice(...a),
     ...createImageSlice(...a),
+    ...createEditorModeSlice(...a),
+    ...createStateEditSlice(...a),
     clear: () => set({
       ...PROVINCE_DATA_EMPTY,
       ...PROVINCE_EDIT_EMPTY,
       ...SELECTION_EMPTY,
       ...DATASET_EMPTY,
       ...IMAGE_EMPTY,
+      ...EDITOR_MODE_EMPTY,
+      ...STATE_EDIT_EMPTY,
     }),
   }
 })

@@ -62,6 +62,9 @@ export function useMapViewportState() {
   const toggleBmpGuid = useMapDataStore((s) => s.toggleBmpGuid)
   const editProvince = useMapDataStore((s) => s.editProvince)
   const editBmpOnlyProvince = useMapDataStore((s) => s.editBmpOnlyProvince)
+  const editorMode = useMapDataStore((s) => s.editorMode)
+  const setSelectedStateId = useMapDataStore((s) => s.setSelectedStateId)
+  const stateProvinceToStateId = useMapDataStore((s) => s.stateProvinceToStateId)
 
   // — Hover state —
   const [hoveredProvince, setHoveredProvince] = useState<HoveredProvince | null>(null)
@@ -113,6 +116,14 @@ export function useMapViewportState() {
     const draft = query.getDraftProvinceByColor(packColor(r, g, b))
     if (!draft) return
 
+    if (editorMode === 'states') {
+      if (draft.provinceId !== null) {
+        const stateId = stateProvinceToStateId.get(draft.provinceId) ?? null
+        setSelectedStateId(stateId)
+      }
+      return
+    }
+
     if (activeTool === 'eyedrop') {
       if (!isEditableDisplayMode(displayMode)) return
       const sample = sampleDisplayModeValue(displayMode, draft)
@@ -157,11 +168,14 @@ export function useMapViewportState() {
     displayMode,
     editBmpOnlyProvince,
     editProvince,
+    editorMode,
     extendSelection,
     query,
     sampledValue,
     setSelectedBmpGuids,
+    setSelectedStateId,
     setSelection,
+    stateProvinceToStateId,
     toggleBmpGuid,
   ])
 

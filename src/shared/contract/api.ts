@@ -125,6 +125,7 @@ export interface ApiContract {
   map: {
     load: (projectId: string) => Promise<MapDataSnapshot>
     save: (projectId: string, provinces: Province[], continents: Continent[]) => Promise<void>
+    saveStates: (projectId: string, states: StateDefinition[]) => Promise<void>
     loadStates: (projectId: string) => Promise<void>
     loadStrategicRegions: (projectId: string) => Promise<void>
     loadResources: (projectId: string) => Promise<Resource[]>

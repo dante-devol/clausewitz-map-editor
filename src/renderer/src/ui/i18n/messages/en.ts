@@ -280,7 +280,24 @@ export const enMessages = {
   'debug.column.name': 'Name',
   'debug.column.manpower': 'Manpower',
   'debug.column.stateCategory': 'Category',
-  'debug.column.owner': 'Owner'
+  'debug.column.owner': 'Owner',
+  'mode.provinces': 'Provinces',
+  'mode.states': 'States',
+  'statePanel.save.summary': '{count} state changes',
+  'statePanel.save.action': 'Save',
+  'statePanel.save.saving': 'Saving...',
+  'statePanel.save.error': 'Save failed',
+  'statePanel.list.searchPlaceholder': 'Search states...',
+  'statePanel.list.empty': 'No states loaded',
+  'statePanel.detail.noSelection': 'Select a state',
+  'statePanel.detail.title': 'State {id}',
+  'statePanel.detail.name': 'Name',
+  'statePanel.detail.category': 'Category',
+  'statePanel.detail.manpower': 'Manpower',
+  'statePanel.detail.owner': 'Owner',
+  'statePanel.changes.title': 'Pending Changes',
+  'statePanel.changes.empty': 'No pending state changes',
+  'statePanel.changes.fieldCount': '{count} field(s) changed'
 } as const
 
 export type MessageKey = keyof typeof enMessages

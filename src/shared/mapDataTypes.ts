@@ -99,6 +99,7 @@ export interface StateDefinition {
   localSupplies?: number
   buildingsMaxLevelFactor?: number
   history: StateHistory
+  sourcePath?: string
 }
 
 export interface StrategicRegionDefinition {

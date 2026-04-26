@@ -3,17 +3,20 @@ import { type StateCreator } from 'zustand'
 export interface SelectionSlice {
   selectedProvinceIds: number[]
   selectedBmpGuids: string[]
+  selectedStateId: number | null
   setSelection: (ids: number[]) => void
   extendSelection: (ids: number[]) => void
   toggleProvinceId: (id: number) => void
   setSelectedBmpGuids: (guids: string[]) => void
   toggleBmpGuid: (guid: string) => void
+  setSelectedStateId: (id: number | null) => void
   clearAllSelection: () => void
 }
 
 export const SELECTION_EMPTY = {
   selectedProvinceIds: [] as number[],
   selectedBmpGuids: [] as string[],
+  selectedStateId: null as number | null,
 }
 
 export const createSelectionSlice: StateCreator<SelectionSlice, [], [], SelectionSlice> = (set) => ({
@@ -47,5 +50,7 @@ export const createSelectionSlice: StateCreator<SelectionSlice, [], [], Selectio
     }
   }),
 
-  clearAllSelection: () => set({ selectedProvinceIds: [], selectedBmpGuids: [] }),
+  setSelectedStateId: (id) => set({ selectedStateId: id }),
+
+  clearAllSelection: () => set({ selectedProvinceIds: [], selectedBmpGuids: [], selectedStateId: null }),
 })

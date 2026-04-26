@@ -21,7 +21,8 @@ export class StatesTxt {
     const states = new Map<number, StateDefinition>()
     for (const filePath of this.filePaths) {
       const content = readFileSync(filePath, 'utf-8')
-      mergeStates(states, StatesTxt.parse(content))
+      const parsed = StatesTxt.parse(content).map((s) => ({ ...s, sourcePath: filePath }))
+      mergeStates(states, parsed)
     }
     return [...states.values()].sort((a, b) => a.id - b.id)
   }
@@ -99,7 +100,7 @@ function parseDateHistories(historyContent: string): DateHistory[] {
 
 function parseCoreOf(content: string): string[] {
   const results: string[] = []
-  const regex = /\bcore_of\s*=\s*/g
+  const regex = /\b(?:add_)?core_of\s*=\s*/g
   let match: RegExpExecArray | null
   while ((match = regex.exec(content)) !== null) {
     const afterEq = match.index + match[0].length
