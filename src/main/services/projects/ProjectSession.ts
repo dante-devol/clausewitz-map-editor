@@ -3,6 +3,7 @@ import type { BrowserWindow } from 'electron'
 import { channels } from '../../../shared/contract/events'
 import type { Continent, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
 import type { LoadedProject, ProjectLoader } from './ProjectLoader'
+import { WorkerParsePool } from '../../workers/WorkerParsePool'
 
 interface WatchEntry {
   watcher: FSWatcher
@@ -12,6 +13,7 @@ interface WatchEntry {
 export class ProjectSession {
   private readonly watchers = new Map<string, WatchEntry>()
   private project: LoadedProject | null = null
+  private pool: WorkerParsePool | null = null
   private continents: Continent[] = []
   private statesLoaded = false
   private strategicRegionsLoaded = false
@@ -24,8 +26,10 @@ export class ProjectSession {
   ) {}
 
   open(project: LoadedProject): LoadedProject {
+    this.disposePool()
     this.disposeWatchers()
     this.project = project
+    this.pool = new WorkerParsePool()
     this.continents = []
     this.statesLoaded = false
     this.strategicRegionsLoaded = false
@@ -45,8 +49,9 @@ export class ProjectSession {
 
   async loadSnapshot() {
     if (!this.project) throw new Error('Project not open')
+    if (!this.pool) throw new Error('Project not open')
 
-    const snapshot = await this.loader.loadSnapshot(this.project)
+    const snapshot = await this.loader.loadSnapshot(this.project, this.pool)
     this.continents = snapshot.continents
     this.watchCoreProjectFiles()
     return snapshot
@@ -54,15 +59,21 @@ export class ProjectSession {
 
   loadStates(): Promise<void> {
     if (!this.project) throw new Error('Project not open')
+    if (!this.pool) throw new Error('Project not open')
     this.watchStateFiles()
     if (this.statesLoadPromise) return this.statesLoadPromise
     if (this.statesLoaded) return Promise.resolve()
 
+    const pool = this.pool
     const totalFiles = this.project.resolvedPaths.states.length
     this.emit('states', { op: 'replace', items: [], loadedFiles: 0, totalFiles })
-    this.statesLoadPromise = this.loader.loadStatesProgressive(this.project, (items, loadedFiles, totalFiles) => {
-      this.emit('states', { op: 'append', items, loadedFiles, totalFiles })
-    }).then(() => {
+    this.statesLoadPromise = this.loader.loadStatesProgressive(
+      this.project,
+      pool,
+      (items, loadedFiles, totalFiles) => {
+        this.emit('states', { op: 'append', items, loadedFiles, totalFiles })
+      }
+    ).then(() => {
       this.statesLoaded = true
       this.statesLoadPromise = null
     }).catch((error) => {
@@ -75,15 +86,21 @@ export class ProjectSession {
 
   loadStrategicRegions(): Promise<void> {
     if (!this.project) throw new Error('Project not open')
+    if (!this.pool) throw new Error('Project not open')
     this.watchStrategicRegionFiles()
     if (this.strategicRegionsLoadPromise) return this.strategicRegionsLoadPromise
     if (this.strategicRegionsLoaded) return Promise.resolve()
 
+    const pool = this.pool
     const totalFiles = this.project.resolvedPaths.strategicRegions.length
     this.emit('strategicRegions', { op: 'replace', items: [], loadedFiles: 0, totalFiles })
-    this.strategicRegionsLoadPromise = this.loader.loadStrategicRegionsProgressive(this.project, (items, loadedFiles, totalFiles) => {
-      this.emit('strategicRegions', { op: 'append', items, loadedFiles, totalFiles })
-    }).then(() => {
+    this.strategicRegionsLoadPromise = this.loader.loadStrategicRegionsProgressive(
+      this.project,
+      pool,
+      (items, loadedFiles, totalFiles) => {
+        this.emit('strategicRegions', { op: 'append', items, loadedFiles, totalFiles })
+      }
+    ).then(() => {
       this.strategicRegionsLoaded = true
       this.strategicRegionsLoadPromise = null
     }).catch((error) => {
@@ -184,12 +201,20 @@ export class ProjectSession {
 
   dispose(): void {
     this.disposeWatchers()
+    this.disposePool()
     this.project = null
     this.continents = []
     this.statesLoaded = false
     this.strategicRegionsLoaded = false
     this.statesLoadPromise = null
     this.strategicRegionsLoadPromise = null
+  }
+
+  private disposePool(): void {
+    if (this.pool) {
+      void this.pool.dispose()
+      this.pool = null
+    }
   }
 
   private disposeWatchers(): void {

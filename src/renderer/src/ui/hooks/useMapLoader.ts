@@ -19,7 +19,7 @@ const BITMAP_RECONCILE_TOTAL_STEPS = 4
 function runBitmapAnalysis(b64: string, signal: AbortSignal): Promise<ProvinceBitmapFacts> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(
-      new URL('../infra/workers/bitmapAnalysis.worker.ts', import.meta.url),
+      new URL('../../infra/workers/bitmapAnalysis.worker.ts', import.meta.url),
       { type: 'module' }
     )
     const cleanup = () => worker.terminate()

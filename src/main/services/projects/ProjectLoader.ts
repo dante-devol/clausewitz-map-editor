@@ -13,6 +13,8 @@ import { TerrainTxt } from '../../parsers/TerrainTxt'
 import type { MapDataSnapshot, ProjectOpenRequest, ProjectOpenResult } from '../../../shared/contract/api'
 import type { Continent } from '../../../shared/mapDataTypes'
 import { buildProvinceCatalog } from '../../../shared/provinceCatalog'
+import type { WorkerParsePool } from '../../workers/WorkerParsePool'
+import type { ParserOutputMap } from '../../workers/parserRegistry'
 
 export interface LoadedProject {
   projectId: string
@@ -30,16 +32,28 @@ export class ProjectLoader {
     }
   }
 
-  async loadSnapshot(project: LoadedProject): Promise<MapDataSnapshot> {
-    const [continentContent, terrainContents, provincesBuffer] = await Promise.all([
-      readFile(project.resolvedPaths.continent, 'utf-8'),
-      Promise.all(project.resolvedPaths.provinceTerrain.map((p) => readFile(p, 'utf-8'))),
-      readFile(project.resolvedPaths.provinces),
+  async loadSnapshot(project: LoadedProject, pool: WorkerParsePool): Promise<MapDataSnapshot> {
+    // Start BMP read and terrain dispatches immediately — no dependencies.
+    const provincesBufferPromise = readFile(project.resolvedPaths.provinces)
+    const terrainPromise = Promise.all(
+      project.resolvedPaths.provinceTerrain.map((p) => pool.dispatch(p, 'terrain'))
+    ).then((results) => results.flat())
+
+    // Continent must be parsed before definitions can be dispatched.
+    const continentContent = await readFile(project.resolvedPaths.continent, 'utf-8')
+    const continents = ContinentTxt.parse(continentContent)
+    const definitionsPromise = pool.dispatch(
+      project.resolvedPaths.definitions,
+      'definitions',
+      { continents }
+    )
+
+    const [provincesBuffer, terrains, provinces] = await Promise.all([
+      provincesBufferPromise,
+      terrainPromise,
+      definitionsPromise,
     ])
 
-    const continents = ContinentTxt.parse(continentContent)
-    const terrains = terrainContents.flatMap((c) => TerrainTxt.parse(c))
-    const provinces = new DefinitionsCsv(project.resolvedPaths.definitions).load(continents)
     const provinceCatalog = buildProvinceCatalog(provinces)
     const provincesImageHash = computeHash(provincesBuffer)
     const provincesImageB64 = provincesBuffer.toString('base64')
@@ -50,7 +64,7 @@ export class ProjectLoader {
       provinces,
       provinceCatalog,
       provincesImageB64,
-      provincesImageHash
+      provincesImageHash,
     }
   }
 
@@ -68,24 +82,31 @@ export class ProjectLoader {
 
   async loadStatesProgressive(
     project: LoadedProject,
+    pool: WorkerParsePool,
     onChunk: (
-      items: import('../../../shared/mapDataTypes').StateDefinition[],
+      items: ParserOutputMap['states'][],
       loadedFiles: number,
       totalFiles: number
     ) => void
   ): Promise<void> {
-    await loadFilesProgressively(project.resolvedPaths.states, StatesTxt.parse, onChunk)
+    await loadFilesProgressively(project.resolvedPaths.states, 'states', pool, onChunk)
   }
 
   async loadStrategicRegionsProgressive(
     project: LoadedProject,
+    pool: WorkerParsePool,
     onChunk: (
-      items: import('../../../shared/mapDataTypes').StrategicRegionDefinition[],
+      items: ParserOutputMap['strategicRegions'][],
       loadedFiles: number,
       totalFiles: number
     ) => void
   ): Promise<void> {
-    await loadFilesProgressively(project.resolvedPaths.strategicRegions, StrategicRegionsTxt.parse, onChunk)
+    await loadFilesProgressively(
+      project.resolvedPaths.strategicRegions,
+      'strategicRegions',
+      pool,
+      onChunk
+    )
   }
 
   loadImageBase64(project: LoadedProject): { b64: string; hash: string } {
@@ -94,29 +115,21 @@ export class ProjectLoader {
   }
 }
 
-const FILE_READ_CONCURRENCY = 8
-
-async function loadFilesProgressively<T>(
+async function loadFilesProgressively<K extends 'states' | 'strategicRegions'>(
   filePaths: string[],
-  parse: (content: string) => T[],
-  onChunk: (items: T[], loadedFiles: number, totalFiles: number) => void
+  key: K,
+  pool: WorkerParsePool,
+  onChunk: (items: ParserOutputMap[K][], loadedFiles: number, totalFiles: number) => void
 ): Promise<void> {
   const totalFiles = filePaths.length
-  let nextIndex = 0
+  if (totalFiles === 0) return
+
   let loadedFiles = 0
-
-  async function runWorker(): Promise<void> {
-    while (true) {
-      const index = nextIndex
-      if (index >= filePaths.length) return
-      nextIndex += 1
-
-      const items = parse(await readFile(filePaths[index], 'utf-8'))
-      loadedFiles += 1
-      onChunk(items, loadedFiles, totalFiles)
-    }
-  }
-
-  const workerCount = Math.min(FILE_READ_CONCURRENCY, filePaths.length)
-  await Promise.all(Array.from({ length: workerCount }, () => runWorker()))
+  await Promise.all(
+    filePaths.map(async (filePath) => {
+      const items = await pool.dispatch(filePath, key)
+      loadedFiles++
+      onChunk(items as ParserOutputMap[K][], loadedFiles, totalFiles)
+    })
+  )
 }
