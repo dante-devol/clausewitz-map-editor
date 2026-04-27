@@ -203,7 +203,7 @@ export function BmpOnlyList({ collapsed, onToggleCollapse }: Props): JSX.Element
   const pendingNewProvinces = useMapDataStore((s) => s.pendingNewProvinces)
   const selectedBmpGuids = useMapDataStore((s) => s.selectedBmpGuids)
   const setSelectedBmpGuids = useMapDataStore((s) => s.setSelectedBmpGuids)
-  const setSelection = useMapDataStore((s) => s.setSelection)
+  const toggleBmpGuid = useMapDataStore((s) => s.toggleBmpGuid)
   const { crossSelectedBmpGuids } = useCrossSelection()
 
   const bmpAssignments = useMemo(() => {
@@ -241,24 +241,29 @@ export function BmpOnlyList({ collapsed, onToggleCollapse }: Props): JSX.Element
       e.preventDefault()
       if (lastSelectedIndexRef.current === null) {
         setSelectedBmpGuids([entry.guid])
-        setSelection([])
         lastSelectedIndexRef.current = index
       } else {
         const start = Math.min(lastSelectedIndexRef.current, index)
         const end = Math.max(lastSelectedIndexRef.current, index)
         const rangeGuids = entries.slice(start, end + 1).map((en) => en.guid)
         setSelectedBmpGuids(rangeGuids)
-        setSelection([])
         // Anchor stays fixed; do not update lastSelectedIndexRef
       }
+    } else if (e.ctrlKey || e.metaKey) {
+      toggleBmpGuid(entry.guid)
+      lastSelectedIndexRef.current = index
     } else {
       setSelectedBmpGuids([entry.guid])
-      setSelection([])
       lastSelectedIndexRef.current = index
     }
   }
 
   const handleActionClick = (entry: BmpOnlyEntry, index: number, e: React.MouseEvent) => {
+    if (e.shiftKey) {
+      selectEntry(entry, index, e)
+      e.stopPropagation()
+      return
+    }
     selectEntry(entry, index, e)
     e.stopPropagation()
   }

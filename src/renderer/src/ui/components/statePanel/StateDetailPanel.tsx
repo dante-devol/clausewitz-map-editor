@@ -34,13 +34,12 @@ import type {
 
 const useStyles = makeStyles({
   root: {
-    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
     backgroundColor: tokens.colorNeutralBackground2,
-    flexShrink: 0,
+    flex: '1 1 0',
+    minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
-    overflowY: 'auto',
-    maxHeight: '520px'
+    overflowY: 'auto'
   },
   empty: {
     color: tokens.colorNeutralForeground3,
@@ -862,7 +861,7 @@ export function StateDetailPanel(): JSX.Element {
         )}
 
         {/* Base history sub-section */}
-        <SubSection
+        <CollapsibleSection
           id="hist-base"
           title={t('statePanel.section.base')}
           expanded={expanded.has('hist-base')}
@@ -887,14 +886,14 @@ export function StateDetailPanel(): JSX.Element {
             styles={styles}
             t={t}
           />
-        </SubSection>
+        </CollapsibleSection>
 
         {/* Date history entries */}
         {effectiveDateHistory.map((dh, idx) => {
           const { year, month, day } = dh.date
           const dateKey = `hist-date-${idx}`
           return (
-            <SubSection
+            <CollapsibleSection
               key={dateKey}
               id={dateKey}
               title={`${year}.${month}.${day}`}
@@ -913,7 +912,7 @@ export function StateDetailPanel(): JSX.Element {
                 styles={styles}
                 t={t}
               />
-            </SubSection>
+            </CollapsibleSection>
           )
         })}
       </CollapsibleSection>
@@ -985,21 +984,23 @@ interface SubSectionProps {
   title: string
   expanded: boolean
   onToggle: () => void
+  action?: React.ReactNode
   onRemove?: () => void
   children: React.ReactNode
   styles: ReturnType<typeof useStyles>
 }
 
-function SubSection({ title, expanded, onToggle, onRemove, children, styles }: SubSectionProps): JSX.Element {
+function SubSection({ title, expanded, onToggle, action, onRemove, children, styles }: SubSectionProps): JSX.Element {
   return (
     <div className={styles.subSection}>
-      <div className={styles.subSectionHeader} onClick={onToggle} role="button" tabIndex={0}
+      <div className={styles.sectionHeader} onClick={onToggle} role="button" tabIndex={0}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onToggle() }}>
         {expanded
-          ? <ChevronDownRegular fontSize={10} className={styles.sectionChevron} />
-          : <ChevronRightRegular fontSize={10} className={styles.sectionChevron} />
+          ? <ChevronDownRegular fontSize={12} className={styles.sectionChevron} />
+          : <ChevronRightRegular fontSize={12} className={styles.sectionChevron} />
         }
-        <Text size={100} className={styles.subSectionTitle}>{title}</Text>
+        <Text size={100} className={styles.sectionTitle}>{title}</Text>
+        {action && <span onClick={(e) => e.stopPropagation()}>{action}</span>}
         {onRemove && (
           <span onClick={(e) => { e.stopPropagation(); onRemove() }}>
             <Button size="small" appearance="subtle" icon={<DismissRegular />} />

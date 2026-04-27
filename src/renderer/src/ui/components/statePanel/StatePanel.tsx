@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { makeStyles } from '@fluentui/react-components'
 import { StateList } from './StateList'
-import { StateDetailPanel } from './StateDetailPanel'
 import { StateChangesList } from './StateChangesList'
 import { StateSaveBar } from './StateSaveBar'
 
@@ -22,7 +21,6 @@ export function StatePanel(): JSX.Element {
   return (
     <div className={styles.panel}>
       <StateList />
-      <StateDetailPanel />
       <StateChangesList
         collapsed={changesCollapsed}
         onToggleCollapse={() => setChangesCollapsed((c) => !c)}

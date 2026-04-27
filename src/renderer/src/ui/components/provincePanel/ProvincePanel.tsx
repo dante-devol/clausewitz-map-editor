@@ -21,7 +21,6 @@ import {
 import { CanonicalProvinceList } from './CanonicalProvinceList'
 import { BmpOnlyList } from './BmpOnlyList'
 import { ChangesList } from './ChangesList'
-import { ProvinceDetailPanel } from '../ProvinceDetailPanel'
 import { useI18n } from '../../i18n/I18nProvider'
 
 const useStyles = makeStyles({
@@ -149,7 +148,6 @@ export function ProvincePanel(): JSX.Element {
         collapsed={bmpCollapsed}
         onToggleCollapse={() => setBmpCollapsed((c) => !c)}
       />
-      <ProvinceDetailPanel />
       <ChangesList
         collapsed={changesCollapsed}
         onToggleCollapse={() => setChangesCollapsed((c) => !c)}

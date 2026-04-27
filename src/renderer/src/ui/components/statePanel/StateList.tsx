@@ -44,7 +44,7 @@ const useStyles = makeStyles({
     minHeight: '100%',
     margin: 0,
     padding: 0,
-    listStyleType: 'none'
+    listStyleType: 'none',
   },
   spacer: {
     position: 'relative',
@@ -56,7 +56,6 @@ const useStyles = makeStyles({
     right: 0,
     display: 'flex',
     alignItems: 'center',
-    gap: tokens.spacingHorizontalXS,
     minWidth: 0,
     overflow: 'hidden',
     paddingLeft: tokens.spacingHorizontalS,
@@ -96,6 +95,12 @@ const useStyles = makeStyles({
       borderRadius: tokens.borderRadiusCircular,
       backgroundColor: tokens.colorPaletteGoldForeground2
     }
+  },
+  rowInner: {
+    display: 'flex',
+    alignItems: 'baseline',
+    boxSizing: 'border-box',
+    gap: tokens.spacingHorizontalXS,
   },
   id: {
     fontFamily: 'monospace',
@@ -201,10 +206,12 @@ export function StateList(): JSX.Element {
                     style={{ top: item.start + 2, height: ROW_H - 4 }}
                     onClick={() => setSelectedStateId(isSelected ? null : state.id)}
                   >
-                    <Text size={100} className={styles.id}>{state.id}</Text>
-                    <Text size={100} className={styles.name}>{displayName}</Text>
-                    <Text size={100} className={styles.category}>{displayCategory}</Text>
-                    <Text size={100} className={styles.owner}>{displayOwner ?? '—'}</Text>
+                    <div className={styles.rowInner}>
+                      <Text size={100} className={styles.id}>{state.id}</Text>
+                      <Text size={100} className={styles.name}>{displayName}</Text>
+                      <Text size={100} className={styles.category}>{displayCategory}</Text>
+                      <Text size={100} className={styles.owner}>{displayOwner ?? '—'}</Text>
+                    </div>
                   </ListItem>
                 )
               })}

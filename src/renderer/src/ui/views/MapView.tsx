@@ -5,6 +5,8 @@ import { MapCanvas } from '../components/MapCanvas'
 import { ProvincePanel } from '../components/provincePanel/ProvincePanel'
 import { StatePanel } from '../components/statePanel/StatePanel'
 import { ModeTabs } from '../components/ModeTabs'
+import { ProvinceDetailPanel } from '../components/ProvinceDetailPanel'
+import { StateDetailPanel } from '../components/statePanel/StateDetailPanel'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
 
 const useStyles = makeStyles({
@@ -16,6 +18,14 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     width: '300px',
+    borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
+    overflow: 'hidden'
+  },
+  detailDrawer: {
+    display: 'flex',
+    flexDirection: 'column',
+    width: '320px',
+    flexShrink: 0,
     borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
     overflow: 'hidden'
   },
@@ -39,6 +49,13 @@ const useStyles = makeStyles({
 export function MapView() {
   const styles = useStyles()
   const editorMode = useMapDataStore((s) => s.editorMode)
+  const selectedStateId = useMapDataStore((s) => s.selectedStateId)
+  const selectedProvinceIds = useMapDataStore((s) => s.selectedProvinceIds)
+  const selectedBmpGuids = useMapDataStore((s) => s.selectedBmpGuids)
+
+  const showDrawer = editorMode === 'states'
+    ? selectedStateId !== null
+    : selectedProvinceIds.length > 0 || selectedBmpGuids.length > 0
 
   return (
     <div className={styles.root}>
@@ -46,6 +63,11 @@ export function MapView() {
         <ModeTabs />
         {editorMode === 'provinces' ? <ProvincePanel /> : <StatePanel />}
       </div>
+      {showDrawer && (
+        <div className={styles.detailDrawer}>
+          {editorMode === 'provinces' ? <ProvinceDetailPanel /> : <StateDetailPanel />}
+        </div>
+      )}
       <MapViewportPane className={styles.viewport} />
       <div className={styles.sidebar}>
         <MapSidebarTop className={styles.sidebarTop} />

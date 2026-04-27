@@ -23,13 +23,14 @@ const COASTAL_FALSE = '__false__'
 
 const useStyles = makeStyles({
   root: {
-    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
     backgroundColor: tokens.colorNeutralBackground2,
     padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalS}`,
-    flexShrink: 0,
+    flex: '1 1 0',
+    minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: tokens.spacingVerticalS
+    gap: tokens.spacingVerticalS,
+    overflowY: 'auto'
   },
   tabStripRow: {
     display: 'flex',
