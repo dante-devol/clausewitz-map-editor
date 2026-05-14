@@ -23,19 +23,25 @@ export interface NotificationRecord {
 
 interface NotificationState {
   notifications: NotificationRecord[]
+  dismissingIds: ReadonlySet<string>
   upsert: (record: NotificationRecord) => void
+  beginDismiss: (id: string) => void
   dismiss: (id: string) => void
   clear: () => void
 }
 
 export const useNotificationStore = create<NotificationState>((set) => ({
   notifications: [],
+  dismissingIds: new Set(),
 
   upsert: (record) => set((state) => {
     const existingIndex = state.notifications.findIndex((notification) => notification.id === record.id)
     if (existingIndex === -1) {
       return {
-        notifications: [...state.notifications, record].sort(compareNotifications)
+        notifications: [...state.notifications, record].sort(compareNotifications),
+        dismissingIds: state.dismissingIds.has(record.id)
+          ? new Set([...state.dismissingIds].filter((id) => id !== record.id))
+          : state.dismissingIds
       }
     }
 
@@ -45,11 +51,16 @@ export const useNotificationStore = create<NotificationState>((set) => ({
     return { notifications }
   }),
 
-  dismiss: (id) => set((state) => ({
-    notifications: state.notifications.filter((notification) => notification.id !== id)
+  beginDismiss: (id) => set((state) => ({
+    dismissingIds: new Set([...state.dismissingIds, id])
   })),
 
-  clear: () => set({ notifications: [] })
+  dismiss: (id) => set((state) => ({
+    notifications: state.notifications.filter((notification) => notification.id !== id),
+    dismissingIds: new Set([...state.dismissingIds].filter((dismissingId) => dismissingId !== id))
+  })),
+
+  clear: () => set({ notifications: [], dismissingIds: new Set() })
 }))
 
 function compareNotifications(a: NotificationRecord, b: NotificationRecord): number {

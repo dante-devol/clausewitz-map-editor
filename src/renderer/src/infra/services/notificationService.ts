@@ -142,7 +142,7 @@ function upsertNotification(input: Omit<NotificationRecord, 'createdAt' | 'updat
   if (record.autoCloseAfterMs !== null) {
     const timer = setTimeout(() => {
       AUTO_DISMISS_TIMERS.delete(record.id)
-      useNotificationStore.getState().dismiss(record.id)
+      useNotificationStore.getState().beginDismiss(record.id)
     }, record.autoCloseAfterMs)
     AUTO_DISMISS_TIMERS.set(record.id, timer)
   }

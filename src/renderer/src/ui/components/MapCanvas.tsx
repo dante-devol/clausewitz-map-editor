@@ -1,4 +1,5 @@
 import { makeStyles, mergeClasses, tokens, Button, Spinner, Text, Tooltip, Skeleton, SkeletonItem, ProgressBar, shorthands } from '@fluentui/react-components'
+import { keyframes } from '@griffel/react'
 import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, PaintBucketRegular, PaintBucketFilled, DismissRegular } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
 import { useMapCanvas } from '../hooks/useMapCanvas'
@@ -9,6 +10,12 @@ import { useNotificationStore } from '../../infra/store/notificationStore'
 import { notificationService } from '../../infra/services/notificationService'
 
 const ZOOM_STEP = 1.25
+const NOTIFICATION_FADE_OUT_MS = 250
+
+const fadeOut = keyframes({
+  from: { opacity: 1, transform: 'translateY(0)' },
+  to: { opacity: 0, transform: 'translateY(-6px)' }
+})
 
 const useStyles = makeStyles({
   root: {
@@ -106,6 +113,13 @@ const useStyles = makeStyles({
   notificationCardError: {
     ...shorthands.borderColor(tokens.colorPaletteRedBorder2)
   },
+  notificationCardDismissing: {
+    animationName: fadeOut,
+    animationDuration: `${NOTIFICATION_FADE_OUT_MS}ms`,
+    animationTimingFunction: 'ease-in',
+    animationFillMode: 'forwards',
+    pointerEvents: 'none'
+  },
   topRightControls: {
     position: 'absolute',
     top: tokens.spacingVerticalM,
@@ -164,19 +178,26 @@ function NotificationTray(): JSX.Element | null {
   const styles = useStyles()
   const { t } = useI18n()
   const notifications = useNotificationStore((s) => s.notifications)
+  const dismissingIds = useNotificationStore((s) => s.dismissingIds)
   if (notifications.length === 0) return null
   return (
     <div className={styles.topLeftNotifications} onMouseDown={(e) => e.stopPropagation()}>
       <div className={styles.notificationTray}>
         {notifications.map((notification) => {
+          const isDismissing = dismissingIds.has(notification.id)
           const notificationClass = mergeClasses(
             styles.notificationCard,
             notification.tone === 'success' && styles.notificationCardSuccess,
             notification.tone === 'warning' && styles.notificationCardWarning,
-            notification.tone === 'error' && styles.notificationCardError
+            notification.tone === 'error' && styles.notificationCardError,
+            isDismissing && styles.notificationCardDismissing
           )
           return (
-            <div key={notification.id} className={notificationClass}>
+            <div
+              key={notification.id}
+              className={notificationClass}
+              onAnimationEnd={isDismissing ? () => notificationService.dismiss(notification.id) : undefined}
+            >
               <div className={styles.notificationHeader}>
                 <Text size={300} weight="semibold" className={styles.notificationTitle}>
                   {notification.title}
