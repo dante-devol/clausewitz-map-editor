@@ -12,6 +12,7 @@ import {
 import {
   AddRegular,
   ChevronDownRegular,
+  ChevronLeftRegular,
   ChevronRightRegular,
   DismissRegular
 } from '@fluentui/react-icons'
@@ -617,7 +618,11 @@ function HistoryBlock({ def, target, onChange, addForm, setAddForm, buildingType
 // Main component
 // ---------------------------------------------------------------------------
 
-export function StateDetailPanel(): JSX.Element {
+interface Props {
+  onCollapse?: () => void
+}
+
+export function StateDetailPanel({ onCollapse }: Props): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
 
@@ -645,6 +650,11 @@ export function StateDetailPanel(): JSX.Element {
   if (!original || !effective) {
     return (
       <div className={styles.root}>
+        <div className={styles.header}>
+          {onCollapse && (
+            <Button size="small" appearance="subtle" icon={<ChevronLeftRegular />} onClick={onCollapse} />
+          )}
+        </div>
         <Text size={200} className={styles.empty}>{t('statePanel.detail.noSelection')}</Text>
       </div>
     )
@@ -686,6 +696,9 @@ export function StateDetailPanel(): JSX.Element {
     <div className={styles.root}>
       {/* Header */}
       <div className={styles.header}>
+        {onCollapse && (
+          <Button size="small" appearance="subtle" icon={<ChevronLeftRegular />} onClick={onCollapse} />
+        )}
         <Text size={200} className={styles.headerTitle}>
           {t('statePanel.detail.title', { id: original.id })}
         </Text>

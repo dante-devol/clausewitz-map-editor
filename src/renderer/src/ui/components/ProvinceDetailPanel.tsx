@@ -10,6 +10,7 @@ import {
   Text,
   shorthands
 } from '@fluentui/react-components'
+import { ChevronLeftRegular } from '@fluentui/react-icons'
 import { unpackColor } from '../../../../shared/mapDataTypes'
 import type { Province } from '../../../../shared/mapDataTypes'
 import type { ProvinceDraftFields, ProvinceDraftTarget } from '../../../../shared/provinceEditing'
@@ -134,7 +135,11 @@ const useStyles = makeStyles({
 
 const TAB_SHOW_LIMIT = 5
 
-export function ProvinceDetailPanel(): JSX.Element {
+interface Props {
+  onCollapse?: () => void
+}
+
+export function ProvinceDetailPanel({ onCollapse }: Props): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
 
@@ -200,13 +205,25 @@ export function ProvinceDetailPanel(): JSX.Element {
   )
 
   if (tabItems.length === 0) {
-    return <div className={styles.root}><Text className={styles.empty}>{t('provinceDetail.empty')}</Text></div>
+    return (
+      <div className={styles.root}>
+        <div className={styles.tabStripRow}>
+          {onCollapse && (
+            <Button size="small" appearance="subtle" icon={<ChevronLeftRegular />} onClick={onCollapse} />
+          )}
+        </div>
+        <Text className={styles.empty}>{t('provinceDetail.empty')}</Text>
+      </div>
+    )
   }
 
   return (
     <div className={styles.root}>
-      {tabItems.length > 1 && (
-        <div className={styles.tabStripRow}>
+      <div className={styles.tabStripRow}>
+        {onCollapse && (
+          <Button size="small" appearance="subtle" icon={<ChevronLeftRegular />} onClick={onCollapse} />
+        )}
+        {tabItems.length > 1 && (
           <TabList
             size="small"
             selectedValue={effectiveKey ?? undefined}
@@ -216,11 +233,11 @@ export function ProvinceDetailPanel(): JSX.Element {
               <Tab key={item.key} value={item.key}>{item.label}</Tab>
             ))}
           </TabList>
-          {tabItems.length > TAB_SHOW_LIMIT && (
-            <Text size={100} className={styles.tabOverflow}>+{tabItems.length - TAB_SHOW_LIMIT}</Text>
-          )}
-        </div>
-      )}
+        )}
+        {tabItems.length > TAB_SHOW_LIMIT && (
+          <Text size={100} className={styles.tabOverflow}>+{tabItems.length - TAB_SHOW_LIMIT}</Text>
+        )}
+      </div>
 
       {focusedTarget && <SingleDetail target={focusedTarget} />}
     </div>

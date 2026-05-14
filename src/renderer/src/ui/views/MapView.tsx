@@ -1,5 +1,6 @@
-import { memo } from 'react'
-import { makeStyles, tokens } from '@fluentui/react-components'
+import { memo, useState, useEffect } from 'react'
+import { makeStyles, tokens, Button, Tooltip } from '@fluentui/react-components'
+import { ChevronRightRegular } from '@fluentui/react-icons'
 import { MapModePanel } from '../components/MapModePanel'
 import { MapCanvas } from '../components/MapCanvas'
 import { ProvincePanel } from '../components/provincePanel/ProvincePanel'
@@ -33,6 +34,21 @@ const useStyles = makeStyles({
     flex: 1,
     position: 'relative'
   },
+  collapsedTab: {
+    position: 'absolute',
+    top: tokens.spacingVerticalS,
+    left: 0,
+    zIndex: 10,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderTopRightRadius: tokens.borderRadiusMedium,
+    borderBottomRightRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground2
+  },
   sidebar: {
     display: 'flex',
     flexDirection: 'column',
@@ -57,18 +73,40 @@ export function MapView() {
     ? selectedStateId !== null
     : selectedProvinceIds.length > 0 || selectedBmpGuids.length > 0
 
+  const [detailCollapsed, setDetailCollapsed] = useState(false)
+
+  useEffect(() => {
+    if (!showDrawer) setDetailCollapsed(false)
+  }, [showDrawer])
+
   return (
     <div className={styles.root}>
       <div className={styles.leftPanel}>
         <ModeTabs />
         {editorMode === 'provinces' ? <ProvincePanel /> : <StatePanel />}
       </div>
-      {showDrawer && (
+      {showDrawer && !detailCollapsed && (
         <div className={styles.detailDrawer}>
-          {editorMode === 'provinces' ? <ProvinceDetailPanel /> : <StateDetailPanel />}
+          {editorMode === 'provinces'
+            ? <ProvinceDetailPanel onCollapse={() => setDetailCollapsed(true)} />
+            : <StateDetailPanel onCollapse={() => setDetailCollapsed(true)} />}
         </div>
       )}
-      <MapViewportPane className={styles.viewport} />
+      <div className={styles.viewport}>
+        {showDrawer && detailCollapsed && (
+          <div className={styles.collapsedTab}>
+            <Tooltip content="Expand detail panel" relationship="label" positioning="after">
+              <Button
+                size="small"
+                appearance="subtle"
+                icon={<ChevronRightRegular />}
+                onClick={() => setDetailCollapsed(false)}
+              />
+            </Tooltip>
+          </div>
+        )}
+        <StableMapCanvas />
+      </div>
       <div className={styles.sidebar}>
         <MapSidebarTop className={styles.sidebarTop} />
       </div>
@@ -76,13 +114,8 @@ export function MapView() {
   )
 }
 
-
-const MapViewportPane = memo(function MapViewportPane({ className }: { className: string }) {
-  return (
-    <div className={className}>
-      <MapCanvas />
-    </div>
-  )
+const StableMapCanvas = memo(function StableMapCanvas() {
+  return <MapCanvas />
 })
 
 const MapSidebarTop = memo(function MapSidebarTop({ className }: { className: string }) {
