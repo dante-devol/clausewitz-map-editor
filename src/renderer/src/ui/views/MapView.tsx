@@ -22,17 +22,22 @@ const useStyles = makeStyles({
     borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
     overflow: 'hidden'
   },
-  detailDrawer: {
-    display: 'flex',
-    flexDirection: 'column',
-    width: '320px',
-    flexShrink: 0,
-    borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
-    overflow: 'hidden'
-  },
   viewport: {
     flex: 1,
     position: 'relative'
+  },
+  detailDrawer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: '320px',
+    zIndex: 10,
+    display: 'flex',
+    flexDirection: 'column',
+    borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
+    overflow: 'hidden',
+    backgroundColor: tokens.colorNeutralBackground1
   },
   collapsedTab: {
     position: 'absolute',
@@ -85,14 +90,14 @@ export function MapView() {
         <ModeTabs />
         {editorMode === 'provinces' ? <ProvincePanel /> : <StatePanel />}
       </div>
-      {showDrawer && !detailCollapsed && (
-        <div className={styles.detailDrawer}>
-          {editorMode === 'provinces'
-            ? <ProvinceDetailPanel onCollapse={() => setDetailCollapsed(true)} />
-            : <StateDetailPanel onCollapse={() => setDetailCollapsed(true)} />}
-        </div>
-      )}
       <div className={styles.viewport}>
+        {showDrawer && !detailCollapsed && (
+          <div className={styles.detailDrawer}>
+            {editorMode === 'provinces'
+              ? <ProvinceDetailPanel onCollapse={() => setDetailCollapsed(true)} />
+              : <StateDetailPanel onCollapse={() => setDetailCollapsed(true)} />}
+          </div>
+        )}
         {showDrawer && detailCollapsed && (
           <div className={styles.collapsedTab}>
             <Tooltip content="Expand detail panel" relationship="label" positioning="after">
