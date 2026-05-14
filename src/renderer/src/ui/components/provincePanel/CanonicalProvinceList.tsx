@@ -18,8 +18,10 @@ import {
 import {
   ChevronDownRegular,
   ChevronUpRegular,
+  DismissRegular,
   ErrorCircleRegular,
   InfoRegular,
+  SearchRegular,
   WarningRegular
 } from '@fluentui/react-icons'
 import { unpackColor } from '../../../../../shared/mapDataTypes'
@@ -407,6 +409,16 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground1,
     maxWidth: 'none'
   },
+  searchBar: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    flexShrink: 0
+  },
+  searchInput: {
+    flex: 1
+  },
   empty: {
     padding: tokens.spacingVerticalM,
     color: tokens.colorNeutralForeground3,
@@ -445,6 +457,7 @@ export function CanonicalProvinceList({ collapsed, onToggleCollapse }: Props): J
   const issuesByProvinceKey = useProvinceValidationStore((s) => s.issuesByProvinceKey)
   const [filters, setFilters] = useState<ProvinceListFilters>(EMPTY_FILTERS)
   const [filterQuery, setFilterQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
 
   const canonicalProvinces = useMemo(
     () => provinceCatalog.filter((e) => e.canonical),
@@ -468,9 +481,14 @@ export function CanonicalProvinceList({ collapsed, onToggleCollapse }: Props): J
     [filters, t]
   )
 
-  const filteredProvinces = useMemo(() => (
-    canonicalProvinces.filter((p) => matchesProvinceFilters(p, filters, issuesByProvinceKey))
-  ), [filters, issuesByProvinceKey, canonicalProvinces])
+  const filteredProvinces = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    return canonicalProvinces.filter((p) => {
+      if (!matchesProvinceFilters(p, filters, issuesByProvinceKey)) return false
+      if (q.length > 0 && !matchesProvinceSearch(p, q, continents)) return false
+      return true
+    })
+  }, [continents, filters, issuesByProvinceKey, searchQuery, canonicalProvinces])
 
   const rowVirtualizer = useVirtualizer({
     count: filteredProvinces.length,
@@ -544,7 +562,7 @@ export function CanonicalProvinceList({ collapsed, onToggleCollapse }: Props): J
           {t('provincePanel.canonical.title')}
         </Text>
         <Text size={100} className={styles.count}>
-          {hasActiveFilters
+          {(hasActiveFilters || searchQuery.trim().length > 0)
             ? `${formatNumber(filteredProvinces.length)} / ${formatNumber(canonicalProvinces.length)}`
             : formatNumber(canonicalProvinces.length)}
         </Text>
@@ -648,6 +666,30 @@ export function CanonicalProvinceList({ collapsed, onToggleCollapse }: Props): J
             : <ChevronUpRegular className={styles.chevron} />}
         </div>
       </div>
+
+      {!collapsed && (
+        <div className={styles.searchBar}>
+          <Input
+            size="small"
+            className={styles.searchInput}
+            appearance="filled-lighter"
+            placeholder={t('provinceList.search.placeholder')}
+            value={searchQuery}
+            onChange={(_, data) => setSearchQuery(data.value)}
+            contentBefore={<SearchRegular />}
+            contentAfter={searchQuery.length > 0
+              ? (
+                <Button
+                  size="small"
+                  appearance="transparent"
+                  icon={<DismissRegular />}
+                  onClick={() => setSearchQuery('')}
+                />
+              )
+              : undefined}
+          />
+        </div>
+      )}
 
       {!collapsed && (
         canonicalProvinces.length === 0 ? (
@@ -797,6 +839,20 @@ export function CanonicalProvinceList({ collapsed, onToggleCollapse }: Props): J
       )}
     </div>
   )
+}
+
+function matchesProvinceSearch(
+  province: ProvinceCatalogEntry,
+  query: string,
+  _continents: ReadonlyMap<string, unknown>
+): boolean {
+  if (province.id !== null && String(province.id).includes(query)) return true
+  if (province.type?.toLowerCase().includes(query)) return true
+  if (province.terrain?.toLowerCase().includes(query)) return true
+  if (province.continent?.toLowerCase().includes(query)) return true
+  if (province.isCoastal === true && 'coastal'.includes(query)) return true
+  if (province.isCoastal === false && 'inland'.includes(query)) return true
+  return false
 }
 
 function uniqueSorted(values: Array<string | null>): string[] {

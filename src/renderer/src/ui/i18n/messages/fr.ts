@@ -150,6 +150,7 @@ export const frMessages: Record<MessageKey, string> = {
   'notification.validation.summary': '{errors} erreurs, {warnings} avertissements',
   'provinceList.title': 'Provinces',
   'provinceList.empty': 'Aucune donnee chargee',
+  'provinceList.search.placeholder': 'Rechercher par ID ou terrain…',
   'provinceList.filter.button': 'Filtrer',
   'provinceList.filter.clear': 'Effacer',
   'provinceList.filter.empty': 'Aucune province ne correspond aux filtres actuels',

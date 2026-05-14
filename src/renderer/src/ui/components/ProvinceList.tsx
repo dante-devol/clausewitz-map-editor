@@ -15,7 +15,7 @@ import {
   Text,
   shorthands
 } from '@fluentui/react-components'
-import { ErrorCircleRegular, InfoRegular, WarningRegular } from '@fluentui/react-icons'
+import { DismissRegular, ErrorCircleRegular, InfoRegular, SearchRegular, WarningRegular } from '@fluentui/react-icons'
 import { unpackColor } from '../../../../shared/mapDataTypes'
 import type { ProvinceCatalogEntry } from '../../../../shared/provinceCatalog'
 import { TYPE_COLORS, continentColor } from '../../infra/config/displayModes'
@@ -358,6 +358,16 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground1,
     maxWidth: 'none'
   },
+  searchBar: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    flexShrink: 0
+  },
+  searchInput: {
+    flex: 1
+  },
   empty: {
     padding: tokens.spacingVerticalM,
     color: tokens.colorNeutralForeground3,
@@ -380,6 +390,7 @@ export function ProvinceList({ provinceCatalog, selectedIds, onSelect }: Props):
   const issuesByProvinceKey = useProvinceValidationStore((s) => s.issuesByProvinceKey)
   const [filters, setFilters] = useState<ProvinceListFilters>(EMPTY_FILTERS)
   const [filterQuery, setFilterQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
 
   const sortedProvinces = useMemo(() => [...provinceCatalog], [provinceCatalog])
   const hasActiveFilters = useMemo(() => !areFiltersEmpty(filters), [filters])
@@ -399,9 +410,14 @@ export function ProvinceList({ provinceCatalog, selectedIds, onSelect }: Props):
     [filters, t]
   )
 
-  const filteredProvinces = useMemo(() => (
-    sortedProvinces.filter((province) => matchesProvinceFilters(province, filters, issuesByProvinceKey))
-  ), [filters, issuesByProvinceKey, sortedProvinces])
+  const filteredProvinces = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    return sortedProvinces.filter((province) => {
+      if (!matchesProvinceFilters(province, filters, issuesByProvinceKey)) return false
+      if (q.length > 0 && !matchesProvinceSearch(province, q, continents)) return false
+      return true
+    })
+  }, [continents, filters, issuesByProvinceKey, searchQuery, sortedProvinces])
 
   const rowVirtualizer = useVirtualizer({
     count: filteredProvinces.length,
@@ -448,7 +464,7 @@ export function ProvinceList({ provinceCatalog, selectedIds, onSelect }: Props):
           {t('provinceList.title')}
         </Text>
         <Text size={100} className={styles.count}>
-          {hasActiveFilters
+          {(hasActiveFilters || searchQuery.trim().length > 0)
             ? `${formatNumber(filteredProvinces.length)} / ${formatNumber(sortedProvinces.length)}`
             : formatNumber(sortedProvinces.length)}
         </Text>
@@ -545,6 +561,28 @@ export function ProvinceList({ provinceCatalog, selectedIds, onSelect }: Props):
             </PopoverSurface>
           </Popover>
         </div>
+      </div>
+
+      <div className={styles.searchBar}>
+        <Input
+          size="small"
+          className={styles.searchInput}
+          appearance="filled-lighter"
+          placeholder={t('provinceList.search.placeholder')}
+          value={searchQuery}
+          onChange={(_, data) => setSearchQuery(data.value)}
+          contentBefore={<SearchRegular />}
+          contentAfter={searchQuery.length > 0
+            ? (
+              <Button
+                size="small"
+                appearance="transparent"
+                icon={<DismissRegular />}
+                onClick={() => setSearchQuery('')}
+              />
+            )
+            : undefined}
+        />
       </div>
 
       {sortedProvinces.length === 0 ? (
@@ -664,6 +702,20 @@ export function ProvinceList({ provinceCatalog, selectedIds, onSelect }: Props):
       )}
     </div>
   )
+}
+
+function matchesProvinceSearch(
+  province: ProvinceCatalogEntry,
+  query: string,
+  _continents: ReadonlyMap<string, unknown>
+): boolean {
+  if (province.id !== null && String(province.id).includes(query)) return true
+  if (province.type?.toLowerCase().includes(query)) return true
+  if (province.terrain?.toLowerCase().includes(query)) return true
+  if (province.continent?.toLowerCase().includes(query)) return true
+  if (province.isCoastal === true && 'coastal'.includes(query)) return true
+  if (province.isCoastal === false && 'inland'.includes(query)) return true
+  return false
 }
 
 function formatProvinceId(province: ProvinceCatalogEntry): string {

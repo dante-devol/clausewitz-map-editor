@@ -148,6 +148,7 @@ export const enMessages = {
   'notification.validation.summary': '{errors} errors, {warnings} warnings',
   'provinceList.title': 'Provinces',
   'provinceList.empty': 'No data loaded',
+  'provinceList.search.placeholder': 'Search by ID or terrain…',
   'provinceList.filter.button': 'Filter',
   'provinceList.filter.clear': 'Clear',
   'provinceList.filter.empty': 'No provinces match the current filters',
