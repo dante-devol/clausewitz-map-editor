@@ -12,7 +12,6 @@ import {
 import {
   AddRegular,
   ChevronDownRegular,
-  ChevronLeftRegular,
   ChevronRightRegular,
   DismissRegular
 } from '@fluentui/react-icons'
@@ -36,11 +35,8 @@ import type {
 const useStyles = makeStyles({
   root: {
     backgroundColor: tokens.colorNeutralBackground2,
-    flex: '1 1 0',
-    minHeight: 0,
     display: 'flex',
-    flexDirection: 'column',
-    overflowY: 'auto'
+    flexDirection: 'column'
   },
   empty: {
     color: tokens.colorNeutralForeground3,
@@ -652,7 +648,7 @@ export function StateDetailPanel({ onCollapse }: Props): JSX.Element {
       <div className={styles.root}>
         <div className={styles.header}>
           {onCollapse && (
-            <Button size="small" appearance="subtle" icon={<ChevronLeftRegular />} onClick={onCollapse} />
+            <Button size="small" appearance="subtle" icon={<ChevronDownRegular />} onClick={onCollapse} />
           )}
         </div>
         <Text size={200} className={styles.empty}>{t('statePanel.detail.noSelection')}</Text>
@@ -697,7 +693,7 @@ export function StateDetailPanel({ onCollapse }: Props): JSX.Element {
       {/* Header */}
       <div className={styles.header}>
         {onCollapse && (
-          <Button size="small" appearance="subtle" icon={<ChevronLeftRegular />} onClick={onCollapse} />
+          <Button size="small" appearance="subtle" icon={<ChevronDownRegular />} onClick={onCollapse} />
         )}
         <Text size={200} className={styles.headerTitle}>
           {t('statePanel.detail.title', { id: original.id })}

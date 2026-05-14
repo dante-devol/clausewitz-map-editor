@@ -1,6 +1,6 @@
 import { memo, useState, useEffect } from 'react'
 import { makeStyles, tokens, Button, Tooltip } from '@fluentui/react-components'
-import { ChevronRightRegular } from '@fluentui/react-icons'
+import { ChevronDownRegular, ChevronUpRegular } from '@fluentui/react-icons'
 import { MapModePanel } from '../components/MapModePanel'
 import { MapCanvas } from '../components/MapCanvas'
 import { ProvincePanel } from '../components/provincePanel/ProvincePanel'
@@ -28,30 +28,31 @@ const useStyles = makeStyles({
   },
   detailDrawer: {
     position: 'absolute',
-    top: 0,
-    left: 0,
     bottom: 0,
-    width: '320px',
+    left: tokens.spacingHorizontalM,
     zIndex: 10,
+    width: 'max-content',
+    maxWidth: '50%',
     display: 'flex',
     flexDirection: 'column',
-    borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
-    overflow: 'hidden',
+    maxHeight: '60%',
+    overflowY: 'auto',
+    borderTopLeftRadius: tokens.borderRadiusMedium,
+    borderTopRightRadius: tokens.borderRadiusMedium,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
     backgroundColor: tokens.colorNeutralBackground1
   },
   collapsedTab: {
     position: 'absolute',
-    top: tokens.spacingVerticalS,
-    left: 0,
+    bottom: 0,
+    left: tokens.spacingHorizontalM,
     zIndex: 10,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
-    borderRight: `1px solid ${tokens.colorNeutralStroke2}`,
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderTopLeftRadius: tokens.borderRadiusMedium,
     borderTopRightRadius: tokens.borderRadiusMedium,
-    borderBottomRightRadius: tokens.borderRadiusMedium,
     backgroundColor: tokens.colorNeutralBackground2
   },
   sidebar: {
@@ -100,11 +101,11 @@ export function MapView() {
         )}
         {showDrawer && detailCollapsed && (
           <div className={styles.collapsedTab}>
-            <Tooltip content="Expand detail panel" relationship="label" positioning="after">
+            <Tooltip content="Expand detail panel" relationship="label" positioning="above">
               <Button
                 size="small"
                 appearance="subtle"
-                icon={<ChevronRightRegular />}
+                icon={<ChevronUpRegular />}
                 onClick={() => setDetailCollapsed(false)}
               />
             </Tooltip>

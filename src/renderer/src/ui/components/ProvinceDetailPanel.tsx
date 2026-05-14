@@ -10,7 +10,7 @@ import {
   Text,
   shorthands
 } from '@fluentui/react-components'
-import { ChevronLeftRegular } from '@fluentui/react-icons'
+import { ChevronDownRegular } from '@fluentui/react-icons'
 import { unpackColor } from '../../../../shared/mapDataTypes'
 import type { Province } from '../../../../shared/mapDataTypes'
 import type { ProvinceDraftFields, ProvinceDraftTarget } from '../../../../shared/provinceEditing'
@@ -26,12 +26,9 @@ const useStyles = makeStyles({
   root: {
     backgroundColor: tokens.colorNeutralBackground2,
     padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalS}`,
-    flex: '1 1 0',
-    minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: tokens.spacingVerticalS,
-    overflowY: 'auto'
+    gap: tokens.spacingVerticalS
   },
   tabStripRow: {
     display: 'flex',
@@ -209,7 +206,7 @@ export function ProvinceDetailPanel({ onCollapse }: Props): JSX.Element {
       <div className={styles.root}>
         <div className={styles.tabStripRow}>
           {onCollapse && (
-            <Button size="small" appearance="subtle" icon={<ChevronLeftRegular />} onClick={onCollapse} />
+            <Button size="small" appearance="subtle" icon={<ChevronDownRegular />} onClick={onCollapse} />
           )}
         </div>
         <Text className={styles.empty}>{t('provinceDetail.empty')}</Text>
@@ -221,7 +218,7 @@ export function ProvinceDetailPanel({ onCollapse }: Props): JSX.Element {
     <div className={styles.root}>
       <div className={styles.tabStripRow}>
         {onCollapse && (
-          <Button size="small" appearance="subtle" icon={<ChevronLeftRegular />} onClick={onCollapse} />
+          <Button size="small" appearance="subtle" icon={<ChevronDownRegular />} onClick={onCollapse} />
         )}
         {tabItems.length > 1 && (
           <TabList
