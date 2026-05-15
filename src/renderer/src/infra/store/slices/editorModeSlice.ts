@@ -1,6 +1,6 @@
 import { type StateCreator } from 'zustand'
 
-export type EditorMode = 'provinces' | 'states' | 'strategicRegions'
+export type EditorMode = 'provinces' | 'states' | 'strategicRegions' | 'paint'
 
 export interface EditorModeSlice {
   editorMode: EditorMode

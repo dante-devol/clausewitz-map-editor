@@ -28,6 +28,7 @@ export function ModeTabs(): JSX.Element {
         <Tab value="provinces">{t('mode.provinces')}</Tab>
         <Tab value="states">{t('mode.states')}</Tab>
         <Tab value="strategicRegions">{t('mode.strategicRegions')}</Tab>
+        <Tab value="paint">{t('mode.paint')}</Tab>
       </TabList>
     </div>
   )

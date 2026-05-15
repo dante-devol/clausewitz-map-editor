@@ -4,6 +4,7 @@ import { BmpProvinceMapSource } from '../../infra/lib/BmpProvinceMapSource'
 import type { CanvasOverlay, BitmapCanvasOverlay } from '../contracts/CanvasOverlay'
 import type { OverlayFilterRule } from '../../core/contracts/MapOverlay'
 import type { ProvinceIndex } from '../../infra/lib/provinceAnalysis'
+import type { BmpPixelStrokeDelta } from '../../../../shared/provinceEditing'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,13 @@ const BBOX_MERGE_PADDING_PX = 1
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
+export interface BrushPaintConfig {
+  radius: number
+  r: number
+  g: number
+  b: number
+}
+
 export interface UseMapCanvasProps {
   src: string | null
   overlays: CanvasOverlay[]
@@ -36,23 +44,29 @@ export interface UseMapCanvasProps {
   validationWarningColors: number[]
   validationErrorColors: number[]
   colorMap?: Map<number, number> | null
-  activeTool: 'select' | 'eyedrop' | 'bucket'
+  activeTool: 'select' | 'eyedrop' | 'bucket' | 'brush'
+  brushPaintConfig?: BrushPaintConfig | null
   onMapClick?: (r: number, g: number, b: number, additive: boolean) => void
   onHoverColorChange?: (color: HoveredColor | null) => void
+  onBrushStrokeComplete?: (pixels: BmpPixelStrokeDelta[], affectedIds: Set<number>) => void
 }
 
 export interface UseMapCanvasResult {
   containerRef: React.RefObject<HTMLDivElement>
   canvasRef: React.RefObject<HTMLCanvasElement>
+  brushCursorCanvasRef: React.RefObject<HTMLCanvasElement>
   dragging: boolean
   displayScale: number
   imageLoaded: boolean
   isCanvasLoading: boolean
+  cursorPosition: { x: number; y: number } | null
   onMouseDown: (e: React.MouseEvent) => void
   onMouseMove: (e: React.MouseEvent) => void
   stopDrag: () => void
   zoomBy: (factor: number) => void
   fit: () => void
+  revertBrushStroke: (pixels: BmpPixelStrokeDelta[]) => void
+  getPixelSnapshot: () => { data: Uint8ClampedArray; width: number; height: number } | null
 }
 
 export function useMapCanvas({
@@ -63,11 +77,14 @@ export function useMapCanvas({
   validationErrorColors,
   colorMap,
   activeTool,
+  brushPaintConfig,
   onMapClick,
   onHoverColorChange,
+  onBrushStrokeComplete,
 }: UseMapCanvasProps): UseMapCanvasResult {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
+  const brushCursorCanvasRef = useRef<HTMLCanvasElement>(null)
   const rendererRef  = useRef<MapRenderer | null>(null)
   const provinceIndexRef = useRef<ProvinceIndex | null>(null)
   const canvasOverlaysRef = useRef<CanvasOverlay[]>([])
@@ -79,8 +96,17 @@ export function useMapCanvas({
   const colorMapRef  = useRef<Map<number, number> | null | undefined>(null)
   const cancelPanRef = useRef<(() => void) | null>(null)
   const dragRef      = useRef<{ startX: number; startY: number; startTX: number; startTY: number } | null>(null)
+  const isPaintingRef = useRef(false)
+  const strokePixelsRef = useRef<BmpPixelStrokeDelta[]>([])
+  const strokeAffectedIdsRef = useRef<Set<number>>(new Set())
+  const lastPaintImgPosRef = useRef<{ x: number; y: number } | null>(null)
+  const brushPaintConfigRef = useRef<BrushPaintConfig | null | undefined>(null)
+  const onBrushStrokeCompleteRef = useRef(onBrushStrokeComplete)
+  const cursorCanvasPositionRef = useRef<{ x: number; y: number } | null>(null)
+  const drawBrushCursorRef = useRef<((x: number, y: number) => void) | null>(null)
 
   const [dragging, setDragging] = useState(false)
+  const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number } | null>(null)
   const [displayScale, setDisplayScale] = useState(1)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [baseImageLoading, setBaseImageLoading] = useState(false)
@@ -110,6 +136,8 @@ export function useMapCanvas({
     transformRef.current = next
     setDisplayScale(next.scale)
     rendererRef.current?.render(next.x, next.y, next.scale)
+    const pos = cursorCanvasPositionRef.current
+    if (pos && brushPaintConfigRef.current) drawBrushCursorRef.current?.(pos.x, pos.y)
   }, [])
 
   const fit = useCallback(() => {
@@ -129,6 +157,8 @@ export function useMapCanvas({
     const container = containerRef.current!
     canvas.width = container.clientWidth
     canvas.height = container.clientHeight
+    const cursorCanvas = brushCursorCanvasRef.current
+    if (cursorCanvas) { cursorCanvas.width = container.clientWidth; cursorCanvas.height = container.clientHeight }
     rendererRef.current = new MapRenderer(canvas)
     return () => {
       cancelPanRef.current?.()
@@ -172,6 +202,10 @@ export function useMapCanvas({
       provinceIndexRef.current = null
     }
   }, [src, fit])
+
+  // Sync brush config and stroke callback refs
+  brushPaintConfigRef.current = brushPaintConfig
+  onBrushStrokeCompleteRef.current = onBrushStrokeComplete
 
   // Sync color map
   useEffect(() => {
@@ -284,6 +318,8 @@ export function useMapCanvas({
     const observer = new ResizeObserver(() => {
       canvas.width = container.clientWidth
       canvas.height = container.clientHeight
+      const cursorCanvas = brushCursorCanvasRef.current
+      if (cursorCanvas) { cursorCanvas.width = container.clientWidth; cursorCanvas.height = container.clientHeight }
       const t = transformRef.current
       syncSelectionStructure(rendererRef.current, provinceIndexRef.current, highlightColorsRef.current, t.scale)
       syncValidationStructure(rendererRef.current, provinceIndexRef.current, validationWarningColorsRef.current, validationErrorColorsRef.current, t.scale)
@@ -318,6 +354,98 @@ export function useMapCanvas({
     return () => el.removeEventListener('wheel', handler)
   }, [applyTransform])
 
+  const clearBrushCursor = useCallback(() => {
+    const cc = brushCursorCanvasRef.current
+    if (!cc) return
+    const ctx = cc.getContext('2d')
+    ctx?.clearRect(0, 0, cc.width, cc.height)
+  }, [])
+
+  // Keep stable ref so applyTransform can call it without a dependency cycle.
+  const drawBrushCursor = useCallback((canvasX: number, canvasY: number) => {
+    const cc = brushCursorCanvasRef.current
+    const cfg = brushPaintConfigRef.current
+    if (!cc) return
+    const ctx = cc.getContext('2d')
+    if (!ctx) return
+    ctx.clearRect(0, 0, cc.width, cc.height)
+    if (!cfg) return
+    const { x: tx, y: ty, scale } = transformRef.current
+    const cx = Math.round((canvasX - tx) / scale)
+    const cy = Math.round((canvasY - ty) / scale)
+    const { radius } = cfg
+    const r2 = radius * radius
+    const minPx = cx - radius
+    const maxPx = cx + radius
+    const minPy = cy - radius
+    const maxPy = cy + radius
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)'
+    ctx.lineWidth = Math.min(1, scale * 0.5)
+    for (let py = minPy; py <= maxPy; py++) {
+      const dy = py - cy
+      for (let px = minPx; px <= maxPx; px++) {
+        const dx = px - cx
+        if (dx * dx + dy * dy >= r2) continue
+        const sx = Math.round(tx + px * scale)
+        const sy = Math.round(ty + py * scale)
+        const sw = Math.max(1, Math.round(scale))
+        ctx.fillRect(sx, sy, sw, sw)
+        if (scale >= 2) ctx.strokeRect(sx + 0.5, sy + 0.5, sw - 1, sw - 1)
+      }
+    }
+  }, [])
+
+  drawBrushCursorRef.current = drawBrushCursor
+
+  const doBrushPaint = useCallback((canvasX: number, canvasY: number) => {
+    const cfg = brushPaintConfigRef.current
+    const renderer = rendererRef.current
+    if (!cfg || !renderer) return
+    const { x: tx, y: ty, scale } = transformRef.current
+    const imgX = (canvasX - tx) / scale
+    const imgY = (canvasY - ty) / scale
+
+    const prev = lastPaintImgPosRef.current
+    const stepSize = Math.max(1, cfg.radius / 2)
+    const positions: Array<{ x: number; y: number }> = []
+
+    if (prev) {
+      const dx = imgX - prev.x
+      const dy = imgY - prev.y
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      const steps = Math.ceil(dist / stepSize)
+      for (let i = 1; i <= steps; i++) {
+        positions.push({ x: prev.x + dx * (i / steps), y: prev.y + dy * (i / steps) })
+      }
+    } else {
+      positions.push({ x: imgX, y: imgY })
+    }
+
+    lastPaintImgPosRef.current = { x: imgX, y: imgY }
+
+    let anyChange = false
+    for (const pos of positions) {
+      const result = renderer.paintBrush(pos.x, pos.y, cfg.radius, cfg.r, cfg.g, cfg.b)
+      if (!result || result.pixels.length === 0) continue
+      strokePixelsRef.current.push(...result.pixels)
+      for (const id of result.affectedIds) strokeAffectedIdsRef.current.add(id)
+      anyChange = true
+    }
+    if (anyChange) renderer.render(tx, ty, scale)
+  }, [])
+
+  const finishBrushStroke = useCallback(() => {
+    if (!isPaintingRef.current) return
+    isPaintingRef.current = false
+    lastPaintImgPosRef.current = null
+    const pixels = strokePixelsRef.current
+    const affectedIds = strokeAffectedIdsRef.current
+    strokePixelsRef.current = []
+    strokeAffectedIdsRef.current = new Set()
+    if (pixels.length > 0) onBrushStrokeCompleteRef.current?.(pixels, affectedIds)
+  }, [])
+
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     cancelPanRef.current?.()
     cancelPanRef.current = null
@@ -334,6 +462,11 @@ export function useMapCanvas({
       const rect = canvas.getBoundingClientRect()
       const cx = e.clientX - rect.left
       const cy = e.clientY - rect.top
+      if (activeTool === 'brush') {
+        isPaintingRef.current = true
+        doBrushPaint(cx, cy)
+        return
+      }
       const { x: tx, y: ty, scale } = transformRef.current
       const color = rendererRef.current?.readOriginalPixel(cx, cy, tx, ty, scale)
       if (color) onMapClick?.(color.r, color.g, color.b, activeTool === 'select' && e.shiftKey)
@@ -342,19 +475,30 @@ export function useMapCanvas({
     const t = transformRef.current
     dragRef.current = { startX: e.clientX, startY: e.clientY, startTX: t.x, startTY: t.y }
     setDragging(true)
-  }, [activeTool, onMapClick])
+  }, [activeTool, doBrushPaint, onMapClick])
 
   const onMouseMove = useCallback((e: React.MouseEvent) => {
     const canvas = canvasRef.current
-    if (canvas && !dragRef.current) {
+    if (canvas) {
       const rect = canvas.getBoundingClientRect()
       const cx = e.clientX - rect.left
       const cy = e.clientY - rect.top
-      const { x: tx, y: ty, scale } = transformRef.current
-      const color = rendererRef.current?.readOriginalPixel(cx, cy, tx, ty, scale)
-      onHoverColorChange?.(color ? { ...color, x: cx, y: cy } : null)
-    } else if (dragRef.current) {
-      onHoverColorChange?.(null)
+      cursorCanvasPositionRef.current = { x: cx, y: cy }
+      setCursorPosition({ x: cx, y: cy })
+      if (!dragRef.current) {
+        if (activeTool === 'brush') {
+          drawBrushCursor(cx, cy)
+          if (isPaintingRef.current) { doBrushPaint(cx, cy); return }
+          return
+        }
+        clearBrushCursor()
+        const { x: tx, y: ty, scale } = transformRef.current
+        const color = rendererRef.current?.readOriginalPixel(cx, cy, tx, ty, scale)
+        onHoverColorChange?.(color ? { ...color, x: cx, y: cy } : null)
+      } else {
+        clearBrushCursor()
+        onHoverColorChange?.(null)
+      }
     }
     if (!dragRef.current) return
     applyTransform({
@@ -362,9 +506,15 @@ export function useMapCanvas({
       x: dragRef.current.startTX + (e.clientX - dragRef.current.startX),
       y: dragRef.current.startTY + (e.clientY - dragRef.current.startY)
     })
-  }, [applyTransform, onHoverColorChange])
+  }, [activeTool, applyTransform, clearBrushCursor, doBrushPaint, drawBrushCursor, onHoverColorChange])
 
-  const stopDrag = useCallback(() => { dragRef.current = null; setDragging(false) }, [])
+  const stopDrag = useCallback(() => {
+    dragRef.current = null
+    setDragging(false)
+    cursorCanvasPositionRef.current = null
+    clearBrushCursor()
+    finishBrushStroke()
+  }, [clearBrushCursor, finishBrushStroke])
 
   const zoomBy = useCallback((factor: number) => {
     const canvas = canvasRef.current
@@ -378,7 +528,23 @@ export function useMapCanvas({
     applyTransform({ scale: newScale, x: cx - (cx - prev.x) * ratio, y: cy - (cy - prev.y) * ratio })
   }, [applyTransform])
 
-  return { containerRef, canvasRef, dragging, displayScale, imageLoaded, isCanvasLoading, onMouseDown, onMouseMove, stopDrag, zoomBy, fit }
+  const revertBrushStroke = useCallback((pixels: BmpPixelStrokeDelta[]) => {
+    const renderer = rendererRef.current
+    if (!renderer) return
+    renderer.revertBrushStroke(pixels)
+    const t = transformRef.current
+    renderer.render(t.x, t.y, t.scale)
+  }, [])
+
+  const getPixelSnapshot = useCallback(() => {
+    return rendererRef.current?.getPixelDataSnapshot() ?? null
+  }, [])
+
+  return {
+    containerRef, canvasRef, brushCursorCanvasRef, dragging, displayScale, imageLoaded, isCanvasLoading,
+    cursorPosition, onMouseDown, onMouseMove, stopDrag, zoomBy, fit,
+    revertBrushStroke, getPixelSnapshot,
+  }
 }
 
 // ─── Canvas utilities (no React deps) ────────────────────────────────────────

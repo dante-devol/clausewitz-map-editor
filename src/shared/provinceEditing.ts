@@ -66,3 +66,16 @@ export interface NewProvince {
 }
 
 export type PendingChange = FieldEdit | BmpFieldEdit | BmpReplacement | NewProvince
+
+export interface BmpPixelStrokeDelta {
+  offset: number
+  oldR: number; oldG: number; oldB: number
+  newR: number; newG: number; newB: number
+}
+
+export interface BmpPixelStroke {
+  id: string
+  targetProvinceColor: number
+  pixelCount: number
+  pixels: BmpPixelStrokeDelta[]
+}

@@ -1,6 +1,7 @@
 import { buildProvinceIndex } from './provinceAnalysis'
 import type { ProvinceMapSource } from './ProvinceMapSource'
 import type { ProvinceIndex } from './provinceAnalysis'
+import type { BmpPixelStrokeDelta } from '../../../../shared/provinceEditing'
 
 // Vertex shader: maps [0,1]×[0,1] unit quad to clip space via a mat3.
 // UV passes straight through — texImage2D row 0 (top) is at V=0, matching quad Y.
@@ -752,6 +753,134 @@ export class MapRenderer {
     }
     gl.bindTexture(gl.TEXTURE_2D, this.paletteTexture)
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, this.paletteHeight, gl.RGBA, gl.UNSIGNED_BYTE, palette)
+  }
+
+  // Paint pixels within a circular brush at image-space coordinates.
+  // Returns per-pixel before/after deltas (for undo) and the set of province IDs whose
+  // pixels were overwritten. Caller must call render() afterwards to display the change.
+  paintBrush(
+    imgCenterX: number, imgCenterY: number,
+    radius: number,
+    targetR: number, targetG: number, targetB: number
+  ): { pixels: BmpPixelStrokeDelta[]; affectedIds: Set<number> } | null {
+    const { gl } = this
+    const index = this.provinceIndex
+    const pixels = this.pixelData
+    if (!index || !pixels || !this.idTexture) return null
+
+    const packed = (targetR << 16) | (targetG << 8) | targetB
+    const targetId = index.colorToId.get(packed)
+    if (targetId === undefined) return null
+
+    const w = this.pixelDataWidth
+    const h = this._imageSize.height
+    const cx = Math.round(imgCenterX)
+    const cy = Math.round(imgCenterY)
+    const r2 = radius * radius
+
+    const minX = Math.max(0, cx - radius)
+    const maxX = Math.min(w - 1, cx + radius)
+    const minY = Math.max(0, cy - radius)
+    const maxY = Math.min(h - 1, cy + radius)
+
+    const deltas: BmpPixelStrokeDelta[] = []
+    const affectedIds = new Set<number>()
+
+    for (let py = minY; py <= maxY; py++) {
+      const dy = py - cy
+      for (let px = minX; px <= maxX; px++) {
+        const dx = px - cx
+        if (dx * dx + dy * dy >= r2) continue
+
+        const flatIdx = py * w + px
+        const byteOff = flatIdx * 4
+        const oldR = pixels[byteOff]
+        const oldG = pixels[byteOff + 1]
+        const oldB = pixels[byteOff + 2]
+
+        if (oldR === targetR && oldG === targetG && oldB === targetB) continue
+        if (pixels[byteOff + 3] === 0) continue
+
+        const prevId = index.idData[flatIdx]
+        if (prevId !== 0) affectedIds.add(prevId)
+
+        deltas.push({ offset: flatIdx, oldR, oldG, oldB, newR: targetR, newG: targetG, newB: targetB })
+
+        pixels[byteOff]     = targetR
+        pixels[byteOff + 1] = targetG
+        pixels[byteOff + 2] = targetB
+        index.idData[flatIdx] = targetId
+      }
+    }
+
+    if (deltas.length === 0) return { pixels: [], affectedIds }
+
+    // Upload dirty rect to ID texture.
+    const rw = maxX - minX + 1
+    const rh = maxY - minY + 1
+    const subBuf = new Uint8Array(rw * rh * 4)
+    for (let row = 0; row < rh; row++) {
+      for (let col = 0; col < rw; col++) {
+        const id = index.idData[(minY + row) * w + (minX + col)]
+        const o = (row * rw + col) * 4
+        subBuf[o]     = id & 0xff
+        subBuf[o + 1] = (id >> 8) & 0xff
+        subBuf[o + 2] = 0
+        subBuf[o + 3] = 255
+      }
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.idTexture)
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, minX, minY, rw, rh, gl.RGBA, gl.UNSIGNED_BYTE, subBuf)
+
+    return { pixels: deltas, affectedIds }
+  }
+
+  // Revert a set of pixel deltas (stroke undo). Caller must call render() afterwards.
+  revertBrushStroke(pixels: BmpPixelStrokeDelta[]): void {
+    const { gl } = this
+    const index = this.provinceIndex
+    const pixelData = this.pixelData
+    if (!index || !pixelData || !this.idTexture || pixels.length === 0) return
+
+    const w = this.pixelDataWidth
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+
+    for (const d of pixels) {
+      const py = Math.floor(d.offset / w)
+      const px = d.offset % w
+      const byteOff = d.offset * 4
+      pixelData[byteOff]     = d.oldR
+      pixelData[byteOff + 1] = d.oldG
+      pixelData[byteOff + 2] = d.oldB
+      const packed = (d.oldR << 16) | (d.oldG << 8) | d.oldB
+      index.idData[d.offset] = index.colorToId.get(packed) ?? 0
+      if (px < minX) minX = px
+      if (px > maxX) maxX = px
+      if (py < minY) minY = py
+      if (py > maxY) maxY = py
+    }
+
+    const rw = maxX - minX + 1
+    const rh = maxY - minY + 1
+    const subBuf = new Uint8Array(rw * rh * 4)
+    for (let row = 0; row < rh; row++) {
+      for (let col = 0; col < rw; col++) {
+        const id = index.idData[(minY + row) * w + (minX + col)]
+        const o = (row * rw + col) * 4
+        subBuf[o]     = id & 0xff
+        subBuf[o + 1] = (id >> 8) & 0xff
+        subBuf[o + 2] = 0
+        subBuf[o + 3] = 255
+      }
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.idTexture)
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, minX, minY, rw, rh, gl.RGBA, gl.UNSIGNED_BYTE, subBuf)
+  }
+
+  // Return a copy of the current pixel data (for BMP export). Returns null if no image loaded.
+  getPixelDataSnapshot(): { data: Uint8ClampedArray; width: number; height: number } | null {
+    if (!this.pixelData) return null
+    return { data: new Uint8ClampedArray(this.pixelData), width: this.pixelDataWidth, height: this._imageSize.height }
   }
 
   dispose(): void {

@@ -1,4 +1,5 @@
-import { makeStyles, makeStaticStyles, mergeClasses, tokens, Button, Spinner, Text, Tooltip, Skeleton, SkeletonItem, ProgressBar, shorthands } from '@fluentui/react-components'
+import { useCallback, useEffect, useRef } from 'react'
+import { makeStyles, makeStaticStyles, mergeClasses, tokens, Button, Slider, Spinner, Text, Tooltip, Skeleton, SkeletonItem, ProgressBar, shorthands } from '@fluentui/react-components'
 import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, PaintBucketRegular, PaintBucketFilled, DismissRegular } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
 import { useMapCanvas } from '../hooks/useMapCanvas'
@@ -7,6 +8,8 @@ import { useMapViewportState } from '../hooks/useMapViewportState'
 import { DisplayModeControl } from './DisplayModeControl'
 import { useNotificationStore } from '../../infra/store/notificationStore'
 import { notificationService } from '../../infra/services/notificationService'
+import { useMapDataStore } from '../../infra/store/mapDataStore'
+import type { BmpPixelStrokeDelta } from '../../../../shared/provinceEditing'
 
 const ZOOM_STEP = 1.25
 const NOTIFICATION_FADE_OUT_MS = 250
@@ -174,7 +177,24 @@ const useStyles = makeStyles({
   hoverTooltipValue: {
     display: 'block',
     fontFamily: 'monospace'
-  }
+  },
+  brushCursorCanvas: {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+    zIndex: 5,
+  },
+  brushSizeRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalXS,
+    minWidth: '140px',
+  },
+  brushSizeLabel: {
+    minWidth: '24px',
+    textAlign: 'right',
+    fontVariantNumeric: 'tabular-nums',
+  },
 })
 
 function NotificationTray(): JSX.Element | null {
@@ -237,16 +257,54 @@ export function MapCanvas(): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
   const { canvasOverlays } = useOverlayAssets()
+  const editorMode = useMapDataStore((s) => s.editorMode)
+  const projectId = useMapDataStore((s) => s.projectId)
+  const addBmpStroke = useMapDataStore((s) => s.addBmpStroke)
+  const setBrushRadius = useMapDataStore((s) => s.setBrushRadius)
+  const pendingRevertPixels = useMapDataStore((s) => s.pendingRevertPixels)
+  const consumePendingRevert = useMapDataStore((s) => s.consumePendingRevert)
   const {
     src, colorMap, highlightColors, validationWarningColors, validationErrorColors,
     activeTool, eyedropEnabled, bucketEnabled, sampledValueColor, sampledValueLabel,
-    displayMode, modeValuesByMode,
+    displayMode, modeValuesByMode, brushPaintConfig, brushRadius, paintProvinceColor,
     onActiveToolChange, onMapClick,
     hoverTooltipPosition, hoverTooltip, onHoverColorChange, onDisplayModeChange,
   } = useMapViewportState()
-  const { containerRef, canvasRef, dragging, displayScale, imageLoaded, isCanvasLoading, onMouseDown, onMouseMove, stopDrag, zoomBy, fit } = useMapCanvas({
-    src, overlays: canvasOverlays, highlightColors, validationWarningColors, validationErrorColors, colorMap, activeTool, onMapClick, onHoverColorChange
+
+  const getPixelSnapshotRef = useRef<(() => { data: Uint8ClampedArray; width: number; height: number } | null) | null>(null)
+
+  const onBrushStrokeComplete = useCallback((pixels: BmpPixelStrokeDelta[], _affectedIds: Set<number>) => {
+    if (pixels.length === 0) return
+    addBmpStroke({
+      id: crypto.randomUUID(),
+      targetProvinceColor: paintProvinceColor ?? 0,
+      pixelCount: pixels.length,
+      pixels,
+    })
+    if (!projectId) return
+    const snapshot = getPixelSnapshotRef.current?.()
+    if (!snapshot) return
+    void window.api.map.saveBmp(projectId, Array.from(snapshot.data), snapshot.width, snapshot.height)
+  }, [addBmpStroke, paintProvinceColor, projectId])
+
+  const {
+    containerRef, canvasRef, brushCursorCanvasRef, dragging, displayScale, imageLoaded, isCanvasLoading,
+    cursorPosition, onMouseDown, onMouseMove, stopDrag, zoomBy, fit, getPixelSnapshot,
+    revertBrushStroke,
+  } = useMapCanvas({
+    src, overlays: canvasOverlays, highlightColors, validationWarningColors, validationErrorColors,
+    colorMap, activeTool, brushPaintConfig, onMapClick, onHoverColorChange, onBrushStrokeComplete,
   })
+
+  getPixelSnapshotRef.current = getPixelSnapshot
+
+  useEffect(() => {
+    if (!pendingRevertPixels || pendingRevertPixels.length === 0) return
+    revertBrushStroke(pendingRevertPixels)
+    consumePendingRevert()
+  }, [pendingRevertPixels, revertBrushStroke, consumePendingRevert])
+
+  const isPaintMode = editorMode === 'paint'
 
   const rootClass = mergeClasses(
     styles.root,
@@ -280,6 +338,11 @@ export function MapCanvas(): JSX.Element {
           </div>
         </div>
       )}
+      <canvas
+        ref={brushCursorCanvasRef}
+        className={styles.brushCursorCanvas}
+        style={{ display: isPaintMode && activeTool === 'brush' ? 'block' : 'none' }}
+      />
       {hoverTooltipPosition && hoverTooltip && !dragging && (
         <div
           className={styles.hoverTooltip}
@@ -298,32 +361,51 @@ export function MapCanvas(): JSX.Element {
       </div>
       <NotificationTray />
       <div className={styles.controls} onMouseDown={(e) => e.stopPropagation()}>
+        {isPaintMode && (
+          <div className={styles.widget}>
+            <div className={styles.brushSizeRow}>
+              <Text size={200}>{t('paintPanel.brushSize')}</Text>
+              <Slider
+                min={1} max={30} step={1}
+                value={brushRadius}
+                onChange={(_, d) => setBrushRadius(d.value)}
+                style={{ flex: 1, minWidth: '80px' }}
+                size="small"
+              />
+              <Text size={200} className={styles.brushSizeLabel}>{brushRadius}</Text>
+            </div>
+          </div>
+        )}
         <div className={styles.widget}>
           <Tooltip content={t('mapCanvas.eyedrop')} relationship="label">
             <Button
               appearance={activeTool === 'eyedrop' ? 'primary' : 'subtle'}
               size="small"
               icon={activeTool === 'eyedrop' ? <EyedropperFilled /> : <EyedropperRegular />}
-              onClick={() => onActiveToolChange?.(activeTool === 'eyedrop' ? 'select' : 'eyedrop')}
-              disabled={!eyedropEnabled}
+              onClick={() => onActiveToolChange?.(activeTool === 'eyedrop' ? (isPaintMode ? 'brush' : 'select') : 'eyedrop')}
+              disabled={isPaintMode ? !imageLoaded : !eyedropEnabled}
             />
           </Tooltip>
-          <div
-            className={styles.colorSwatch}
-            style={{ backgroundColor: sampledValueColor ?? tokens.colorNeutralBackground4 }}
-          />
-          <Text size={200} className={styles.colorLabel}>
-            {sampledValueLabel ?? t('mapValue.none')}
-          </Text>
-          <Tooltip content={t('mapCanvas.bucket')} relationship="label">
-            <Button
-              appearance={activeTool === 'bucket' ? 'primary' : 'subtle'}
-              size="small"
-              icon={activeTool === 'bucket' ? <PaintBucketFilled /> : <PaintBucketRegular />}
-              onClick={() => onActiveToolChange?.(activeTool === 'bucket' ? 'select' : 'bucket')}
-              disabled={!bucketEnabled}
-            />
-          </Tooltip>
+          {!isPaintMode && (
+            <>
+              <div
+                className={styles.colorSwatch}
+                style={{ backgroundColor: sampledValueColor ?? tokens.colorNeutralBackground4 }}
+              />
+              <Text size={200} className={styles.colorLabel}>
+                {sampledValueLabel ?? t('mapValue.none')}
+              </Text>
+              <Tooltip content={t('mapCanvas.bucket')} relationship="label">
+                <Button
+                  appearance={activeTool === 'bucket' ? 'primary' : 'subtle'}
+                  size="small"
+                  icon={activeTool === 'bucket' ? <PaintBucketFilled /> : <PaintBucketRegular />}
+                  onClick={() => onActiveToolChange?.(activeTool === 'bucket' ? 'select' : 'bucket')}
+                  disabled={!bucketEnabled}
+                />
+              </Tooltip>
+            </>
+          )}
         </div>
         <div className={styles.widget}>
           <Button appearance="subtle" size="small" icon={<ZoomOutRegular />} onClick={() => zoomBy(1 / ZOOM_STEP)} />

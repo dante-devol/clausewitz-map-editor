@@ -4,6 +4,7 @@ import { channels } from '../../../shared/contract/events'
 import type { Continent, Resource, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
 import type { LoadedProject, ProjectLoader } from './ProjectLoader'
 import { WorkerParsePool } from '../../workers/WorkerParsePool'
+import { writeBmp } from '../../parsers/BmpWriter'
 
 interface WatchEntry {
   watcher: FSWatcher
@@ -12,6 +13,7 @@ interface WatchEntry {
 
 export class ProjectSession {
   private readonly watchers = new Map<string, WatchEntry>()
+  private suppressImageChanges = 0
   private project: LoadedProject | null = null
   private pool: WorkerParsePool | null = null
   private continents: Continent[] = []
@@ -62,7 +64,6 @@ export class ProjectSession {
   loadStates(): Promise<void> {
     if (!this.project) throw new Error('Project not open')
     if (!this.pool) throw new Error('Project not open')
-    this.watchStateFiles()
     if (this.statesLoadPromise) return this.statesLoadPromise
     if (this.statesLoaded) return Promise.resolve()
 
@@ -78,12 +79,19 @@ export class ProjectSession {
     ).then(() => {
       this.statesLoaded = true
       this.statesLoadPromise = null
+      this.watchStateFiles()
     }).catch((error) => {
       this.statesLoadPromise = null
       throw error
     })
 
     return this.statesLoadPromise
+  }
+
+  saveBmp(rgbaData: number[], width: number, height: number): void {
+    const project = this.requireProject()
+    this.suppressImageChanges++
+    writeBmp(project.resolvedPaths.provinces, rgbaData, width, height)
   }
 
   saveStates(states: StateDefinition[]): void {
@@ -119,7 +127,6 @@ export class ProjectSession {
   loadStrategicRegions(): Promise<void> {
     if (!this.project) throw new Error('Project not open')
     if (!this.pool) throw new Error('Project not open')
-    this.watchStrategicRegionFiles()
     if (this.strategicRegionsLoadPromise) return this.strategicRegionsLoadPromise
     if (this.strategicRegionsLoaded) return Promise.resolve()
 
@@ -135,6 +142,7 @@ export class ProjectSession {
     ).then(() => {
       this.strategicRegionsLoaded = true
       this.strategicRegionsLoadPromise = null
+      this.watchStrategicRegionFiles()
     }).catch((error) => {
       this.strategicRegionsLoadPromise = null
       throw error
@@ -168,6 +176,7 @@ export class ProjectSession {
 
     this.watch(this.project.resolvedPaths.provinces, () => {
       if (!this.project) return
+      if (this.suppressImageChanges > 0) { this.suppressImageChanges--; return }
       this.emit('image', this.loader.loadImageBase64(this.project))
     })
   }

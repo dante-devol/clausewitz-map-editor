@@ -10,6 +10,7 @@ import { ModeTabs } from '../components/ModeTabs'
 import { ProvinceDetailPanel } from '../components/ProvinceDetailPanel'
 import { StateDetailPanel } from '../components/statePanel/StateDetailPanel'
 import { StrategicRegionDetailPanel } from '../components/strategicRegionPanel/StrategicRegionDetailPanel'
+import { PaintPanel } from '../components/paintPanel/PaintPanel'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
 
 const useStyles = makeStyles({
@@ -78,11 +79,13 @@ export function MapView() {
   const selectedProvinceIds = useMapDataStore((s) => s.selectedProvinceIds)
   const selectedBmpGuids = useMapDataStore((s) => s.selectedBmpGuids)
 
-  const showDrawer = editorMode === 'states'
-    ? selectedStateId !== null
-    : editorMode === 'strategicRegions'
-      ? selectedStrategicRegionId !== null
-      : selectedProvinceIds.length > 0 || selectedBmpGuids.length > 0
+  const showDrawer = editorMode === 'paint'
+    ? false
+    : editorMode === 'states'
+      ? selectedStateId !== null
+      : editorMode === 'strategicRegions'
+        ? selectedStrategicRegionId !== null
+        : selectedProvinceIds.length > 0 || selectedBmpGuids.length > 0
 
   const [detailCollapsed, setDetailCollapsed] = useState(false)
 
@@ -98,7 +101,9 @@ export function MapView() {
           ? <ProvincePanel />
           : editorMode === 'states'
             ? <StatePanel />
-            : <StrategicRegionPanel />}
+            : editorMode === 'strategicRegions'
+              ? <StrategicRegionPanel />
+              : <PaintPanel />}
       </div>
       <div className={styles.viewport}>
         {showDrawer && !detailCollapsed && (

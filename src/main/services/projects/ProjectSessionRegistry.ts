@@ -52,6 +52,12 @@ export class ProjectSessionRegistry {
     return session.loadStrategicRegions()
   }
 
+  saveBmpForWindow(window: BrowserWindow, projectId: string, rgbaData: number[], width: number, height: number) {
+    const session = this.forWindow(window)
+    if (session.projectId !== projectId) throw new Error('Project session mismatch')
+    return session.saveBmp(rgbaData, width, height)
+  }
+
   saveStatesForWindow(window: BrowserWindow, projectId: string, states: StateDefinition[]) {
     const session = this.forWindow(window)
     if (session.projectId !== projectId) {

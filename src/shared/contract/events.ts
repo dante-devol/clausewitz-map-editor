@@ -33,7 +33,8 @@ export const channels = {
     saveStrategicRegions: 'map:saveStrategicRegions',
     loadWeatherEntries: 'map:loadWeatherEntries',
     loadResources: 'map:loadResources',
-    changed: 'map:changed'
+    changed: 'map:changed',
+    saveBmp: 'map:saveBmp'
   },
   settings: {
     get: 'settings:get',

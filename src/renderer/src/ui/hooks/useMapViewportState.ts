@@ -43,7 +43,7 @@ export function useMapViewportState() {
   const { highlightColors, validationHighlightColors } = useProvinceHighlights(effectiveCatalog)
 
   // — Tool state —
-  const [activeTool, setActiveTool] = useState<'select' | 'eyedrop' | 'bucket'>('select')
+  const [activeTool, setActiveTool] = useState<'select' | 'eyedrop' | 'bucket' | 'brush'>('select')
   const [sampledValue, setSampledValue] = useState<DisplayModeSample | null>(null)
   const previousDisplayModeRef = useRef<typeof displayMode | null>(null)
 
@@ -67,6 +67,11 @@ export function useMapViewportState() {
   const stateProvinceToStateId = useMapDataStore((s) => s.stateProvinceToStateId)
   const setSelectedStrategicRegionId = useMapDataStore((s) => s.setSelectedStrategicRegionId)
   const strategicRegionProvinceToRegionId = useMapDataStore((s) => s.strategicRegionProvinceToRegionId)
+
+  // — Paint tool state —
+  const paintProvinceColor = useMapDataStore((s) => s.paintProvinceColor)
+  const setPaintProvinceColor = useMapDataStore((s) => s.setPaintProvinceColor)
+  const brushRadius = useMapDataStore((s) => s.brushRadius)
 
   // — Hover state —
   const [hoveredProvince, setHoveredProvince] = useState<HoveredProvince | null>(null)
@@ -109,14 +114,22 @@ export function useMapViewportState() {
   }, [dispatchDisplayMode])
 
   const onActiveToolChange = useCallback((tool: typeof activeTool) => {
-    if (tool === 'eyedrop' && !eyedropEnabled) return
+    if (tool === 'eyedrop' && !eyedropEnabled && editorMode !== 'paint') return
     if (tool === 'bucket' && !bucketEnabled) return
     setActiveTool(tool)
-  }, [eyedropEnabled, bucketEnabled])
+  }, [eyedropEnabled, bucketEnabled, editorMode])
 
   const onMapClick = useCallback((r: number, g: number, b: number, additive: boolean) => {
     const draft = query.getDraftProvinceByColor(packColor(r, g, b))
     if (!draft) return
+
+    if (editorMode === 'paint') {
+      if (activeTool === 'eyedrop') {
+        setPaintProvinceColor(packColor(r, g, b))
+        setActiveTool('brush')
+      }
+      return
+    }
 
     if (editorMode === 'states') {
       if (draft.provinceId !== null) {
@@ -186,6 +199,7 @@ export function useMapViewportState() {
     setSelectedStateId,
     setSelectedStrategicRegionId,
     setSelection,
+    setPaintProvinceColor,
     stateProvinceToStateId,
     strategicRegionProvinceToRegionId,
     toggleBmpGuid,
@@ -200,6 +214,15 @@ export function useMapViewportState() {
     },
     [query]
   )
+
+  const brushPaintConfig = paintProvinceColor !== null
+    ? {
+        radius: brushRadius,
+        r: (paintProvinceColor >> 16) & 0xff,
+        g: (paintProvinceColor >> 8) & 0xff,
+        b: paintProvinceColor & 0xff,
+      }
+    : null
 
   return {
     src: provincesImageB64 ? `data:image/bmp;base64,${provincesImageB64}` : null,
@@ -220,6 +243,9 @@ export function useMapViewportState() {
     hoverTooltip,
     onHoverColorChange,
     onDisplayModeChange,
+    paintProvinceColor,
+    brushRadius,
+    brushPaintConfig,
   }
 }
 

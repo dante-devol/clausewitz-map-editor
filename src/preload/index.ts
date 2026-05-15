@@ -45,7 +45,8 @@ const api: ApiContract = {
       const listener = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on(channels.map.changed, listener)
       return () => ipcRenderer.off(channels.map.changed, listener)
-    }
+    },
+    saveBmp: (projectId, rgbaData, width, height) => ipcRenderer.invoke(channels.map.saveBmp, projectId, rgbaData, width, height)
   },
   settings: {
     get: () => ipcRenderer.invoke(channels.settings.get),

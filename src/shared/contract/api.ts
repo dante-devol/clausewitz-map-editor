@@ -135,6 +135,7 @@ export interface ApiContract {
     loadWeatherEntries: (projectId: string) => Promise<string[]>
     loadResources: (projectId: string) => Promise<Resource[]>
     onChanged: (callback: (event: MapChangedEvent) => void) => () => void
+    saveBmp: (projectId: string, rgbaData: number[], width: number, height: number) => Promise<void>
   }
   settings: {
     get: () => Promise<AppConfig>
