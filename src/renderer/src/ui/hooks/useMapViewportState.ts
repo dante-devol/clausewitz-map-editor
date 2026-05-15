@@ -42,26 +42,40 @@ export function useMapViewportState() {
   // — Canvas highlight colors —
   const { highlightColors, validationHighlightColors } = useProvinceHighlights(effectiveCatalog)
 
-  // — Tool state —
-  const [activeTool, setActiveTool] = useState<'select' | 'eyedrop' | 'bucket' | 'brush' | 'select-color'>('select')
-  const [sampledValue, setSampledValue] = useState<DisplayModeSample | null>(null)
-  const previousDisplayModeRef = useRef<typeof displayMode | null>(null)
+  // — Editor mode —
   const editorMode = useMapDataStore((s) => s.editorMode)
   const previousEditorModeRef = useRef(editorMode)
 
-  // Reset tool when editor mode changes (e.g. switching from paint to provinces)
+  // — Paint tool state (Zustand, shared with PaintPanel) —
+  const paintActiveTool = useMapDataStore((s) => s.paintActiveTool)
+  const setPaintActiveTool = useMapDataStore((s) => s.setPaintActiveTool)
+  const addPaintSelectionColor = useMapDataStore((s) => s.addPaintSelectionColor)
+  const removePaintSelectionColor = useMapDataStore((s) => s.removePaintSelectionColor)
+  const clearPaintSelection = useMapDataStore((s) => s.clearPaintSelection)
+  const paintSelection = useMapDataStore((s) => s.paintSelection)
+
+  // — Non-paint tool state (local) —
+  const [nonPaintTool, setNonPaintTool] = useState<'select' | 'eyedrop' | 'bucket'>('select')
+  const [sampledValue, setSampledValue] = useState<DisplayModeSample | null>(null)
+  const previousDisplayModeRef = useRef<typeof displayMode | null>(null)
+
+  // Reset tools when editor mode changes (e.g. switching from paint to provinces)
   useEffect(() => {
     if (previousEditorModeRef.current === editorMode) return
     previousEditorModeRef.current = editorMode
-    setActiveTool(editorMode === 'paint' ? 'brush' : 'select')
-  }, [editorMode])
+    if (editorMode === 'paint') {
+      setPaintActiveTool('brush')
+    } else {
+      setNonPaintTool('select')
+    }
+  }, [editorMode, setPaintActiveTool])
 
-  // Reset tool when display mode changes externally (e.g. overlay panel)
+  // Reset non-paint tool when display mode changes externally (e.g. overlay panel)
   useEffect(() => {
     if (previousDisplayModeRef.current === displayMode) return
     previousDisplayModeRef.current = displayMode
     setSampledValue(null)
-    setActiveTool('select')
+    setNonPaintTool('select')
   }, [displayMode])
 
   // — Selection actions —
@@ -80,14 +94,15 @@ export function useMapViewportState() {
   const paintProvinceColor = useMapDataStore((s) => s.paintProvinceColor)
   const setPaintProvinceColor = useMapDataStore((s) => s.setPaintProvinceColor)
   const brushRadius = useMapDataStore((s) => s.brushRadius)
-  const paintSelection = useMapDataStore((s) => s.paintSelection)
-  const togglePaintSelectionColor = useMapDataStore((s) => s.togglePaintSelectionColor)
-  const clearPaintSelection = useMapDataStore((s) => s.clearPaintSelection)
+  const paintSelectionStore = useMapDataStore((s) => s.paintSelection)
 
   // — Hover state —
   const [hoveredProvince, setHoveredProvince] = useState<HoveredProvince | null>(null)
 
   const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
+
+  // Unified active tool for canvas: paint mode uses paintActiveTool, otherwise nonPaintTool
+  const activeTool = editorMode === 'paint' ? paintActiveTool : nonPaintTool
 
   // — Derived tool props —
   const eyedropEnabled = isEditableDisplayMode(displayMode)
@@ -120,26 +135,34 @@ export function useMapViewportState() {
   // — Event handlers —
   const onDisplayModeChange = useCallback((mode: typeof displayMode) => {
     setSampledValue(null)
-    setActiveTool('select')
+    setNonPaintTool('select')
     dispatchDisplayMode(mode)
   }, [dispatchDisplayMode])
 
-  const onActiveToolChange = useCallback((tool: typeof activeTool) => {
-    if (tool === 'eyedrop' && !eyedropEnabled && editorMode !== 'paint') return
+  const onActiveToolChange = useCallback((tool: 'select' | 'eyedrop' | 'bucket') => {
+    if (tool === 'eyedrop' && !eyedropEnabled) return
     if (tool === 'bucket' && !bucketEnabled) return
-    setActiveTool(tool)
-  }, [eyedropEnabled, bucketEnabled, editorMode])
+    setNonPaintTool(tool)
+  }, [eyedropEnabled, bucketEnabled])
 
-  const onMapClick = useCallback((r: number, g: number, b: number, additive: boolean) => {
+  const onMapClick = useCallback((r: number, g: number, b: number, modifiers: { shift: boolean; ctrl: boolean }) => {
     const draft = query.getDraftProvinceByColor(packColor(r, g, b))
     if (!draft) return
 
     if (editorMode === 'paint') {
-      if (activeTool === 'eyedrop') {
+      if (paintActiveTool === 'eyedrop') {
         setPaintProvinceColor(packColor(r, g, b))
-        setActiveTool('brush')
-      } else if (activeTool === 'select-color') {
-        togglePaintSelectionColor(packColor(r, g, b))
+        setPaintActiveTool('brush')
+      } else if (paintActiveTool === 'select-color') {
+        const packed = packColor(r, g, b)
+        if (modifiers.ctrl && modifiers.shift) {
+          removePaintSelectionColor(packed)
+        } else if (modifiers.shift) {
+          addPaintSelectionColor(packed)
+        } else {
+          clearPaintSelection()
+          addPaintSelectionColor(packed)
+        }
       }
       return
     }
@@ -160,7 +183,7 @@ export function useMapViewportState() {
       return
     }
 
-    if (activeTool === 'eyedrop') {
+    if (nonPaintTool === 'eyedrop') {
       if (!isEditableDisplayMode(displayMode)) return
       const sample = sampleDisplayModeValue(displayMode, draft)
       if (!sample) return
@@ -170,11 +193,11 @@ export function useMapViewportState() {
         return
       }
       setSampledValue(sample)
-      setActiveTool('bucket')
+      setNonPaintTool('bucket')
       return
     }
 
-    if (activeTool === 'bucket') {
+    if (nonPaintTool === 'bucket') {
       if (!sampledValue || sampledValue.mode !== displayMode || !isEditableDisplayMode(displayMode)) return
       if (draft.provinceId !== null) {
         if (sampledValue.mode === 'type') editProvince(draft.provinceId, { type: sampledValue.value })
@@ -190,30 +213,35 @@ export function useMapViewportState() {
       return
     }
 
+    // select tool
     if (draft.provinceId !== null) {
-      if (additive) extendSelection([draft.provinceId])
+      if (modifiers.shift) extendSelection([draft.provinceId])
       else setSelection([draft.provinceId])
       return
     }
 
     if (draft.bmpGuid === null) return
-    if (additive) toggleBmpGuid(draft.bmpGuid)
+    if (modifiers.shift) toggleBmpGuid(draft.bmpGuid)
     else setSelectedBmpGuids([draft.bmpGuid])
   }, [
-    activeTool,
+    addPaintSelectionColor,
+    clearPaintSelection,
     displayMode,
     editBmpOnlyProvince,
     editProvince,
     editorMode,
     extendSelection,
+    nonPaintTool,
+    paintActiveTool,
     query,
+    removePaintSelectionColor,
     sampledValue,
     setSelectedBmpGuids,
     setSelectedStateId,
     setSelectedStrategicRegionId,
-    setSelection,
+    setPaintActiveTool,
     setPaintProvinceColor,
-    togglePaintSelectionColor,
+    setSelection,
     stateProvinceToStateId,
     strategicRegionProvinceToRegionId,
     toggleBmpGuid,
@@ -235,12 +263,12 @@ export function useMapViewportState() {
         r: (paintProvinceColor >> 16) & 0xff,
         g: (paintProvinceColor >> 8) & 0xff,
         b: paintProvinceColor & 0xff,
-        selectionColors: paintSelection.size > 0 ? paintSelection : null,
+        selectionColors: paintSelectionStore.size > 0 ? paintSelectionStore : null,
       }
     : null
 
   const highlightColorsForCanvas = editorMode === 'paint'
-    ? Array.from(paintSelection)
+    ? Array.from(paintSelectionStore)
     : highlightColors
 
   return {
@@ -266,7 +294,6 @@ export function useMapViewportState() {
     brushRadius,
     brushPaintConfig,
     paintSelection,
-    clearPaintSelection,
   }
 }
 

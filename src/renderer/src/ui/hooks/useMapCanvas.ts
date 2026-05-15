@@ -45,9 +45,9 @@ export interface UseMapCanvasProps {
   validationWarningColors: number[]
   validationErrorColors: number[]
   colorMap?: Map<number, number> | null
-  activeTool: 'select' | 'eyedrop' | 'bucket' | 'brush'
+  activeTool: 'select' | 'eyedrop' | 'bucket' | 'brush' | 'select-color'
   brushPaintConfig?: BrushPaintConfig | null
-  onMapClick?: (r: number, g: number, b: number, additive: boolean) => void
+  onMapClick?: (r: number, g: number, b: number, modifiers: { shift: boolean; ctrl: boolean }) => void
   onHoverColorChange?: (color: HoveredColor | null) => void
   onBrushStrokeComplete?: (pixels: BmpPixelStrokeDelta[], affectedIds: Set<number>) => void
 }
@@ -470,7 +470,7 @@ export function useMapCanvas({
       }
       const { x: tx, y: ty, scale } = transformRef.current
       const color = rendererRef.current?.readOriginalPixel(cx, cy, tx, ty, scale)
-      if (color) onMapClick?.(color.r, color.g, color.b, activeTool === 'select' && e.shiftKey)
+      if (color) onMapClick?.(color.r, color.g, color.b, { shift: e.shiftKey, ctrl: e.ctrlKey })
       if (activeTool !== 'select') return
     }
     const t = transformRef.current

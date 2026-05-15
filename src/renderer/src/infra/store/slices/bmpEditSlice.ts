@@ -1,19 +1,24 @@
 import { type StateCreator } from 'zustand'
 import type { BmpPixelStroke, BmpPixelStrokeDelta } from '../../../../../shared/provinceEditing'
 
+export type PaintActiveTool = 'eyedrop' | 'brush' | 'select-color'
+
 export interface BmpEditSlice {
   pendingBmpStrokes: BmpPixelStroke[]
   pendingRevertPixels: BmpPixelStrokeDelta[] | null
   paintProvinceColor: number | null
   brushRadius: number
   paintSelection: Set<number>
+  paintActiveTool: PaintActiveTool
   addBmpStroke: (stroke: BmpPixelStroke) => void
   revertBmpStroke: (strokeId: string) => void
   consumePendingRevert: () => void
   clearBmpStrokes: () => void
   setPaintProvinceColor: (color: number | null) => void
   setBrushRadius: (radius: number) => void
-  togglePaintSelectionColor: (packedColor: number) => void
+  setPaintActiveTool: (tool: PaintActiveTool) => void
+  addPaintSelectionColor: (packedColor: number) => void
+  removePaintSelectionColor: (packedColor: number) => void
   clearPaintSelection: () => void
 }
 
@@ -23,6 +28,7 @@ export const BMP_EDIT_EMPTY = {
   paintProvinceColor: null as number | null,
   brushRadius: 5,
   paintSelection: new Set<number>(),
+  paintActiveTool: 'brush' as PaintActiveTool,
 }
 
 export const createBmpEditSlice: StateCreator<BmpEditSlice, [], [], BmpEditSlice> = (set) => ({
@@ -48,10 +54,17 @@ export const createBmpEditSlice: StateCreator<BmpEditSlice, [], [], BmpEditSlice
 
   setBrushRadius: (radius) => set({ brushRadius: Math.max(1, Math.min(30, radius)) }),
 
-  togglePaintSelectionColor: (packedColor) => set((state) => {
+  setPaintActiveTool: (tool) => set({ paintActiveTool: tool }),
+
+  addPaintSelectionColor: (packedColor) => set((state) => {
     const next = new Set(state.paintSelection)
-    if (next.has(packedColor)) next.delete(packedColor)
-    else next.add(packedColor)
+    next.add(packedColor)
+    return { paintSelection: next }
+  }),
+
+  removePaintSelectionColor: (packedColor) => set((state) => {
+    const next = new Set(state.paintSelection)
+    next.delete(packedColor)
     return { paintSelection: next }
   }),
 

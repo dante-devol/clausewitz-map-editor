@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { makeStyles, makeStaticStyles, mergeClasses, tokens, Button, Slider, Spinner, Text, Tooltip, Skeleton, SkeletonItem, ProgressBar, shorthands } from '@fluentui/react-components'
-import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, PaintBucketRegular, PaintBucketFilled, DismissRegular, CheckboxCheckedRegular, CheckboxCheckedFilled } from '@fluentui/react-icons'
+import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, PaintBucketRegular, PaintBucketFilled, DismissRegular } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
 import { useMapCanvas } from '../hooks/useMapCanvas'
 import { useOverlayAssets } from '../hooks/useOverlayAssets'
@@ -263,13 +263,13 @@ export function MapCanvas(): JSX.Element {
   const setBrushRadius = useMapDataStore((s) => s.setBrushRadius)
   const pendingRevertPixels = useMapDataStore((s) => s.pendingRevertPixels)
   const consumePendingRevert = useMapDataStore((s) => s.consumePendingRevert)
+  const paintProvinceColor = useMapDataStore((s) => s.paintProvinceColor)
   const {
     src, colorMap, highlightColors, validationWarningColors, validationErrorColors,
     activeTool, eyedropEnabled, bucketEnabled, sampledValueColor, sampledValueLabel,
-    displayMode, modeValuesByMode, brushPaintConfig, brushRadius, paintProvinceColor,
+    displayMode, modeValuesByMode, brushPaintConfig, brushRadius,
     onActiveToolChange, onMapClick,
     hoverTooltipPosition, hoverTooltip, onHoverColorChange, onDisplayModeChange,
-    paintSelection, clearPaintSelection,
   } = useMapViewportState()
 
   const getPixelSnapshotRef = useRef<(() => { data: Uint8ClampedArray; width: number; height: number } | null) | null>(null)
@@ -309,7 +309,9 @@ export function MapCanvas(): JSX.Element {
 
   const rootClass = mergeClasses(
     styles.root,
-    activeTool !== 'select' && activeTool !== 'brush' ? styles.eyedropping : (dragging ? styles.dragging : undefined)
+    activeTool !== 'select' && activeTool !== 'brush' && activeTool !== 'select-color'
+      ? styles.eyedropping
+      : (dragging ? styles.dragging : undefined)
   )
 
   return (
@@ -377,62 +379,35 @@ export function MapCanvas(): JSX.Element {
             </div>
           </div>
         )}
-        <div className={styles.widget}>
-          <Tooltip content={t('mapCanvas.eyedrop')} relationship="label">
-            <Button
-              appearance={activeTool === 'eyedrop' ? 'primary' : 'subtle'}
-              size="small"
-              icon={activeTool === 'eyedrop' ? <EyedropperFilled /> : <EyedropperRegular />}
-              onClick={() => onActiveToolChange?.(activeTool === 'eyedrop' ? (isPaintMode ? 'brush' : 'select') : 'eyedrop')}
-              disabled={isPaintMode ? !imageLoaded : !eyedropEnabled}
-            />
-          </Tooltip>
-          {isPaintMode && (
-            <>
-              <Tooltip content={t('paintPanel.selectColor')} relationship="label">
-                <Button
-                  appearance={activeTool === 'select-color' ? 'primary' : 'subtle'}
-                  size="small"
-                  icon={activeTool === 'select-color' ? <CheckboxCheckedFilled /> : <CheckboxCheckedRegular />}
-                  onClick={() => onActiveToolChange?.(activeTool === 'select-color' ? 'brush' : 'select-color')}
-                  disabled={!imageLoaded}
-                />
-              </Tooltip>
-              {paintSelection.size > 0 && (
-                <Tooltip content={t('paintPanel.clearSelection')} relationship="label">
-                  <Button
-                    appearance="subtle"
-                    size="small"
-                    icon={<DismissRegular />}
-                    onClick={clearPaintSelection}
-                  >
-                    <Text size={200}>{paintSelection.size}</Text>
-                  </Button>
-                </Tooltip>
-              )}
-            </>
-          )}
-          {!isPaintMode && (
-            <>
-              <div
-                className={styles.colorSwatch}
-                style={{ backgroundColor: sampledValueColor ?? tokens.colorNeutralBackground4 }}
+        {!isPaintMode && (
+          <div className={styles.widget}>
+            <Tooltip content={t('mapCanvas.eyedrop')} relationship="label">
+              <Button
+                appearance={activeTool === 'eyedrop' ? 'primary' : 'subtle'}
+                size="small"
+                icon={activeTool === 'eyedrop' ? <EyedropperFilled /> : <EyedropperRegular />}
+                onClick={() => onActiveToolChange?.(activeTool === 'eyedrop' ? 'select' : 'eyedrop')}
+                disabled={!eyedropEnabled}
               />
-              <Text size={200} className={styles.colorLabel}>
-                {sampledValueLabel ?? t('mapValue.none')}
-              </Text>
-              <Tooltip content={t('mapCanvas.bucket')} relationship="label">
-                <Button
-                  appearance={activeTool === 'bucket' ? 'primary' : 'subtle'}
-                  size="small"
-                  icon={activeTool === 'bucket' ? <PaintBucketFilled /> : <PaintBucketRegular />}
-                  onClick={() => onActiveToolChange?.(activeTool === 'bucket' ? 'select' : 'bucket')}
-                  disabled={!bucketEnabled}
-                />
-              </Tooltip>
-            </>
-          )}
-        </div>
+            </Tooltip>
+            <div
+              className={styles.colorSwatch}
+              style={{ backgroundColor: sampledValueColor ?? tokens.colorNeutralBackground4 }}
+            />
+            <Text size={200} className={styles.colorLabel}>
+              {sampledValueLabel ?? t('mapValue.none')}
+            </Text>
+            <Tooltip content={t('mapCanvas.bucket')} relationship="label">
+              <Button
+                appearance={activeTool === 'bucket' ? 'primary' : 'subtle'}
+                size="small"
+                icon={activeTool === 'bucket' ? <PaintBucketFilled /> : <PaintBucketRegular />}
+                onClick={() => onActiveToolChange?.(activeTool === 'bucket' ? 'select' : 'bucket')}
+                disabled={!bucketEnabled}
+              />
+            </Tooltip>
+          </div>
+        )}
         <div className={styles.widget}>
           <Button appearance="subtle" size="small" icon={<ZoomOutRegular />} onClick={() => zoomBy(1 / ZOOM_STEP)} />
           <Text size={200} className={styles.zoomLabel}>{Math.round(displayScale * 100)}%</Text>
