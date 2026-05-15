@@ -378,6 +378,8 @@ function StrategicRegionsTab() {
           <thead>
             <tr>
               <th className={styles.th}>{t('debug.column.id')}</th>
+              <th className={styles.th}>{t('debug.column.name')}</th>
+              <th className={styles.th}>{t('debug.column.weatherPeriods')}</th>
               <th className={styles.th}>{t('debug.column.provinceCount')}</th>
               <th className={styles.th}>{t('debug.column.provinces')}</th>
             </tr>
@@ -386,6 +388,8 @@ function StrategicRegionsTab() {
             {rows.map((region, i) => (
               <tr key={region.id} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
                 <td className={styles.td}>{region.id}</td>
+                <td className={styles.td}>{region.name || '—'}</td>
+                <td className={styles.td}>{formatNumber(region.weatherPeriods?.length ?? 0)}</td>
                 <td className={styles.td}>{formatNumber(region.provinceIds.length)}</td>
                 <td className={styles.td}>{formatProvincePreview(region.provinceIds)}</td>
               </tr>

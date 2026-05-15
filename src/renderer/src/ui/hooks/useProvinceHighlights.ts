@@ -72,6 +72,8 @@ export function useProvinceHighlights(
   const editorMode = useMapDataStore((s) => s.editorMode)
   const selectedStateId = useMapDataStore((s) => s.selectedStateId)
   const statesById = useMapDataStore((s) => s.statesById)
+  const selectedStrategicRegionId = useMapDataStore((s) => s.selectedStrategicRegionId)
+  const strategicRegionsById = useMapDataStore((s) => s.strategicRegionsById)
   const issuesByProvinceKey = useProvinceValidationStore((s) => s.issuesByProvinceKey)
 
   const highlightColors = useMemo(() => {
@@ -86,8 +88,19 @@ export function useProvinceHighlights(
       }
       return colors
     }
+    if (editorMode === 'strategicRegions') {
+      if (selectedStrategicRegionId === null) return []
+      const region = strategicRegionsById.get(selectedStrategicRegionId)
+      if (!region) return []
+      const colors: number[] = []
+      for (const provinceId of region.provinceIds) {
+        const color = provinces.get(provinceId)?.color
+        if (color !== undefined) colors.push(color)
+      }
+      return colors
+    }
     return computeHighlightColors(selectedProvinceIds, selectedBmpGuids, provinces, bmpOnlyEntries, bmpReplacements)
-  }, [editorMode, selectedStateId, statesById, selectedProvinceIds, selectedBmpGuids, provinces, bmpOnlyEntries, bmpReplacements])
+  }, [editorMode, selectedStateId, statesById, selectedStrategicRegionId, strategicRegionsById, selectedProvinceIds, selectedBmpGuids, provinces, bmpOnlyEntries, bmpReplacements])
 
   const validationHighlightColors = useMemo(
     () => computeValidationHighlightColors(effectiveCatalog, issuesByProvinceKey),

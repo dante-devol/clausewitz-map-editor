@@ -55,6 +55,7 @@ export function resolvePaths(gamePath: string, modPath: string, replacePaths: re
     rivers:          resolveFile(gamePath, modPath, p.rivers, replacePaths),
     stateCategories: resolveFolder(gamePath, modPath, p.stateCategories, replacePaths),
     resources:       resolveFolder(gamePath, modPath, p.resources, replacePaths),
-    buildings:       resolveFolder(gamePath, modPath, p.buildings, replacePaths)
+    buildings:       resolveFolder(gamePath, modPath, p.buildings, replacePaths),
+    weather:         resolveFile(gamePath, modPath, p.weather, replacePaths)
   }
 }

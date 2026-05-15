@@ -27,6 +27,7 @@ export function ModeTabs(): JSX.Element {
       <TabList selectedValue={editorMode} onTabSelect={handleTabSelect} size="small">
         <Tab value="provinces">{t('mode.provinces')}</Tab>
         <Tab value="states">{t('mode.states')}</Tab>
+        <Tab value="strategicRegions">{t('mode.strategicRegions')}</Tab>
       </TabList>
     </div>
   )

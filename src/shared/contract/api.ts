@@ -27,6 +27,7 @@ export interface AppConfig {
     stateCategories: string
     resources: string
     buildings: string
+    weather: string
   }
   displayModeOverrides: Partial<Record<string, Partial<Record<string, string>>>>
 }
@@ -126,8 +127,10 @@ export interface ApiContract {
     load: (projectId: string) => Promise<MapDataSnapshot>
     save: (projectId: string, provinces: Province[], continents: Continent[]) => Promise<void>
     saveStates: (projectId: string, states: StateDefinition[]) => Promise<void>
+    saveStrategicRegions: (projectId: string, regions: StrategicRegionDefinition[]) => Promise<void>
     loadStates: (projectId: string) => Promise<void>
     loadStrategicRegions: (projectId: string) => Promise<void>
+    loadWeatherEntries: (projectId: string) => Promise<string[]>
     loadResources: (projectId: string) => Promise<Resource[]>
     onChanged: (callback: (event: MapChangedEvent) => void) => () => void
   }

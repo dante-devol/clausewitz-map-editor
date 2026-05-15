@@ -11,6 +11,7 @@ export type PathKey =
   | 'stateCategories'
   | 'resources'
   | 'buildings'
+  | 'weather'
 
 // File paths resolve to a single absolute path (mod wins if present, else game).
 // Folder paths resolve to a merged file list — mod files overwrite same-named game
@@ -28,6 +29,7 @@ export interface ResolvedPaths {
   stateCategories: string[]
   resources: string[]
   buildings: string[]
+  weather: string
 }
 
 export interface GameVerificationResult {

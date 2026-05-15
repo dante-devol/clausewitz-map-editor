@@ -1,5 +1,5 @@
 import { readFileSync } from 'fs'
-import type { StrategicRegionDefinition } from '../../shared/mapDataTypes'
+import type { StrategicRegionDefinition, WeatherPeriod } from '../../shared/mapDataTypes'
 
 export class StrategicRegionsTxt {
   private readonly filePaths: string[]
@@ -12,7 +12,7 @@ export class StrategicRegionsTxt {
     const regions = new Map<number, StrategicRegionDefinition>()
     for (const filePath of this.filePaths) {
       const content = readFileSync(filePath, 'utf-8')
-      const parsed = StrategicRegionsTxt.parse(content)
+      const parsed = StrategicRegionsTxt.parse(content).map((r) => ({ ...r, sourcePath: filePath }))
       for (const region of parsed) regions.set(region.id, region)
     }
     return [...regions.values()].sort((a, b) => a.id - b.id)
@@ -28,15 +28,70 @@ export class StrategicRegionsTxt {
       const block = extractBlock(content, openIdx)
       if (!block) break
 
-      const regionId = parseScalarNumber(block.content, 'id')
+      const regionId = parseScalarInt(block.content, 'id')
+      const name = parseScalarString(block.content, 'name') ?? ''
       const provinceIds = parseNumberListBlock(block.content, 'provinces')
-      if (regionId !== null && provinceIds.length > 0) regions.push({ id: regionId, provinceIds })
+      const weatherPeriods = parseWeatherBlock(block.content)
+
+      if (regionId !== null) {
+        regions.push({ id: regionId, name, provinceIds, weatherPeriods })
+      }
 
       blockRegex.lastIndex = block.end
     }
 
     return regions
   }
+}
+
+function parseWeatherBlock(content: string): WeatherPeriod[] {
+  const weatherMatch = /\bweather\s*=\s*\{/.exec(content)
+  if (!weatherMatch) return []
+
+  const openIdx = weatherMatch.index + weatherMatch[0].length - 1
+  const weatherBlock = extractBlock(content, openIdx)
+  if (!weatherBlock) return []
+
+  const periods: WeatherPeriod[] = []
+  const periodRegex = /\bperiod\s*=\s*\{/g
+  let periodMatch: RegExpExecArray | null
+  while ((periodMatch = periodRegex.exec(weatherBlock.content)) !== null) {
+    const pOpenIdx = periodMatch.index + periodMatch[0].length - 1
+    const pBlock = extractBlock(weatherBlock.content, pOpenIdx)
+    if (!pBlock) break
+
+    const between = parseTwoFloatBlock(pBlock.content, 'between') ?? [0, 30]
+    const temperature = parseTwoFloatBlock(pBlock.content, 'temperature') ?? [0, 0]
+    const minSnowLevel = parseScalarFloat(pBlock.content, 'min_snow_level')
+    const weatherWeights = parseWeatherWeights(pBlock.content)
+
+    periods.push({
+      between: between as [number, number],
+      temperature: temperature as [number, number],
+      ...(minSnowLevel !== null ? { minSnowLevel } : {}),
+      weatherWeights
+    })
+
+    periodRegex.lastIndex = pBlock.end
+  }
+
+  return periods
+}
+
+const PERIOD_STRUCTURAL_KEYS = new Set(['between', 'temperature', 'min_snow_level', 'temperature_day_night'])
+
+function parseWeatherWeights(content: string): Record<string, number> {
+  const weights: Record<string, number> = {}
+  // Match key = float pairs, skipping block values (between/temperature use { })
+  const kvRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*([\d.]+(?:\.\d+)?)\b/g
+  let m: RegExpExecArray | null
+  while ((m = kvRegex.exec(content)) !== null) {
+    const key = m[1]
+    if (PERIOD_STRUCTURAL_KEYS.has(key)) continue
+    const val = parseFloat(m[2])
+    if (!Number.isNaN(val)) weights[key] = val
+  }
+  return weights
 }
 
 interface Block {
@@ -58,11 +113,36 @@ function extractBlock(str: string, openIdx: number): Block | null {
   return null
 }
 
-function parseScalarNumber(content: string, key: string): number | null {
+function parseScalarInt(content: string, key: string): number | null {
   const match = content.match(new RegExp(`\\b${escapeRegExp(key)}\\s*=\\s*(\\d+)\\b`))
   if (!match) return null
   const value = parseInt(match[1], 10)
   return Number.isNaN(value) ? null : value
+}
+
+function parseScalarFloat(content: string, key: string): number | null {
+  const match = content.match(new RegExp(`\\b${escapeRegExp(key)}\\s*=\\s*([\\d.]+(?:\\.\\d+)?)\\b`))
+  if (!match) return null
+  const value = parseFloat(match[1])
+  return Number.isNaN(value) ? null : value
+}
+
+function parseScalarString(content: string, key: string): string | null {
+  const match = content.match(new RegExp(`\\b${escapeRegExp(key)}\\s*=\\s*"([^"]*)"(?:\\s|$)`))
+  if (match) return match[1]
+  const bareMatch = content.match(new RegExp(`\\b${escapeRegExp(key)}\\s*=\\s*([^\\s{}"#]+)`))
+  return bareMatch ? bareMatch[1] : null
+}
+
+function parseTwoFloatBlock(content: string, key: string): [number, number] | null {
+  const match = new RegExp(`\\b${escapeRegExp(key)}\\s*=\\s*\\{`).exec(content)
+  if (!match) return null
+  const openIdx = match.index + match[0].length - 1
+  const block = extractBlock(content, openIdx)
+  if (!block) return null
+  const nums = [...block.content.matchAll(/[\d.]+(?:\.\d+)?/g)].map((m) => parseFloat(m[0]))
+  if (nums.length < 2) return null
+  return [nums[0], nums[1]]
 }
 
 function parseNumberListBlock(content: string, key: string): number[] {

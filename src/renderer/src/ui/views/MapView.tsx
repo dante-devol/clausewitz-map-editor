@@ -5,9 +5,11 @@ import { MapModePanel } from '../components/MapModePanel'
 import { MapCanvas } from '../components/MapCanvas'
 import { ProvincePanel } from '../components/provincePanel/ProvincePanel'
 import { StatePanel } from '../components/statePanel/StatePanel'
+import { StrategicRegionPanel } from '../components/strategicRegionPanel/StrategicRegionPanel'
 import { ModeTabs } from '../components/ModeTabs'
 import { ProvinceDetailPanel } from '../components/ProvinceDetailPanel'
 import { StateDetailPanel } from '../components/statePanel/StateDetailPanel'
+import { StrategicRegionDetailPanel } from '../components/strategicRegionPanel/StrategicRegionDetailPanel'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
 
 const useStyles = makeStyles({
@@ -72,12 +74,15 @@ export function MapView() {
   const styles = useStyles()
   const editorMode = useMapDataStore((s) => s.editorMode)
   const selectedStateId = useMapDataStore((s) => s.selectedStateId)
+  const selectedStrategicRegionId = useMapDataStore((s) => s.selectedStrategicRegionId)
   const selectedProvinceIds = useMapDataStore((s) => s.selectedProvinceIds)
   const selectedBmpGuids = useMapDataStore((s) => s.selectedBmpGuids)
 
   const showDrawer = editorMode === 'states'
     ? selectedStateId !== null
-    : selectedProvinceIds.length > 0 || selectedBmpGuids.length > 0
+    : editorMode === 'strategicRegions'
+      ? selectedStrategicRegionId !== null
+      : selectedProvinceIds.length > 0 || selectedBmpGuids.length > 0
 
   const [detailCollapsed, setDetailCollapsed] = useState(false)
 
@@ -89,14 +94,20 @@ export function MapView() {
     <div className={styles.root}>
       <div className={styles.leftPanel}>
         <ModeTabs />
-        {editorMode === 'provinces' ? <ProvincePanel /> : <StatePanel />}
+        {editorMode === 'provinces'
+          ? <ProvincePanel />
+          : editorMode === 'states'
+            ? <StatePanel />
+            : <StrategicRegionPanel />}
       </div>
       <div className={styles.viewport}>
         {showDrawer && !detailCollapsed && (
           <div className={styles.detailDrawer}>
             {editorMode === 'provinces'
               ? <ProvinceDetailPanel onCollapse={() => setDetailCollapsed(true)} />
-              : <StateDetailPanel onCollapse={() => setDetailCollapsed(true)} />}
+              : editorMode === 'states'
+                ? <StateDetailPanel onCollapse={() => setDetailCollapsed(true)} />
+                : <StrategicRegionDetailPanel onCollapse={() => setDetailCollapsed(true)} />}
           </div>
         )}
         {showDrawer && detailCollapsed && (

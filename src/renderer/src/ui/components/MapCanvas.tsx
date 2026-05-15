@@ -1,5 +1,4 @@
-import { makeStyles, mergeClasses, tokens, Button, Spinner, Text, Tooltip, Skeleton, SkeletonItem, ProgressBar, shorthands } from '@fluentui/react-components'
-import { keyframes } from '@griffel/react'
+import { makeStyles, makeStaticStyles, mergeClasses, tokens, Button, Spinner, Text, Tooltip, Skeleton, SkeletonItem, ProgressBar, shorthands } from '@fluentui/react-components'
 import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, PaintBucketRegular, PaintBucketFilled, DismissRegular } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
 import { useMapCanvas } from '../hooks/useMapCanvas'
@@ -12,9 +11,13 @@ import { notificationService } from '../../infra/services/notificationService'
 const ZOOM_STEP = 1.25
 const NOTIFICATION_FADE_OUT_MS = 250
 
-const fadeOut = keyframes({
-  from: { opacity: 1, transform: 'translateY(0)' },
-  to: { opacity: 0, transform: 'translateY(-6px)' }
+const FADE_OUT_NAME = 'hoi4me-notification-fade-out'
+
+const useStaticStyles = makeStaticStyles({
+  [`@keyframes ${FADE_OUT_NAME}`]: {
+    from: { opacity: '1', transform: 'translateY(0)' },
+    to: { opacity: '0', transform: 'translateY(-6px)' }
+  }
 })
 
 const useStyles = makeStyles({
@@ -114,7 +117,7 @@ const useStyles = makeStyles({
     ...shorthands.borderColor(tokens.colorPaletteRedBorder2)
   },
   notificationCardDismissing: {
-    animationName: fadeOut,
+    animationName: FADE_OUT_NAME,
     animationDuration: `${NOTIFICATION_FADE_OUT_MS}ms`,
     animationTimingFunction: 'ease-in',
     animationFillMode: 'forwards',
@@ -175,6 +178,7 @@ const useStyles = makeStyles({
 })
 
 function NotificationTray(): JSX.Element | null {
+  useStaticStyles()
   const styles = useStyles()
   const { t } = useI18n()
   const notifications = useNotificationStore((s) => s.notifications)

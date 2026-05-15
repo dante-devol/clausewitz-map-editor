@@ -21,7 +21,8 @@ export const DEFAULT_CONFIG: Config = {
     rivers: '/map/rivers.bmp',
     stateCategories: '/common/state_category',
     resources: '/common/resources',
-    buildings: '/common/buildings'
+    buildings: '/common/buildings',
+    weather: '/common/weather.txt'
   },
   displayModeOverrides: {}
 }

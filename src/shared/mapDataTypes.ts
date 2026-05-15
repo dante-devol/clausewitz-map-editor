@@ -108,9 +108,19 @@ export interface StateDefinition {
   sourcePath?: string
 }
 
+export interface WeatherPeriod {
+  between: [number, number]
+  temperature: [number, number]
+  minSnowLevel?: number
+  weatherWeights: Record<string, number>
+}
+
 export interface StrategicRegionDefinition {
   id: number
+  name: string
   provinceIds: number[]
+  weatherPeriods: WeatherPeriod[]
+  sourcePath?: string
 }
 
 export interface TerrainCategory {

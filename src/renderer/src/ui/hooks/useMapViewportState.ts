@@ -65,6 +65,8 @@ export function useMapViewportState() {
   const editorMode = useMapDataStore((s) => s.editorMode)
   const setSelectedStateId = useMapDataStore((s) => s.setSelectedStateId)
   const stateProvinceToStateId = useMapDataStore((s) => s.stateProvinceToStateId)
+  const setSelectedStrategicRegionId = useMapDataStore((s) => s.setSelectedStrategicRegionId)
+  const strategicRegionProvinceToRegionId = useMapDataStore((s) => s.strategicRegionProvinceToRegionId)
 
   // — Hover state —
   const [hoveredProvince, setHoveredProvince] = useState<HoveredProvince | null>(null)
@@ -124,6 +126,14 @@ export function useMapViewportState() {
       return
     }
 
+    if (editorMode === 'strategicRegions') {
+      if (draft.provinceId !== null) {
+        const regionId = strategicRegionProvinceToRegionId.get(draft.provinceId) ?? null
+        setSelectedStrategicRegionId(regionId)
+      }
+      return
+    }
+
     if (activeTool === 'eyedrop') {
       if (!isEditableDisplayMode(displayMode)) return
       const sample = sampleDisplayModeValue(displayMode, draft)
@@ -174,8 +184,10 @@ export function useMapViewportState() {
     sampledValue,
     setSelectedBmpGuids,
     setSelectedStateId,
+    setSelectedStrategicRegionId,
     setSelection,
     stateProvinceToStateId,
+    strategicRegionProvinceToRegionId,
     toggleBmpGuid,
   ])
 

@@ -1,6 +1,8 @@
 import { readFileSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { StatesTxtWriter } from '../../parsers/StatesTxtWriter'
+import { StrategicRegionsTxtWriter } from '../../parsers/StrategicRegionsTxtWriter'
+import { WeatherTxt } from '../../parsers/WeatherTxt'
 import { computeHash } from '../../fileManager'
 import { join } from 'path'
 import { getConfig } from '../../config'
@@ -15,7 +17,7 @@ import { StateCategoryTxt } from '../../parsers/StateCategoryTxt'
 import { BuildingsTxt } from '../../parsers/BuildingsTxt'
 import { ResourcesTxt } from '../../parsers/ResourcesTxt'
 import type { MapDataSnapshot, ProjectOpenRequest, ProjectOpenResult } from '../../../shared/contract/api'
-import type { Building, Continent, Resource, StateCategory, StateDefinition } from '../../../shared/mapDataTypes'
+import type { Building, Continent, Resource, StateCategory, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
 import { buildProvinceCatalog } from '../../../shared/provinceCatalog'
 import type { WorkerParsePool } from '../../workers/WorkerParsePool'
 import type { ParserOutputMap } from '../../workers/parserRegistry'
@@ -118,7 +120,9 @@ export class ProjectLoader {
       totalFiles: number
     ) => void
   ): Promise<void> {
-    await loadFilesProgressively(project.resolvedPaths.states, 'states', pool, onChunk)
+    await loadFilesProgressively(project.resolvedPaths.states, 'states', pool, onChunk,
+      (item, filePath) => ({ ...item, sourcePath: filePath })
+    )
   }
 
   async loadStrategicRegionsProgressive(
@@ -134,13 +138,23 @@ export class ProjectLoader {
       project.resolvedPaths.strategicRegions,
       'strategicRegions',
       pool,
-      onChunk
+      onChunk,
+      (item, filePath) => ({ ...item, sourcePath: filePath })
     )
   }
 
   saveStates(states: StateDefinition[]): void {
     const writer = new StatesTxtWriter()
     for (const state of states) writer.write(state)
+  }
+
+  saveStrategicRegions(regions: StrategicRegionDefinition[]): void {
+    const writer = new StrategicRegionsTxtWriter()
+    for (const region of regions) writer.write(region)
+  }
+
+  loadWeatherEntries(project: LoadedProject): string[] {
+    return WeatherTxt.load(project.resolvedPaths.weather)
   }
 
   loadImageBase64(project: LoadedProject): { b64: string; hash: string } {
@@ -153,7 +167,8 @@ async function loadFilesProgressively<K extends 'states' | 'strategicRegions'>(
   filePaths: string[],
   key: K,
   pool: WorkerParsePool,
-  onChunk: (items: ParserOutputMap[K][], loadedFiles: number, totalFiles: number) => void
+  onChunk: (items: ParserOutputMap[K][], loadedFiles: number, totalFiles: number) => void,
+  transformItem?: (item: ParserOutputMap[K], filePath: string) => ParserOutputMap[K]
 ): Promise<void> {
   const totalFiles = filePaths.length
   if (totalFiles === 0) return
@@ -180,8 +195,11 @@ async function loadFilesProgressively<K extends 'states' | 'strategicRegions'>(
 
   await Promise.all(
     filePaths.map(async (filePath) => {
-      const items = await pool.dispatch(filePath, key)
-      pendingItems.push(...(items as ParserOutputMap[K][]))
+      const rawItems = await pool.dispatch(filePath, key)
+      const items = transformItem
+        ? (rawItems as ParserOutputMap[K][]).map((item) => transformItem(item, filePath))
+        : (rawItems as ParserOutputMap[K][])
+      pendingItems.push(...items)
       loadedFiles++
       scheduleFlush()
     })

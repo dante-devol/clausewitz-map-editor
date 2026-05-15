@@ -3,7 +3,7 @@ import { ProjectLoader } from './ProjectLoader'
 import { ProjectSession } from './ProjectSession'
 import type { ProjectOpenRequest, ProjectOpenResult } from '../../../shared/contract/api'
 import type { LoadedProject } from './ProjectLoader'
-import type { StateDefinition } from '../../../shared/mapDataTypes'
+import type { StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
 
 export class ProjectSessionRegistry {
   private readonly sessions = new Map<number, ProjectSession>()
@@ -58,6 +58,22 @@ export class ProjectSessionRegistry {
       throw new Error('Project session mismatch')
     }
     return session.saveStates(states)
+  }
+
+  saveStrategicRegionsForWindow(window: BrowserWindow, projectId: string, regions: StrategicRegionDefinition[]) {
+    const session = this.forWindow(window)
+    if (session.projectId !== projectId) {
+      throw new Error('Project session mismatch')
+    }
+    return session.saveStrategicRegions(regions)
+  }
+
+  loadWeatherEntriesForWindow(window: BrowserWindow, projectId: string): string[] {
+    const session = this.forWindow(window)
+    if (session.projectId !== projectId) {
+      throw new Error('Project session mismatch')
+    }
+    return session.loadWeatherEntries()
   }
 
   loadResourcesForWindow(window: BrowserWindow, projectId: string) {

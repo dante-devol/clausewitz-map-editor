@@ -34,6 +34,11 @@ import {
   STATE_EDIT_EMPTY,
   type StateEditSlice
 } from './slices/stateEditSlice'
+import {
+  createStrategicRegionEditSlice,
+  STRATEGIC_REGION_EDIT_EMPTY,
+  type StrategicRegionEditSlice
+} from './slices/strategicRegionEditSlice'
 
 export type MapDataState =
   ProvinceDataSlice &
@@ -42,7 +47,8 @@ export type MapDataState =
   DatasetSlice &
   ImageSlice &
   EditorModeSlice &
-  StateEditSlice & {
+  StateEditSlice &
+  StrategicRegionEditSlice & {
     clear: () => void
   }
 
@@ -56,6 +62,7 @@ export const useMapDataStore = create<MapDataState>()((...a) => {
     ...createImageSlice(...a),
     ...createEditorModeSlice(...a),
     ...createStateEditSlice(...a),
+    ...createStrategicRegionEditSlice(...a),
     clear: () => set({
       ...PROVINCE_DATA_EMPTY,
       ...PROVINCE_EDIT_EMPTY,
@@ -64,6 +71,7 @@ export const useMapDataStore = create<MapDataState>()((...a) => {
       ...IMAGE_EMPTY,
       ...EDITOR_MODE_EMPTY,
       ...STATE_EDIT_EMPTY,
+      ...STRATEGIC_REGION_EDIT_EMPTY,
     }),
   }
 })

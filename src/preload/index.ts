@@ -36,8 +36,10 @@ const api: ApiContract = {
     load: (projectId) => ipcRenderer.invoke(channels.map.load, projectId),
     save: (projectId, provinces, continents) => ipcRenderer.invoke(channels.map.save, projectId, provinces, continents),
     saveStates: (projectId, states) => ipcRenderer.invoke(channels.map.saveStates, projectId, states),
+    saveStrategicRegions: (projectId, regions) => ipcRenderer.invoke(channels.map.saveStrategicRegions, projectId, regions),
     loadStates: (projectId) => ipcRenderer.invoke(channels.map.loadStates, projectId),
     loadStrategicRegions: (projectId) => ipcRenderer.invoke(channels.map.loadStrategicRegions, projectId),
+    loadWeatherEntries: (projectId) => ipcRenderer.invoke(channels.map.loadWeatherEntries, projectId),
     loadResources: (projectId) => ipcRenderer.invoke(channels.map.loadResources, projectId),
     onChanged: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
