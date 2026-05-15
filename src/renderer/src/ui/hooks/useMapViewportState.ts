@@ -46,6 +46,8 @@ export function useMapViewportState() {
   const [activeTool, setActiveTool] = useState<'select' | 'eyedrop' | 'bucket' | 'brush' | 'select-color'>('select')
   const [sampledValue, setSampledValue] = useState<DisplayModeSample | null>(null)
   const previousDisplayModeRef = useRef<typeof displayMode | null>(null)
+  const editorMode = useMapDataStore((s) => s.editorMode)
+  const previousEditorModeRef = useRef(editorMode)
 
   // Reset tool when editor mode changes (e.g. switching from paint to provinces)
   useEffect(() => {
@@ -69,8 +71,6 @@ export function useMapViewportState() {
   const toggleBmpGuid = useMapDataStore((s) => s.toggleBmpGuid)
   const editProvince = useMapDataStore((s) => s.editProvince)
   const editBmpOnlyProvince = useMapDataStore((s) => s.editBmpOnlyProvince)
-  const editorMode = useMapDataStore((s) => s.editorMode)
-  const previousEditorModeRef = useRef(editorMode)
   const setSelectedStateId = useMapDataStore((s) => s.setSelectedStateId)
   const stateProvinceToStateId = useMapDataStore((s) => s.stateProvinceToStateId)
   const setSelectedStrategicRegionId = useMapDataStore((s) => s.setSelectedStrategicRegionId)
