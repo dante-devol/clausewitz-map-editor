@@ -33,6 +33,10 @@ const DEFAULT_ACK_TIMEOUT_MS = 2200
 const PENDING_ADVANCES = new Map<string, Omit<NotificationRecord, 'createdAt' | 'updatedAt'>>()
 let advanceFlushId: ReturnType<typeof requestAnimationFrame> | null = null
 
+// Tracks scopes that have been completed/failed so late-arriving IPC onChanged
+// events can't overwrite the completion and cancel the auto-dismiss timer.
+const COMPLETED_SCOPES = new Set<string>()
+
 function flushAdvances(): void {
   advanceFlushId = null
   for (const input of PENDING_ADVANCES.values()) upsertNotification(input)
@@ -41,6 +45,7 @@ function flushAdvances(): void {
 
 export const notificationService = {
   beginProgress({ scope, title, message = null, progress, tone = 'neutral' }: ProgressInput): void {
+    COMPLETED_SCOPES.delete(scope)
     upsertNotification({
       id: scope,
       scope,
@@ -54,6 +59,7 @@ export const notificationService = {
   },
 
   advanceProgress({ scope, title, message = null, progress, tone = 'neutral' }: ProgressInput): void {
+    if (COMPLETED_SCOPES.has(scope)) return
     PENDING_ADVANCES.set(scope, { id: scope, scope, kind: 'progress', tone, title, message, progress, autoCloseAfterMs: null })
     advanceFlushId ??= requestAnimationFrame(flushAdvances)
   },
@@ -65,6 +71,8 @@ export const notificationService = {
     tone = 'success',
     autoCloseAfterMs = DEFAULT_ACK_TIMEOUT_MS
   }: CompletionInput): void {
+    COMPLETED_SCOPES.add(scope)
+    PENDING_ADVANCES.delete(scope)
     upsertNotification({
       id: scope,
       scope,
@@ -84,6 +92,8 @@ export const notificationService = {
     tone = 'error',
     autoCloseAfterMs = null
   }: CompletionInput): void {
+    COMPLETED_SCOPES.add(scope)
+    PENDING_ADVANCES.delete(scope)
     upsertNotification({
       id: scope,
       scope,
@@ -118,11 +128,13 @@ export const notificationService = {
   },
 
   dismiss(id: string): void {
+    COMPLETED_SCOPES.delete(id)
     clearTimer(id)
     useNotificationStore.getState().dismiss(id)
   },
 
   clear(): void {
+    COMPLETED_SCOPES.clear()
     for (const id of AUTO_DISMISS_TIMERS.keys()) clearTimer(id)
     useNotificationStore.getState().clear()
   }
