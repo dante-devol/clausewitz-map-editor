@@ -14,8 +14,10 @@ export interface DatasetSlice {
   strategicRegionsRevision: number
   replaceStates: (states: StateDefinition[]) => void
   appendStates: (states: StateDefinition[]) => void
+  patchStates: (sourcePath: string, states: StateDefinition[]) => void
   replaceStrategicRegions: (strategicRegions: StrategicRegionDefinition[]) => void
   appendStrategicRegions: (strategicRegions: StrategicRegionDefinition[]) => void
+  patchStrategicRegions: (sourcePath: string, strategicRegions: StrategicRegionDefinition[]) => void
   setStatesStatus: (status: 'idle' | 'loading' | 'ready' | 'error') => void
   setStrategicRegionsStatus: (status: 'idle' | 'loading' | 'ready' | 'error') => void
 }
@@ -68,6 +70,11 @@ export const createDatasetSlice: StateCreator<DatasetSlice, [], [], DatasetSlice
     statesRevision: state.statesRevision + 1
   })),
 
+  patchStates: (sourcePath, incoming) => set((state) => ({
+    ...buildStatesSlice([...state.states.filter((s) => s.sourcePath !== sourcePath), ...incoming]),
+    statesRevision: state.statesRevision + 1
+  })),
+
   replaceStrategicRegions: (incoming) => set((state) => ({
     ...buildStrategicRegionsSlice(incoming),
     strategicRegionsRevision: state.strategicRegionsRevision + 1
@@ -75,6 +82,14 @@ export const createDatasetSlice: StateCreator<DatasetSlice, [], [], DatasetSlice
 
   appendStrategicRegions: (incoming) => set((state) => ({
     ...buildStrategicRegionsSlice([...state.strategicRegions, ...incoming]),
+    strategicRegionsRevision: state.strategicRegionsRevision + 1
+  })),
+
+  patchStrategicRegions: (sourcePath, incoming) => set((state) => ({
+    ...buildStrategicRegionsSlice([
+      ...state.strategicRegions.filter((r) => r.sourcePath !== sourcePath),
+      ...incoming,
+    ]),
     strategicRegionsRevision: state.strategicRegionsRevision + 1
   })),
 

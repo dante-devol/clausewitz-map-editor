@@ -79,17 +79,19 @@ export interface MapChangedEvent {
 }
 
 export interface StateDatasetUpdate {
-  op: 'replace' | 'append'
+  op: 'replace' | 'append' | 'patch'
   items: StateDefinition[]
   loadedFiles: number
   totalFiles: number
+  sourcePath?: string
 }
 
 export interface StrategicRegionDatasetUpdate {
-  op: 'replace' | 'append'
+  op: 'replace' | 'append' | 'patch'
   items: StrategicRegionDefinition[]
   loadedFiles: number
   totalFiles: number
+  sourcePath?: string
 }
 
 export interface ImageChangedData {

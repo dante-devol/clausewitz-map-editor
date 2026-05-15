@@ -143,6 +143,7 @@ export const enMessages = {
   'notification.strategicRegionsLoad.doneMessage': 'Strategic region data finished loading.',
   'notification.strategicRegionsLoad.failedTitle': 'Strategic region load failed',
   'notification.strategicRegionsLoad.failedMessage': 'Strategic region data could not be loaded.',
+  'notification.fileReload.title': 'Files reloaded',
   'notification.validation.title': 'Validation complete',
   'notification.validation.clean': 'No validation issues found.',
   'notification.validation.summary': '{errors} errors, {warnings} warnings',

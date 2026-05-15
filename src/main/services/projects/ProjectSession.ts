@@ -177,13 +177,18 @@ export class ProjectSession {
 
     for (const filePath of this.project.resolvedPaths.states) {
       this.watch(filePath, () => {
-        if (!this.project) return
+        if (!this.project || !this.pool) return
         if (!this.statesLoaded) return
-        this.statesLoaded = false
-        this.statesLoadPromise = null
-        void this.loadStates()
+        void this.reloadStateFile(filePath)
       })
     }
+  }
+
+  private async reloadStateFile(filePath: string): Promise<void> {
+    if (!this.pool) return
+    const rawItems = await this.pool.dispatch(filePath, 'states')
+    const items = (rawItems as StateDefinition[]).map((item) => ({ ...item, sourcePath: filePath }))
+    this.emit('states', { op: 'patch', sourcePath: filePath, items, loadedFiles: 1, totalFiles: 1 })
   }
 
   private watchStrategicRegionFiles(): void {
@@ -191,13 +196,18 @@ export class ProjectSession {
 
     for (const filePath of this.project.resolvedPaths.strategicRegions) {
       this.watch(filePath, () => {
-        if (!this.project) return
+        if (!this.project || !this.pool) return
         if (!this.strategicRegionsLoaded) return
-        this.strategicRegionsLoaded = false
-        this.strategicRegionsLoadPromise = null
-        void this.loadStrategicRegions()
+        void this.reloadStrategicRegionFile(filePath)
       })
     }
+  }
+
+  private async reloadStrategicRegionFile(filePath: string): Promise<void> {
+    if (!this.pool) return
+    const rawItems = await this.pool.dispatch(filePath, 'strategicRegions')
+    const items = (rawItems as StrategicRegionDefinition[]).map((item) => ({ ...item, sourcePath: filePath }))
+    this.emit('strategicRegions', { op: 'patch', sourcePath: filePath, items, loadedFiles: 1, totalFiles: 1 })
   }
 
   private watch(path: string, onChanged: () => void): void {

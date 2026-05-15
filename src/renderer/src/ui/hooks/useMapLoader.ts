@@ -10,6 +10,7 @@ import type { ImageChangedData, StateDatasetUpdate, StrategicRegionDatasetUpdate
 import type { BitmapAnalysisOutput } from '../../infra/workers/bitmapAnalysis.worker'
 import { useProjectStore } from '../../infra/store/projectStore'
 import { notificationService } from '../../infra/services/notificationService'
+import { useNotificationStore } from '../../infra/store/notificationStore'
 import { useI18n } from '../i18n/I18nProvider'
 
 const provinceBitmapFactsCache = new Map<string, ProvinceBitmapFacts>()
@@ -52,8 +53,10 @@ export function useMapLoader(): void {
   const loadBuildings = useMapDataStore((s) => s.loadBuildings)
   const replaceStates = useMapDataStore((s) => s.replaceStates)
   const appendStates = useMapDataStore((s) => s.appendStates)
+  const patchStates = useMapDataStore((s) => s.patchStates)
   const replaceStrategicRegions = useMapDataStore((s) => s.replaceStrategicRegions)
   const appendStrategicRegions = useMapDataStore((s) => s.appendStrategicRegions)
+  const patchStrategicRegions = useMapDataStore((s) => s.patchStrategicRegions)
   const loadProvincesImage = useMapDataStore((s) => s.loadProvincesImage)
   const setStatesStatus = useMapDataStore((s) => s.setStatesStatus)
   const setStrategicRegionsStatus = useMapDataStore((s) => s.setStrategicRegionsStatus)
@@ -79,6 +82,8 @@ export function useMapLoader(): void {
     const loadScope = `map-load:${projectId}`
     const statesScope = `states-load:${projectId}`
     const strategicRegionsScope = `strategic-regions-load:${projectId}`
+    const patchReloadScope = `file-patch-reload:${projectId}`
+    const patchedFiles = new Set<string>()
 
     async function loadStatesAsync() {
       if (cancelled || useMapDataStore.getState().statesStatus !== 'idle') return
@@ -229,33 +234,43 @@ export function useMapLoader(): void {
       else if (event.type === 'buildings') loadBuildings(event.data as import('../../../../shared/mapDataTypes').Building[])
       else if (event.type === 'states') {
         const update = event.data as StateDatasetUpdate
-        const progress = resolveFileProgress(update.loadedFiles, update.totalFiles, resolvedPaths?.states.length ?? 0)
-        notificationService.advanceProgress({
-          scope: statesScope,
-          title: tRef.current('notification.statesLoad.title'),
-          message: tRef.current('notification.statesLoad.progress', {
-            loaded: progress.current,
-            total: progress.total
-          }),
-          progress
-        })
-        if (update.op === 'replace') replaceStates(update.items)
-        else appendStates(update.items)
+        if (update.op === 'patch') {
+          patchStates(update.sourcePath!, update.items)
+          showPatchReloadToast(update.sourcePath!, patchedFiles, patchReloadScope, tRef.current('notification.fileReload.title'))
+        } else {
+          const progress = resolveFileProgress(update.loadedFiles, update.totalFiles, resolvedPaths?.states.length ?? 0)
+          notificationService.advanceProgress({
+            scope: statesScope,
+            title: tRef.current('notification.statesLoad.title'),
+            message: tRef.current('notification.statesLoad.progress', {
+              loaded: progress.current,
+              total: progress.total
+            }),
+            progress
+          })
+          if (update.op === 'replace') replaceStates(update.items)
+          else appendStates(update.items)
+        }
       }
       else if (event.type === 'strategicRegions') {
         const update = event.data as StrategicRegionDatasetUpdate
-        const progress = resolveFileProgress(update.loadedFiles, update.totalFiles, resolvedPaths?.strategicRegions.length ?? 0)
-        notificationService.advanceProgress({
-          scope: strategicRegionsScope,
-          title: tRef.current('notification.strategicRegionsLoad.title'),
-          message: tRef.current('notification.strategicRegionsLoad.progress', {
-            loaded: progress.current,
-            total: progress.total
-          }),
-          progress
-        })
-        if (update.op === 'replace') replaceStrategicRegions(update.items)
-        else appendStrategicRegions(update.items)
+        if (update.op === 'patch') {
+          patchStrategicRegions(update.sourcePath!, update.items)
+          showPatchReloadToast(update.sourcePath!, patchedFiles, patchReloadScope, tRef.current('notification.fileReload.title'))
+        } else {
+          const progress = resolveFileProgress(update.loadedFiles, update.totalFiles, resolvedPaths?.strategicRegions.length ?? 0)
+          notificationService.advanceProgress({
+            scope: strategicRegionsScope,
+            title: tRef.current('notification.strategicRegionsLoad.title'),
+            message: tRef.current('notification.strategicRegionsLoad.progress', {
+              loaded: progress.current,
+              total: progress.total
+            }),
+            progress
+          })
+          if (update.op === 'replace') replaceStrategicRegions(update.items)
+          else appendStrategicRegions(update.items)
+        }
       }
       else if (event.type === 'image') {
         const imageData = event.data as ImageChangedData
@@ -288,8 +303,10 @@ export function useMapLoader(): void {
     loadProvincesImage,
     replaceStates,
     appendStates,
+    patchStates,
     replaceStrategicRegions,
     appendStrategicRegions,
+    patchStrategicRegions,
     loadTerrains,
     loadStateCategories,
     loadBuildings,
@@ -408,4 +425,26 @@ function resolveFileProgress(
 
 function normalizeProgressNumber(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+const PATCH_RELOAD_TOAST_MS = 3000
+
+function showPatchReloadToast(
+  sourcePath: string,
+  patchedFiles: Set<string>,
+  scope: string,
+  title: string
+): void {
+  const notifAlive = useNotificationStore.getState().notifications.some((n) => n.id === scope)
+  if (!notifAlive) patchedFiles.clear()
+  const filename = sourcePath.split(/[\\/]/).pop() ?? sourcePath
+  patchedFiles.add(filename)
+  notificationService.pushAck({
+    id: scope,
+    scope,
+    tone: 'neutral',
+    title,
+    message: [...patchedFiles].join(', '),
+    autoCloseAfterMs: PATCH_RELOAD_TOAST_MS
+  })
 }

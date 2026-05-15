@@ -145,6 +145,7 @@ export const frMessages: Record<MessageKey, string> = {
   'notification.strategicRegionsLoad.doneMessage': 'Les donnees de region strategique sont chargees.',
   'notification.strategicRegionsLoad.failedTitle': 'Echec du chargement des regions strategiques',
   'notification.strategicRegionsLoad.failedMessage': 'Les donnees de region strategique n\'ont pas pu etre chargees.',
+  'notification.fileReload.title': 'Fichiers rechargees',
   'notification.validation.title': 'Validation terminee',
   'notification.validation.clean': 'Aucun probleme de validation trouve.',
   'notification.validation.summary': '{errors} erreurs, {warnings} avertissements',
