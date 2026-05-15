@@ -288,6 +288,8 @@ export const enMessages = {
   'mode.strategicRegions': 'Strat Regions',
   'mode.paint': 'Paint',
   'paintPanel.brushSize': 'Brush Size',
+  'paintPanel.selectColor': 'Select Color',
+  'paintPanel.clearSelection': 'Clear Selection',
   'paintPanel.noProvince': 'Eyedrop a province to paint',
   'paintPanel.paintingAs': 'Painting as',
   'paintPanel.exportBmp': 'Export Province BMP',

@@ -6,12 +6,15 @@ export interface BmpEditSlice {
   pendingRevertPixels: BmpPixelStrokeDelta[] | null
   paintProvinceColor: number | null
   brushRadius: number
+  paintSelection: Set<number>
   addBmpStroke: (stroke: BmpPixelStroke) => void
   revertBmpStroke: (strokeId: string) => void
   consumePendingRevert: () => void
   clearBmpStrokes: () => void
   setPaintProvinceColor: (color: number | null) => void
   setBrushRadius: (radius: number) => void
+  togglePaintSelectionColor: (packedColor: number) => void
+  clearPaintSelection: () => void
 }
 
 export const BMP_EDIT_EMPTY = {
@@ -19,6 +22,7 @@ export const BMP_EDIT_EMPTY = {
   pendingRevertPixels: null as BmpPixelStrokeDelta[] | null,
   paintProvinceColor: null as number | null,
   brushRadius: 5,
+  paintSelection: new Set<number>(),
 }
 
 export const createBmpEditSlice: StateCreator<BmpEditSlice, [], [], BmpEditSlice> = (set) => ({
@@ -43,4 +47,13 @@ export const createBmpEditSlice: StateCreator<BmpEditSlice, [], [], BmpEditSlice
   setPaintProvinceColor: (color) => set({ paintProvinceColor: color }),
 
   setBrushRadius: (radius) => set({ brushRadius: Math.max(1, Math.min(30, radius)) }),
+
+  togglePaintSelectionColor: (packedColor) => set((state) => {
+    const next = new Set(state.paintSelection)
+    if (next.has(packedColor)) next.delete(packedColor)
+    else next.add(packedColor)
+    return { paintSelection: next }
+  }),
+
+  clearPaintSelection: () => set({ paintSelection: new Set() }),
 })

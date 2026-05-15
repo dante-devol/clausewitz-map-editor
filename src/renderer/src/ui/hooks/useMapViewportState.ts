@@ -43,7 +43,7 @@ export function useMapViewportState() {
   const { highlightColors, validationHighlightColors } = useProvinceHighlights(effectiveCatalog)
 
   // — Tool state —
-  const [activeTool, setActiveTool] = useState<'select' | 'eyedrop' | 'bucket' | 'brush'>('select')
+  const [activeTool, setActiveTool] = useState<'select' | 'eyedrop' | 'bucket' | 'brush' | 'select-color'>('select')
   const [sampledValue, setSampledValue] = useState<DisplayModeSample | null>(null)
   const previousDisplayModeRef = useRef<typeof displayMode | null>(null)
 
@@ -72,6 +72,9 @@ export function useMapViewportState() {
   const paintProvinceColor = useMapDataStore((s) => s.paintProvinceColor)
   const setPaintProvinceColor = useMapDataStore((s) => s.setPaintProvinceColor)
   const brushRadius = useMapDataStore((s) => s.brushRadius)
+  const paintSelection = useMapDataStore((s) => s.paintSelection)
+  const togglePaintSelectionColor = useMapDataStore((s) => s.togglePaintSelectionColor)
+  const clearPaintSelection = useMapDataStore((s) => s.clearPaintSelection)
 
   // — Hover state —
   const [hoveredProvince, setHoveredProvince] = useState<HoveredProvince | null>(null)
@@ -127,6 +130,8 @@ export function useMapViewportState() {
       if (activeTool === 'eyedrop') {
         setPaintProvinceColor(packColor(r, g, b))
         setActiveTool('brush')
+      } else if (activeTool === 'select-color') {
+        togglePaintSelectionColor(packColor(r, g, b))
       }
       return
     }
@@ -200,6 +205,7 @@ export function useMapViewportState() {
     setSelectedStrategicRegionId,
     setSelection,
     setPaintProvinceColor,
+    togglePaintSelectionColor,
     stateProvinceToStateId,
     strategicRegionProvinceToRegionId,
     toggleBmpGuid,
@@ -221,13 +227,18 @@ export function useMapViewportState() {
         r: (paintProvinceColor >> 16) & 0xff,
         g: (paintProvinceColor >> 8) & 0xff,
         b: paintProvinceColor & 0xff,
+        selectionColors: paintSelection.size > 0 ? paintSelection : null,
       }
     : null
+
+  const highlightColorsForCanvas = editorMode === 'paint'
+    ? Array.from(paintSelection)
+    : highlightColors
 
   return {
     src: provincesImageB64 ? `data:image/bmp;base64,${provincesImageB64}` : null,
     colorMap,
-    highlightColors,
+    highlightColors: highlightColorsForCanvas,
     validationWarningColors: validationHighlightColors.warningColors,
     validationErrorColors: validationHighlightColors.errorColors,
     activeTool,
@@ -246,6 +257,8 @@ export function useMapViewportState() {
     paintProvinceColor,
     brushRadius,
     brushPaintConfig,
+    paintSelection,
+    clearPaintSelection,
   }
 }
 

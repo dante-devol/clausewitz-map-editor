@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { makeStyles, makeStaticStyles, mergeClasses, tokens, Button, Slider, Spinner, Text, Tooltip, Skeleton, SkeletonItem, ProgressBar, shorthands } from '@fluentui/react-components'
-import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, PaintBucketRegular, PaintBucketFilled, DismissRegular } from '@fluentui/react-icons'
+import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, PaintBucketRegular, PaintBucketFilled, DismissRegular, CheckboxCheckedRegular, CheckboxCheckedFilled } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
 import { useMapCanvas } from '../hooks/useMapCanvas'
 import { useOverlayAssets } from '../hooks/useOverlayAssets'
@@ -269,6 +269,7 @@ export function MapCanvas(): JSX.Element {
     displayMode, modeValuesByMode, brushPaintConfig, brushRadius, paintProvinceColor,
     onActiveToolChange, onMapClick,
     hoverTooltipPosition, hoverTooltip, onHoverColorChange, onDisplayModeChange,
+    paintSelection, clearPaintSelection,
   } = useMapViewportState()
 
   const getPixelSnapshotRef = useRef<(() => { data: Uint8ClampedArray; width: number; height: number } | null) | null>(null)
@@ -308,7 +309,7 @@ export function MapCanvas(): JSX.Element {
 
   const rootClass = mergeClasses(
     styles.root,
-    activeTool !== 'select' ? styles.eyedropping : (dragging ? styles.dragging : undefined)
+    activeTool !== 'select' && activeTool !== 'brush' ? styles.eyedropping : (dragging ? styles.dragging : undefined)
   )
 
   return (
@@ -386,6 +387,31 @@ export function MapCanvas(): JSX.Element {
               disabled={isPaintMode ? !imageLoaded : !eyedropEnabled}
             />
           </Tooltip>
+          {isPaintMode && (
+            <>
+              <Tooltip content={t('paintPanel.selectColor')} relationship="label">
+                <Button
+                  appearance={activeTool === 'select-color' ? 'primary' : 'subtle'}
+                  size="small"
+                  icon={activeTool === 'select-color' ? <CheckboxCheckedFilled /> : <CheckboxCheckedRegular />}
+                  onClick={() => onActiveToolChange?.(activeTool === 'select-color' ? 'brush' : 'select-color')}
+                  disabled={!imageLoaded}
+                />
+              </Tooltip>
+              {paintSelection.size > 0 && (
+                <Tooltip content={t('paintPanel.clearSelection')} relationship="label">
+                  <Button
+                    appearance="subtle"
+                    size="small"
+                    icon={<DismissRegular />}
+                    onClick={clearPaintSelection}
+                  >
+                    <Text size={200}>{paintSelection.size}</Text>
+                  </Button>
+                </Tooltip>
+              )}
+            </>
+          )}
           {!isPaintMode && (
             <>
               <div

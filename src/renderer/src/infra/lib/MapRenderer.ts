@@ -761,7 +761,8 @@ export class MapRenderer {
   paintBrush(
     imgCenterX: number, imgCenterY: number,
     radius: number,
-    targetR: number, targetG: number, targetB: number
+    targetR: number, targetG: number, targetB: number,
+    selectionColors?: Set<number> | null
   ): { pixels: BmpPixelStrokeDelta[]; affectedIds: Set<number> } | null {
     const { gl } = this
     const index = this.provinceIndex
@@ -798,6 +799,7 @@ export class MapRenderer {
         const oldG = pixels[byteOff + 1]
         const oldB = pixels[byteOff + 2]
 
+        if (selectionColors && !selectionColors.has((oldR << 16) | (oldG << 8) | oldB)) continue
         if (oldR === targetR && oldG === targetG && oldB === targetB) continue
         if (pixels[byteOff + 3] === 0) continue
 

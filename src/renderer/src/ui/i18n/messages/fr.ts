@@ -290,6 +290,8 @@ export const frMessages: Record<MessageKey, string> = {
   'mode.strategicRegions': 'Regions strat.',
   'mode.paint': 'Peinture',
   'paintPanel.brushSize': 'Taille du pinceau',
+  'paintPanel.selectColor': 'Sélectionner une couleur',
+  'paintPanel.clearSelection': 'Effacer la sélection',
   'paintPanel.noProvince': 'Utilisez la pipette pour selectionner',
   'paintPanel.paintingAs': 'Peindre en tant que',
   'paintPanel.exportBmp': 'Exporter BMP de provinces',

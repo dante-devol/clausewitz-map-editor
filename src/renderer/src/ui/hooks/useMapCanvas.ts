@@ -35,6 +35,7 @@ export interface BrushPaintConfig {
   r: number
   g: number
   b: number
+  selectionColors?: Set<number> | null
 }
 
 export interface UseMapCanvasProps {
@@ -426,7 +427,7 @@ export function useMapCanvas({
 
     let anyChange = false
     for (const pos of positions) {
-      const result = renderer.paintBrush(pos.x, pos.y, cfg.radius, cfg.r, cfg.g, cfg.b)
+      const result = renderer.paintBrush(pos.x, pos.y, cfg.radius, cfg.r, cfg.g, cfg.b, cfg.selectionColors)
       if (!result || result.pixels.length === 0) continue
       strokePixelsRef.current.push(...result.pixels)
       for (const id of result.affectedIds) strokeAffectedIdsRef.current.add(id)
