@@ -28,15 +28,19 @@ function serialize(r: StrategicRegionDefinition): string {
   return lines.join('\n')
 }
 
+function formatFloat(n: number): string {
+  return Number.isInteger(n) ? `${n}.0` : String(n)
+}
+
 function serializePeriod(p: WeatherPeriod, lines: string[]): void {
   lines.push('\t\tperiod = {')
-  lines.push(`\t\t\tbetween = { ${p.between[0]} ${p.between[1]} }`)
-  lines.push(`\t\t\ttemperature = { ${p.temperature[0]} ${p.temperature[1]} }`)
+  lines.push(`\t\t\tbetween = { ${formatFloat(p.between[0])} ${formatFloat(p.between[1])} }`)
+  lines.push(`\t\t\ttemperature = { ${formatFloat(p.temperature[0])} ${formatFloat(p.temperature[1])} }`)
   for (const [key, weight] of Object.entries(p.weatherWeights)) {
-    lines.push(`\t\t\t${key} = ${weight}`)
+    lines.push(`\t\t\t${key} = ${formatFloat(weight)}`)
   }
   if (p.minSnowLevel !== undefined) {
-    lines.push(`\t\t\tmin_snow_level = ${p.minSnowLevel}`)
+    lines.push(`\t\t\tmin_snow_level = ${formatFloat(p.minSnowLevel)}`)
   }
   lines.push('\t\t}')
 }
