@@ -25,6 +25,7 @@ export const frMessages: Record<MessageKey, string> = {
   'shell.nav.settings': 'Parametres',
   'shell.theme.light': 'Mode clair',
   'shell.theme.dark': 'Mode sombre',
+  'shell.nav.back': 'Retour a la selection de projet',
   'settings.title': 'Parametres',
   'settings.language.title': 'Langue',
   'settings.language.description': "Choisissez la langue d'affichage de l'application.",

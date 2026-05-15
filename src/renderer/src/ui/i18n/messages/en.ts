@@ -23,6 +23,7 @@ export const enMessages = {
   'shell.nav.settings': 'Settings',
   'shell.theme.light': 'Light mode',
   'shell.theme.dark': 'Dark mode',
+  'shell.nav.back': 'Back to project selection',
   'settings.title': 'Settings',
   'settings.language.title': 'Language',
   'settings.language.description': 'Choose the application display language.',

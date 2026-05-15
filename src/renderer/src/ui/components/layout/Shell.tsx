@@ -6,6 +6,7 @@ import {
   Tooltip
 } from '@fluentui/react-components'
 import {
+  ArrowLeftRegular,
   MapRegular,
   SettingsRegular,
   WeatherMoonRegular,
@@ -65,6 +66,7 @@ interface ShellProps {
   theme: Theme
   onViewChange: (view: View) => void
   onToggleTheme: () => void
+  onBack: () => void
   children: React.ReactNode
 }
 
@@ -73,7 +75,7 @@ const NAV_ITEMS: { view: View; icon: React.ReactNode; labelKey: 'shell.nav.map' 
   { view: 'settings', icon: <SettingsRegular />, labelKey: 'shell.nav.settings' }
 ]
 
-export function Shell({ activeView, theme, onViewChange, onToggleTheme, children }: ShellProps) {
+export function Shell({ activeView, theme, onViewChange, onToggleTheme, onBack, children }: ShellProps) {
   const styles = useStyles()
   const { t } = useI18n()
 
@@ -91,6 +93,9 @@ export function Shell({ activeView, theme, onViewChange, onToggleTheme, children
         ))}
 
         <div className={styles.sidebarBottom}>
+          <Tooltip content={t('shell.nav.back')} relationship="label" positioning="after">
+            <Button appearance="subtle" icon={<ArrowLeftRegular />} onClick={onBack} />
+          </Tooltip>
           <Tooltip
             content={theme === 'dark' ? t('shell.theme.light') : t('shell.theme.dark')}
             relationship="label"

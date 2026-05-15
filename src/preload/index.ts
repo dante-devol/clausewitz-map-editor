@@ -55,7 +55,8 @@ const api: ApiContract = {
     reset: () => ipcRenderer.invoke(channels.settings.reset)
   },
   window: {
-    enterEditor: () => ipcRenderer.invoke(channels.window.enterEditor)
+    enterEditor: () => ipcRenderer.invoke(channels.window.enterEditor),
+    exitEditor: () => ipcRenderer.invoke(channels.window.exitEditor)
   }
 }
 

@@ -43,6 +43,7 @@ export const channels = {
     reset: 'settings:reset'
   },
   window: {
-    enterEditor: 'window:enterEditor'
+    enterEditor: 'window:enterEditor',
+    exitEditor: 'window:exitEditor'
   }
 } as const

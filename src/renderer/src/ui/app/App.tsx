@@ -6,6 +6,7 @@ import { SettingsView } from '../views/SettingsView'
 import { ProjectSelectionView } from '../views/ProjectSelectionView'
 import { DebugPanel } from '../components/DebugPanel'
 import { useAppState } from '../hooks/useAppState'
+import { useCoreStore } from '../../infra/store/coreStore'
 import { useDisplayModeConfig } from '../hooks/useDisplayModeConfig'
 import { useProjectSelection } from '../hooks/useProjectSelection'
 import { useMapLoader } from '../hooks/useMapLoader'
@@ -19,6 +20,12 @@ const VIEWS = {
 
 function App(): JSX.Element {
   const { theme, activeView, setActiveView, toggleTheme } = useAppState()
+  const sessionCleared = useCoreStore((s) => s.sessionCleared)
+
+  function handleBack() {
+    sessionCleared()
+    void window.api.window.exitEditor()
+  }
   const {
     currentProject, recentProjects, gamePath, gamePathValid, gameVerification,
     pendingProject, selectProject, browseForProject, browseForGamePath,
@@ -71,6 +78,7 @@ function App(): JSX.Element {
         theme={theme}
         onViewChange={setActiveView}
         onToggleTheme={toggleTheme}
+        onBack={handleBack}
       >
         {VIEWS[activeView]}
       </Shell>

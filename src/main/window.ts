@@ -54,3 +54,11 @@ export function enterEditor(): void {
   mainWindow.setSize(1280, 800, true)
   mainWindow.center()
 }
+
+// Transitions the window back to project-selection size.
+export function exitEditor(): void {
+  if (!mainWindow) return
+  mainWindow.unmaximize()
+  mainWindow.setSize(480, 600)
+  mainWindow.setResizable(false)
+}

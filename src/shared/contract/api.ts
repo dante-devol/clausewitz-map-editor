@@ -145,5 +145,6 @@ export interface ApiContract {
   }
   window: {
     enterEditor: () => Promise<void>
+    exitEditor: () => Promise<void>
   }
 }
