@@ -46,6 +46,14 @@ export function useMapViewportState() {
   const [activeTool, setActiveTool] = useState<'select' | 'eyedrop' | 'bucket' | 'brush' | 'select-color'>('select')
   const [sampledValue, setSampledValue] = useState<DisplayModeSample | null>(null)
   const previousDisplayModeRef = useRef<typeof displayMode | null>(null)
+  const previousEditorModeRef = useRef<typeof editorMode>(editorMode)
+
+  // Reset tool when editor mode changes (e.g. switching from paint to provinces)
+  useEffect(() => {
+    if (previousEditorModeRef.current === editorMode) return
+    previousEditorModeRef.current = editorMode
+    setActiveTool(editorMode === 'paint' ? 'brush' : 'select')
+  }, [editorMode])
 
   // Reset tool when display mode changes externally (e.g. overlay panel)
   useEffect(() => {
