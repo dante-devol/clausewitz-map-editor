@@ -1,6 +1,6 @@
-# HOI4 Map Editor
+# Clausewitz Map Editor
 
-A desktop editor for **Hearts of Iron IV** map mods. It opens a HOI4 mod (or the base
+A desktop editor for **Clausewitz** game map mods. As of presently, it opens a HOI4 mod (or the base
 game files), reads the map-related game data, and lets you inspect and edit it against a
 live, hardware-accelerated view of the province bitmap.
 
