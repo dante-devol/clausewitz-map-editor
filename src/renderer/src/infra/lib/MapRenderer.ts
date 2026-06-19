@@ -758,6 +758,49 @@ export class MapRenderer {
   // Paint pixels within a circular brush at image-space coordinates.
   // Returns per-pixel before/after deltas (for undo) and the set of province IDs whose
   // pixels were overwritten. Caller must call render() afterwards to display the change.
+  private registerColorInPalette(r: number, g: number, b: number, id: number): void {
+    const { gl } = this
+    const neededHeight = Math.ceil((id + 1) / 256)
+
+    if (neededHeight > this.paletteHeight) {
+      const expand = (old: Uint8Array): Uint8Array => {
+        const next = new Uint8Array(256 * neededHeight * 4)
+        next.set(old)
+        return next
+      }
+      this.paletteData           = expand(this.paletteData!)
+      this.selectionData         = expand(this.selectionData!)
+      this.validationWarningData = expand(this.validationWarningData!)
+      this.validationErrorData   = expand(this.validationErrorData!)
+      this.paletteHeight = neededHeight
+
+      const reupload = (existing: WebGLTexture | null, data: Uint8Array): WebGLTexture => {
+        if (existing) gl.deleteTexture(existing)
+        const tex = gl.createTexture()!
+        initializeMaskTexture(gl, tex, data, neededHeight)
+        return tex
+      }
+      // Write color into palette before reuploading so it's included in the full upload.
+      const base = id * 4
+      this.paletteData[base] = r; this.paletteData[base + 1] = g
+      this.paletteData[base + 2] = b; this.paletteData[base + 3] = 255
+
+      this.paletteTexture           = reupload(this.paletteTexture, this.paletteData)
+      this.selectionTexture         = reupload(this.selectionTexture, this.selectionData)
+      this.validationWarningTexture = reupload(this.validationWarningTexture, this.validationWarningData)
+      this.validationErrorTexture   = reupload(this.validationErrorTexture, this.validationErrorData)
+    } else {
+      // Palette is already large enough — patch just the one texel.
+      const base = id * 4
+      this.paletteData![base] = r; this.paletteData![base + 1] = g
+      this.paletteData![base + 2] = b; this.paletteData![base + 3] = 255
+      const col = id % 256
+      const row = Math.floor(id / 256)
+      gl.bindTexture(gl.TEXTURE_2D, this.paletteTexture)
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, col, row, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([r, g, b, 255]))
+    }
+  }
+
   paintBrush(
     imgCenterX: number, imgCenterY: number,
     radius: number,
@@ -770,8 +813,13 @@ export class MapRenderer {
     if (!index || !pixels || !this.idTexture) return null
 
     const packed = (targetR << 16) | (targetG << 8) | targetB
-    const targetId = index.colorToId.get(packed)
-    if (targetId === undefined) return null
+    let targetId = index.colorToId.get(packed)
+    if (targetId === undefined) {
+      const maxId = index.colorToId.size > 0 ? Math.max(...index.colorToId.values()) : 0
+      targetId = maxId + 1
+      index.colorToId.set(packed, targetId)
+      this.registerColorInPalette(targetR, targetG, targetB, targetId)
+    }
 
     const w = this.pixelDataWidth
     const h = this._imageSize.height

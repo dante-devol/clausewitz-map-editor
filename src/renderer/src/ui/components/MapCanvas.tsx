@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { makeStyles, makeStaticStyles, mergeClasses, tokens, Button, Slider, Spinner, Text, Tooltip, Skeleton, SkeletonItem, ProgressBar, shorthands } from '@fluentui/react-components'
-import { ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular, EyedropperRegular, EyedropperFilled, PaintBucketRegular, PaintBucketFilled, DismissRegular } from '@fluentui/react-icons'
+import {
+  ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular,
+  EyedropperRegular, EyedropperFilled, PaintBucketRegular, PaintBucketFilled,
+  DismissRegular,
+  WandRegular, WandFilled, PenRegular, PenFilled,
+  AddRegular, AddCircleRegular,
+} from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
 import { useMapCanvas } from '../hooks/useMapCanvas'
 import { useOverlayAssets } from '../hooks/useOverlayAssets'
@@ -9,6 +15,8 @@ import { DisplayModeControl } from './DisplayModeControl'
 import { useNotificationStore } from '../../infra/store/notificationStore'
 import { notificationService } from '../../infra/services/notificationService'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
+import { useMapQueryApi } from '../../bridge/MapQueryProvider'
+import { unpackColor } from '../../../../shared/mapDataTypes'
 import type { BmpPixelStrokeDelta } from '../../../../shared/provinceEditing'
 
 const ZOOM_STEP = 1.25
@@ -70,7 +78,8 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'stretch',
-    gap: tokens.spacingVerticalXS
+    gap: tokens.spacingVerticalXS,
+    zIndex: 4,
   },
   topLeftNotifications: {
     position: 'absolute',
@@ -182,7 +191,7 @@ const useStyles = makeStyles({
     position: 'absolute',
     inset: 0,
     pointerEvents: 'none',
-    zIndex: 5,
+    zIndex: 1,
   },
   brushSizeRow: {
     display: 'flex',
@@ -195,7 +204,86 @@ const useStyles = makeStyles({
     textAlign: 'right',
     fontVariantNumeric: 'tabular-nums',
   },
+
+  // ── Paint color widget ───────────────────────────────────────────────────
+  paintColorSwatch: {
+    width: '36px',
+    height: '36px',
+    borderRadius: tokens.borderRadiusMedium,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    flexShrink: 0,
+    backgroundColor: tokens.colorNeutralBackground3,
+  },
+  paintColorTextCol: {
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    flex: 1,
+    minWidth: 0,
+    gap: '2px',
+  },
+  paintColorIdText: {
+    fontWeight: 600,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  paintColorHexText: {
+    fontFamily: 'monospace',
+    color: tokens.colorNeutralForeground3,
+  },
+  paintColorButtonCol: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: '1px',
+    flexShrink: 0,
+  },
+  paintColorButtonRow: {
+    display: 'flex',
+    flexDirection: 'row',
+    gap: '1px',
+  },
+  paintColorActionButton: {
+    minWidth: '20px',
+    width: '20px',
+    height: '20px',
+    padding: '1px',
+    '& svg': { fontSize: '14px' },
+  },
+
+  // ── Paint tool widget ────────────────────────────────────────────────────
+  paintToolWidget: {
+    alignItems: 'flex-start',
+  },
+  widgetDivider: {
+    width: '1px',
+    alignSelf: 'stretch',
+    backgroundColor: tokens.colorNeutralStroke2,
+    flexShrink: 0,
+  },
+  selectionEmpty: {
+    color: tokens.colorNeutralForeground3,
+  },
 })
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function generateUniqueColor(isDraftColor: (packed: number) => boolean): number {
+  for (let i = 0; i < 1000; i++) {
+    const r = Math.floor(Math.random() * 255) + 1
+    const g = Math.floor(Math.random() * 256)
+    const b = Math.floor(Math.random() * 256)
+    const packed = (r << 16) | (g << 8) | b
+    if (!isDraftColor(packed)) return packed
+  }
+  for (let packed = 1; packed <= 0xffffff; packed++) {
+    if (!isDraftColor(packed)) return packed
+  }
+  throw new Error('No unique province color available')
+}
+
+// ─── Notification tray ────────────────────────────────────────────────────────
 
 function NotificationTray(): JSX.Element | null {
   useStaticStyles()
@@ -256,7 +344,10 @@ function NotificationTray(): JSX.Element | null {
 export function MapCanvas(): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
+  const query = useMapQueryApi()
   const { canvasOverlays } = useOverlayAssets()
+
+  // ── Store subscriptions ──────────────────────────────────────────────────
   const editorMode = useMapDataStore((s) => s.editorMode)
   const projectId = useMapDataStore((s) => s.projectId)
   const addBmpStroke = useMapDataStore((s) => s.addBmpStroke)
@@ -264,6 +355,21 @@ export function MapCanvas(): JSX.Element {
   const pendingRevertPixels = useMapDataStore((s) => s.pendingRevertPixels)
   const consumePendingRevert = useMapDataStore((s) => s.consumePendingRevert)
   const paintProvinceColor = useMapDataStore((s) => s.paintProvinceColor)
+  const setPaintProvinceColor = useMapDataStore((s) => s.setPaintProvinceColor)
+  const paintActiveTool = useMapDataStore((s) => s.paintActiveTool)
+  const setPaintActiveTool = useMapDataStore((s) => s.setPaintActiveTool)
+  const paintSelection = useMapDataStore((s) => s.paintSelection)
+  const clearPaintSelection = useMapDataStore((s) => s.clearPaintSelection)
+  const originalDefinitions = useMapDataStore((s) => s.originalDefinitions)
+  const pendingNewProvinces = useMapDataStore((s) => s.pendingNewProvinces)
+  const syncBmpOnlyEntries = useMapDataStore((s) => s.syncBmpOnlyEntries)
+  const assignBmpProvince = useMapDataStore((s) => s.assignBmpProvince)
+  const revertNewProvince = useMapDataStore((s) => s.revertNewProvince)
+  const removeBmpOnlyEntry = useMapDataStore((s) => s.removeBmpOnlyEntry)
+  const pendingAutoGenerated = useMapDataStore((s) => s.pendingAutoGenerated)
+  const setPendingAutoGenerated = useMapDataStore((s) => s.setPendingAutoGenerated)
+  const pendingBmpStrokes = useMapDataStore((s) => s.pendingBmpStrokes)
+
   const {
     src, colorMap, highlightColors, validationWarningColors, validationErrorColors,
     activeTool, eyedropEnabled, bucketEnabled, sampledValueColor, sampledValueLabel,
@@ -271,6 +377,56 @@ export function MapCanvas(): JSX.Element {
     onActiveToolChange, onMapClick,
     hoverTooltipPosition, hoverTooltip, onHoverColorChange, onDisplayModeChange,
   } = useMapViewportState()
+
+  // ── Paint: pending auto-generated cleanup ────────────────────────────────
+
+  const cleanupPendingAuto = useCallback(() => {
+    const pending = useMapDataStore.getState().pendingAutoGenerated
+    if (!pending) return
+    if (pending.type === 'province') revertNewProvince(pending.guid)
+    removeBmpOnlyEntry(pending.color)
+    setPendingAutoGenerated(null)
+  }, [revertNewProvince, removeBmpOnlyEntry, setPendingAutoGenerated])
+
+  // Eyedropper changes paintProvinceColor away from pending → cleanup
+  useEffect(() => {
+    const pending = useMapDataStore.getState().pendingAutoGenerated
+    if (!pending) return
+    if (paintProvinceColor !== pending.color) cleanupPendingAuto()
+  }, [paintProvinceColor, cleanupPendingAuto])
+
+  // Stroke landed with pending color → it's in use, stop tracking
+  useEffect(() => {
+    if (!pendingAutoGenerated) return
+    if (pendingBmpStrokes.some((s) => s.targetProvinceColor === pendingAutoGenerated.color)) {
+      setPendingAutoGenerated(null)
+    }
+  }, [pendingBmpStrokes, pendingAutoGenerated, setPendingAutoGenerated])
+
+  // ── Paint: new province handlers ─────────────────────────────────────────
+
+  const handleNewProvince = useCallback(() => {
+    cleanupPendingAuto()
+    const color = generateUniqueColor((packed) => !!query.getDraftProvinceByColor(packed))
+    const maxExisting = originalDefinitions.size > 0 ? Math.max(...originalDefinitions.keys()) : 0
+    const nextId = maxExisting + pendingNewProvinces.size + 1
+    syncBmpOnlyEntries([color])
+    const guid = useMapDataStore.getState().bmpOnlyByColor.get(color)!
+    assignBmpProvince(guid, { type: 'register', assignedId: nextId })
+    setPendingAutoGenerated({ guid, color, type: 'province' })
+    setPaintProvinceColor(color)
+  }, [assignBmpProvince, cleanupPendingAuto, originalDefinitions, pendingNewProvinces, query, setPaintProvinceColor, setPendingAutoGenerated, syncBmpOnlyEntries])
+
+  const handleNewUnregistered = useCallback(() => {
+    cleanupPendingAuto()
+    const color = generateUniqueColor((packed) => !!query.getDraftProvinceByColor(packed))
+    syncBmpOnlyEntries([color])
+    const guid = useMapDataStore.getState().bmpOnlyByColor.get(color)!
+    setPendingAutoGenerated({ guid, color, type: 'unregistered' })
+    setPaintProvinceColor(color)
+  }, [cleanupPendingAuto, query, setPaintProvinceColor, setPendingAutoGenerated, syncBmpOnlyEntries])
+
+  // ── Brush stroke completion ──────────────────────────────────────────────
 
   const getPixelSnapshotRef = useRef<(() => { data: Uint8ClampedArray; width: number; height: number } | null) | null>(null)
 
@@ -305,7 +461,26 @@ export function MapCanvas(): JSX.Element {
     consumePendingRevert()
   }, [pendingRevertPixels, revertBrushStroke, consumePendingRevert])
 
+  // ── Derived paint display values ─────────────────────────────────────────
+
   const isPaintMode = editorMode === 'paint'
+
+  const swatchRgb = paintProvinceColor !== null ? unpackColor(paintProvinceColor) : null
+  const swatchStyle = swatchRgb
+    ? { backgroundColor: `rgb(${swatchRgb.r},${swatchRgb.g},${swatchRgb.b})` }
+    : undefined
+
+  const draftProvince = isPaintMode && paintProvinceColor !== null
+    ? query.getDraftProvinceByColor(paintProvinceColor)
+    : undefined
+  const provinceIdLabel = draftProvince?.provinceId != null
+    ? `Province ${draftProvince.provinceId}`
+    : draftProvince
+      ? t('paintPanel.unregistered')
+      : t('paintPanel.noProvince')
+  const colorHexLabel = paintProvinceColor !== null
+    ? `#${paintProvinceColor.toString(16).padStart(6, '0').toUpperCase()}`
+    : '—'
 
   const rootClass = mergeClasses(
     styles.root,
@@ -364,21 +539,100 @@ export function MapCanvas(): JSX.Element {
       </div>
       <NotificationTray />
       <div className={styles.controls} onMouseDown={(e) => e.stopPropagation()}>
+
+        {/* ── Paint: color widget ── */}
         {isPaintMode && (
           <div className={styles.widget}>
-            <div className={styles.brushSizeRow}>
-              <Text size={200}>{t('paintPanel.brushSize')}</Text>
-              <Slider
-                min={1} max={30} step={1}
-                value={brushRadius}
-                onChange={(_, d) => setBrushRadius(d.value)}
-                style={{ flex: 1, minWidth: '80px' }}
-                size="small"
-              />
-              <Text size={200} className={styles.brushSizeLabel}>{brushRadius}</Text>
+            <div className={styles.paintColorSwatch} style={swatchStyle} />
+            <div className={styles.paintColorTextCol}>
+              <Text size={200} className={styles.paintColorIdText}>{provinceIdLabel}</Text>
+              <Text size={200} className={styles.paintColorHexText}>{colorHexLabel}</Text>
+            </div>
+            <div className={styles.paintColorButtonCol}>
+              <Tooltip content={t('paintPanel.tools.eyedrop')} relationship="label">
+                <Button
+                  appearance={paintActiveTool === 'eyedrop' ? 'primary' : 'subtle'}
+                  size="small"
+                  className={styles.paintColorActionButton}
+                  icon={paintActiveTool === 'eyedrop' ? <EyedropperFilled /> : <EyedropperRegular />}
+                  onClick={() => setPaintActiveTool('eyedrop')}
+                />
+              </Tooltip>
+              <div className={styles.paintColorButtonRow}>
+                <Tooltip content={t('paintPanel.newProvince')} relationship="label">
+                  <Button
+                    appearance="subtle"
+                    size="small"
+                    className={styles.paintColorActionButton}
+                    icon={<AddCircleRegular />}
+                    onClick={handleNewProvince}
+                  />
+                </Tooltip>
+                <Tooltip content={t('paintPanel.newUnregistered')} relationship="label">
+                  <Button
+                    appearance="subtle"
+                    size="small"
+                    className={styles.paintColorActionButton}
+                    icon={<AddRegular />}
+                    onClick={handleNewUnregistered}
+                  />
+                </Tooltip>
+              </div>
             </div>
           </div>
         )}
+
+        {/* ── Paint: tool widget ── */}
+        {isPaintMode && (
+          <div className={mergeClasses(styles.widget, styles.paintToolWidget)}>
+            <Tooltip content={t('paintPanel.tools.wand')} relationship="label">
+              <Button
+                appearance={paintActiveTool === 'select-color' ? 'primary' : 'subtle'}
+                size="small"
+                icon={paintActiveTool === 'select-color' ? <WandFilled /> : <WandRegular />}
+                onClick={() => setPaintActiveTool('select-color')}
+              />
+            </Tooltip>
+            <Tooltip content={t('paintPanel.tools.brush')} relationship="label">
+              <Button
+                appearance={paintActiveTool === 'brush' ? 'primary' : 'subtle'}
+                size="small"
+                icon={paintActiveTool === 'brush' ? <PenFilled /> : <PenRegular />}
+                onClick={() => setPaintActiveTool('brush')}
+              />
+            </Tooltip>
+            <div className={styles.widgetDivider} />
+            {paintActiveTool !== 'select-color' ? (
+              <div className={styles.brushSizeRow}>
+                <Slider
+                  min={1} max={30} step={1}
+                  value={brushRadius}
+                  onChange={(_, d) => setBrushRadius(d.value)}
+                  style={{ flex: 1, minWidth: '80px' }}
+                  size="small"
+                />
+                <Text size={200} className={styles.brushSizeLabel}>{brushRadius}</Text>
+              </div>
+            ) : (
+              paintSelection.size === 0 ? (
+                <Text size={100} className={styles.selectionEmpty}>{t('paintPanel.noSelection')}</Text>
+              ) : (
+                <Tooltip content={t('paintPanel.clearSelection', { count: paintSelection.size })} relationship="label">
+                  <Button
+                    appearance="subtle"
+                    size="small"
+                    icon={<DismissRegular />}
+                    onClick={clearPaintSelection}
+                  >
+                    <Text size={200}>{paintSelection.size}</Text>
+                  </Button>
+                </Tooltip>
+              )
+            )}
+          </div>
+        )}
+
+        {/* ── Non-paint: eyedrop + bucket widget ── */}
         {!isPaintMode && (
           <div className={styles.widget}>
             <Tooltip content={t('mapCanvas.eyedrop')} relationship="label">
@@ -408,6 +662,8 @@ export function MapCanvas(): JSX.Element {
             </Tooltip>
           </div>
         )}
+
+        {/* ── Zoom widget ── */}
         <div className={styles.widget}>
           <Button appearance="subtle" size="small" icon={<ZoomOutRegular />} onClick={() => zoomBy(1 / ZOOM_STEP)} />
           <Text size={200} className={styles.zoomLabel}>{Math.round(displayScale * 100)}%</Text>

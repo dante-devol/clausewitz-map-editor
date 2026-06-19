@@ -23,6 +23,7 @@ export interface ProvinceEditSlice {
   assignBmpProvince: (guid: string, action: BmpAssignmentAction) => void
   revertBmpReplacement: (provinceId: number) => void
   revertNewProvince: (guid: string) => void
+  removeBmpOnlyEntry: (color: number) => void
   clearSavedChanges: () => void
   clearPendingChanges: () => void
 }
@@ -123,6 +124,17 @@ export const createProvinceEditSlice: StateCreator<ProvinceEditSlice, [], [], Pr
     const bmpReplacements = new Map(state.bmpReplacements)
     bmpReplacements.delete(provinceId)
     return { bmpReplacements }
+  }),
+
+  removeBmpOnlyEntry: (color) => set((state) => {
+    const bmpOnlyByColor = new Map(state.bmpOnlyByColor)
+    const guid = bmpOnlyByColor.get(color)
+    if (!guid) return {}
+    bmpOnlyByColor.delete(color)
+    const bmpOnlyEntries = state.bmpOnlyEntries.filter((e) => e.color !== color)
+    const pendingBmpOnlyEdits = new Map(state.pendingBmpOnlyEdits)
+    pendingBmpOnlyEdits.delete(guid)
+    return { bmpOnlyByColor, bmpOnlyEntries, pendingBmpOnlyEdits }
   }),
 
   revertNewProvince: (guid) => set((state) => {
