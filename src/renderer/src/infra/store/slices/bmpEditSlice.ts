@@ -60,11 +60,18 @@ export const createBmpEditSlice: StateCreator<BmpEditSlice, [], [], BmpEditSlice
     pendingBmpStrokes: [...state.pendingBmpStrokes, stroke]
   })),
 
+  // Only the most recently painted stroke can be reverted. A stroke's
+  // recorded "old" colors are only valid immediately after it was painted —
+  // if a later stroke has since repainted some of the same pixels, restoring
+  // an older stroke's colors would overwrite that later work with stale data.
+  // Reverting strictly from the top of the stack keeps every revert correct,
+  // and repeating it walks back through strokes one at a time.
   revertBmpStroke: (strokeId) => set((state) => {
-    const stroke = state.pendingBmpStrokes.find((s) => s.id === strokeId)
+    const stroke = state.pendingBmpStrokes.at(-1)
+    if (!stroke || stroke.id !== strokeId) return {}
     return {
-      pendingBmpStrokes: state.pendingBmpStrokes.filter((s) => s.id !== strokeId),
-      pendingRevertPixels: stroke ? stroke.pixels : null,
+      pendingBmpStrokes: state.pendingBmpStrokes.slice(0, -1),
+      pendingRevertPixels: stroke.pixels,
     }
   }),
 

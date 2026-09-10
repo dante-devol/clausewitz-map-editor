@@ -151,10 +151,14 @@ export function PaintPanel(): JSX.Element {
               <Text size={200} className={styles.empty}>{t('paintPanel.changes.empty')}</Text>
             ) : (
               <div className={styles.changeList}>
-                {[...pendingBmpStrokes].reverse().map((stroke) => (
+                {/* Newest first. Only the newest stroke (index 0 here) can be
+                    reverted without risk of undoing pixels a later stroke has
+                    since repainted; see revertBmpStroke. */}
+                {[...pendingBmpStrokes].reverse().map((stroke, index) => (
                   <StrokeRow
                     key={stroke.id}
                     stroke={stroke}
+                    canRevert={index === 0}
                     onRevert={() => revertBmpStroke(stroke.id)}
                   />
                 ))}
@@ -187,7 +191,15 @@ export function PaintPanel(): JSX.Element {
   )
 }
 
-function StrokeRow({ stroke, onRevert }: { stroke: BmpPixelStroke; onRevert: () => void }): JSX.Element {
+function StrokeRow({
+  stroke,
+  canRevert,
+  onRevert,
+}: {
+  stroke: BmpPixelStroke
+  canRevert: boolean
+  onRevert: () => void
+}): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
   const { r, g, b } = unpackColor(stroke.targetProvinceColor)
@@ -198,9 +210,11 @@ function StrokeRow({ stroke, onRevert }: { stroke: BmpPixelStroke; onRevert: () 
       <Text size={200} style={{ flex: 1, minWidth: 0 }}>
         {t('paintPanel.changes.stroke', { count: stroke.pixelCount })}
       </Text>
-      <Tooltip content={t('paintPanel.changes.revert')} relationship="label">
-        <Button appearance="subtle" size="small" icon={<DismissRegular />} onClick={onRevert} />
-      </Tooltip>
+      {canRevert && (
+        <Tooltip content={t('paintPanel.changes.revert')} relationship="label">
+          <Button appearance="subtle" size="small" icon={<DismissRegular />} onClick={onRevert} />
+        </Tooltip>
+      )}
     </div>
   )
 }
