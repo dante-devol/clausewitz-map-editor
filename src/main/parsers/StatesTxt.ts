@@ -1,4 +1,3 @@
-import { readFileSync } from 'fs'
 import type {
   DateHistory,
   GenericEffect,
@@ -10,362 +9,193 @@ import type {
   StateResource,
   VictoryPoint
 } from '../../shared/mapDataTypes'
+import {
+  assignmentsOf,
+  bareNumbers,
+  blockOf,
+  firstAssignment,
+  numberOf,
+  parseScript,
+  scalarOf,
+  type ScriptAssignment,
+  type ScriptBlock
+} from './script/ScriptParser'
+import { numericAssignments } from './script/ScriptEditing'
 
 export class StatesTxt {
-  private readonly filePaths: string[]
-
-  constructor(filePaths: string[]) {
-    this.filePaths = filePaths
-  }
-
-  load(): StateDefinition[] {
-    const states = new Map<number, StateDefinition>()
-    for (const filePath of this.filePaths) {
-      const content = readFileSync(filePath, 'utf-8')
-      const parsed = StatesTxt.parse(content).map((s) => ({ ...s, sourcePath: filePath }))
-      mergeStates(states, parsed)
-    }
-    return [...states.values()].sort((a, b) => a.id - b.id)
-  }
-
   static parse(content: string): StateDefinition[] {
+    const doc = parseScript(content)
     const states: StateDefinition[] = []
-
-    for (const blockContent of parseTopLevelNamedBlocks(content, 'state')) {
-      const stateId = parseScalarNumber(blockContent, 'id')
-      const provinceIds = parseNumberListBlock(blockContent, 'provinces')
-      if (stateId === null || provinceIds.length === 0) continue
-
-      const historyBlockContent = parseBlockContent(blockContent, 'history')
-      const history: StateHistory = historyBlockContent
-        ? { ...parseHistoryDef(historyBlockContent), dateHistory: parseDateHistories(historyBlockContent) }
-        : { owner: undefined, coreOf: [], buildings: [], victoryPoints: [], effects: [], dateHistory: [] }
-
-      const resources = parseResources(blockContent)
-
-      const state: StateDefinition = {
-        id: stateId,
-        name: parseScalarString(blockContent, 'name') ?? '',
-        provinceIds,
-        manpower: parseScalarNumber(blockContent, 'manpower') ?? 0,
-        stateCategory: parseScalarString(blockContent, 'state_category') ?? '',
-        history
-      }
-
-      if (resources !== undefined) state.resources = resources
-      const isImpassable = parseScalarBool(blockContent, 'is_impassable')
-      if (isImpassable !== null) state.isImpassable = isImpassable
-      const localSupplies = parseScalarFloat(blockContent, 'local_supplies')
-      if (localSupplies !== null) state.localSupplies = localSupplies
-      const buildingsMaxLevelFactor = parseScalarFloat(blockContent, 'buildings_max_level_factor')
-      if (buildingsMaxLevelFactor !== null) state.buildingsMaxLevelFactor = buildingsMaxLevelFactor
-
-      states.push(state)
+    for (const entry of stateAssignments(doc.root)) {
+      const state = readState(entry.value as ScriptBlock, content)
+      if (state) states.push(state)
     }
-
     return states
   }
 }
 
-function mergeStates(target: Map<number, StateDefinition>, source: StateDefinition[]): void {
-  for (const state of source) {
-    target.set(state.id, state)
-  }
+// Top-level `state = { ... }` blocks.
+export function stateAssignments(root: ScriptBlock): ScriptAssignment[] {
+  return assignmentsOf(root, 'state').filter((entry) => entry.value.kind === 'block')
 }
 
-function parseHistoryDef(content: string): HistoryDef {
-  return {
-    owner: parseScalarString(content, 'owner') ?? undefined,
-    coreOf: parseCoreOf(content),
-    buildings: parseHistoryBuildings(content),
-    victoryPoints: parseVictoryPoints(content),
-    effects: parseGenericEffects(content)
-  }
+export function readStateId(block: ScriptBlock): number | null {
+  return numberOf(firstAssignment(block, 'id'))
 }
 
-const KNOWN_HISTORY_KEYS = new Set(['owner', 'core_of', 'add_core_of', 'victory_points', 'buildings'])
-const DATE_KEY_RE = /^\d{4}\.\d{1,2}\.\d{1,2}$/
+export function readState(block: ScriptBlock, source: string): StateDefinition | null {
+  const id = readStateId(block)
+  const provincesBlock = blockOf(firstAssignment(block, 'provinces'))
+  const provinceIds = provincesBlock ? bareNumbers(provincesBlock) : []
+  if (id === null || provinceIds.length === 0) return null
 
-function parseGenericEffects(content: string): GenericEffect[] {
-  const results: GenericEffect[] = []
-  let i = 0
+  const historyBlock = blockOf(firstAssignment(block, 'history'))
+  const history: StateHistory = historyBlock
+    ? readStateHistory(historyBlock, source)
+    : { owner: undefined, coreOf: [], buildings: [], victoryPoints: [], effects: [], dateHistory: [] }
 
-  while (i < content.length) {
-    const c = content[i]
-    if (isWhitespace(c)) { i++; continue }
-    if (c === '#') { i = skipComment(content, i); continue }
+  const state: StateDefinition = {
+    id,
+    name: scalarOf(firstAssignment(block, 'name')) ?? '',
+    provinceIds,
+    manpower: numberOf(firstAssignment(block, 'manpower')) ?? 0,
+    stateCategory: scalarOf(firstAssignment(block, 'state_category')) ?? '',
+    history
+  }
 
-    const keyStart = i
-    while (i < content.length && /[\w.]/.test(content[i])) i++
-    if (i === keyStart) { i++; continue }
-    const key = content.slice(keyStart, i)
+  const resources = readResources(block)
+  if (resources !== undefined) state.resources = resources
+  const impassable = scalarOf(firstAssignment(block, 'impassable'))
+  if (impassable === 'yes' || impassable === 'no') state.isImpassable = impassable === 'yes'
+  const localSupplies = numberOf(firstAssignment(block, 'local_supplies'))
+  if (localSupplies !== null) state.localSupplies = localSupplies
+  const buildingsMaxLevelFactor = numberOf(firstAssignment(block, 'buildings_max_level_factor'))
+  if (buildingsMaxLevelFactor !== null) state.buildingsMaxLevelFactor = buildingsMaxLevelFactor
 
-    while (i < content.length && (content[i] === ' ' || content[i] === '\t')) i++
-    if (content[i] !== '=') { i = skipLine(content, i); continue }
-    i++ // consume '='
-    while (i < content.length && (content[i] === ' ' || content[i] === '\t')) i++
+  return state
+}
 
-    let value: string
-    if (content[i] === '{') {
-      const block = extractBlock(content, i)
-      if (!block) { i++; continue }
-      value = content.slice(i, block.end)
-      i = block.end
-    } else if (content[i] === '"') {
-      const closeIdx = content.indexOf('"', i + 1)
-      if (closeIdx < 0) { i = skipLine(content, i); continue }
-      value = content.slice(i + 1, closeIdx) // strip quotes; re-added on write
-      i = closeIdx + 1
-    } else {
-      const m = content.slice(i).match(/^([^\s#\n]+)/)
-      if (!m) { i = skipLine(content, i); continue }
-      value = m[1]
-      i += m[0].length
+export function readResources(block: ScriptBlock): StateResource[] | undefined {
+  const resourcesBlock = blockOf(firstAssignment(block, 'resources'))
+  if (!resourcesBlock) return undefined
+  const resources = numericAssignments(resourcesBlock).map(({ key, value }) => ({ type: key, amount: value }))
+  return resources.length > 0 ? resources : undefined
+}
+
+// ─── History ────────────────────────────────────────────────────────────────
+
+const DATE_KEY_RE = /^(\d+)\.(\d+)\.(\d+)$/
+
+export interface DatedHistoryNode {
+  node: ScriptAssignment
+  date: DateHistory['date']
+}
+
+// The direct children of a history (or dated history) block, by role. Only the
+// top level is considered: entries inside dated blocks or `if` blocks belong to
+// those blocks and are never hoisted.
+export interface HistoryParts {
+  owner: ScriptAssignment[]
+  cores: ScriptAssignment[]
+  victoryPoints: { node: ScriptAssignment; victoryPoint: VictoryPoint }[]
+  buildings: ScriptAssignment[]
+  effects: { node: ScriptAssignment; effect: GenericEffect }[]
+  dates: DatedHistoryNode[]
+}
+
+export function historyParts(block: ScriptBlock, source: string): HistoryParts {
+  const parts: HistoryParts = { owner: [], cores: [], victoryPoints: [], buildings: [], effects: [], dates: [] }
+
+  for (const entry of assignmentsOf(block)) {
+    if (entry.operator !== '=') continue
+    const key = entry.key.text.toLowerCase()
+    const value = entry.value
+
+    if (key === 'owner' && value.kind === 'scalar') {
+      parts.owner.push(entry)
+      continue
+    }
+    if (key === 'add_core_of' && value.kind === 'scalar') {
+      parts.cores.push(entry)
+      continue
+    }
+    if (key === 'victory_points' && value.kind === 'block') {
+      const numbers = bareNumbers(value)
+      if (numbers.length >= 2) {
+        parts.victoryPoints.push({ node: entry, victoryPoint: { province: numbers[0], value: numbers[1] } })
+        continue
+      }
+    }
+    if (key === 'buildings' && value.kind === 'block') {
+      parts.buildings.push(entry)
+      continue
+    }
+    const dateMatch = DATE_KEY_RE.exec(entry.key.text)
+    if (dateMatch && value.kind === 'block') {
+      parts.dates.push({
+        node: entry,
+        date: { year: Number(dateMatch[1]), month: Number(dateMatch[2]), day: Number(dateMatch[3]) }
+      })
+      continue
     }
 
-    if (KNOWN_HISTORY_KEYS.has(key) || DATE_KEY_RE.test(key)) continue
-    results.push({ key, value })
-  }
-
-  return results
-}
-
-function parseDateHistories(historyContent: string): DateHistory[] {
-  const results: DateHistory[] = []
-  const dateRegex = /\b(\d{4})\.(\d{1,2})\.(\d{1,2})\s*=\s*\{/g
-  let match: RegExpExecArray | null
-  while ((match = dateRegex.exec(historyContent)) !== null) {
-    const openIdx = match.index + match[0].length - 1
-    const block = extractBlock(historyContent, openIdx)
-    if (!block) continue
-    results.push({
-      date: { year: parseInt(match[1]), month: parseInt(match[2]), day: parseInt(match[3]) },
-      ...parseHistoryDef(block.content)
+    parts.effects.push({
+      node: entry,
+      effect: {
+        key: entry.key.text,
+        value: value.kind === 'scalar' ? value.text : source.slice(value.start, value.end)
+      }
     })
-    dateRegex.lastIndex = block.end
   }
-  return results
+
+  return parts
 }
 
-function parseCoreOf(content: string): string[] {
-  const results: string[] = []
-  const regex = /\b(?:add_)?core_of\s*=\s*/g
-  let match: RegExpExecArray | null
-  while ((match = regex.exec(content)) !== null) {
-    const afterEq = match.index + match[0].length
-    if (content[afterEq] === '{') {
-      const block = extractBlock(content, afterEq)
-      if (block) {
-        results.push(...block.content.trim().split(/\s+/).filter(Boolean))
-        regex.lastIndex = block.end
-      }
-    } else {
-      const wordMatch = content.slice(afterEq).match(/^(\w+)/)
-      if (wordMatch) results.push(wordMatch[1])
+export function readHistoryDef(parts: HistoryParts): HistoryDef {
+  const buildingsBlock = parts.buildings[0]?.value
+  return {
+    owner: parts.owner[0] ? scalarOf(parts.owner[0]) : undefined,
+    coreOf: parts.cores.map((entry) => scalarOf(entry)!),
+    buildings: buildingsBlock?.kind === 'block' ? readBuildings(buildingsBlock) : [],
+    victoryPoints: parts.victoryPoints.map((entry) => entry.victoryPoint),
+    effects: parts.effects.map((entry) => entry.effect)
+  }
+}
+
+export function readStateHistory(block: ScriptBlock, source: string): StateHistory {
+  const parts = historyParts(block, source)
+  return {
+    ...readHistoryDef(parts),
+    dateHistory: parts.dates.map(({ node, date }) => ({
+      date,
+      ...readHistoryDef(historyParts(node.value as ScriptBlock, source))
+    }))
+  }
+}
+
+export function isProvinceKey(key: string): boolean {
+  return /^\d+$/.test(key)
+}
+
+export function readBuildings(block: ScriptBlock): (StateBuildingDefinition | ProvinceBuildingDefinition)[] {
+  const result: (StateBuildingDefinition | ProvinceBuildingDefinition)[] = []
+  for (const { key, value } of numericAssignments(block, (k) => !isProvinceKey(k))) {
+    result.push({ type: key, amount: value })
+  }
+  for (const entry of provinceBuildingBlocks(block)) {
+    const province = Number(entry.key.text)
+    for (const { key, value } of numericAssignments(entry.value as ScriptBlock)) {
+      result.push({ province, type: key, amount: value })
     }
   }
-  return results
+  return result
 }
 
-function parseVictoryPoints(content: string): VictoryPoint[] {
-  const results: VictoryPoint[] = []
-  const regex = /\bvictory_points\s*=\s*\{/g
-  let match: RegExpExecArray | null
-  while ((match = regex.exec(content)) !== null) {
-    const openIdx = match.index + match[0].length - 1
-    const block = extractBlock(content, openIdx)
-    if (!block) continue
-    const nums = [...block.content.matchAll(/\b(\d+)\b/g)].map((m) => parseInt(m[1]))
-    if (nums.length >= 2) results.push({ province: nums[0], value: nums[1] })
-    regex.lastIndex = block.end
-  }
-  return results
+// `<province id> = { ... }` entries inside a buildings block.
+export function provinceBuildingBlocks(block: ScriptBlock): ScriptAssignment[] {
+  return assignmentsOf(block).filter((entry) => isProvinceKey(entry.key.text) && entry.value.kind === 'block')
 }
 
-function parseHistoryBuildings(content: string): (StateBuildingDefinition | ProvinceBuildingDefinition)[] {
-  const blockContent = parseBlockContent(content, 'buildings')
-  if (!blockContent) return []
-
-  const results: (StateBuildingDefinition | ProvinceBuildingDefinition)[] = []
-  let i = 0
-
-  while (i < blockContent.length) {
-    const c = blockContent[i]
-    if (c === ' ' || c === '\t' || c === '\r' || c === '\n') { i++; continue }
-    if (c === '#') { while (i < blockContent.length && blockContent[i] !== '\n') i++; continue }
-
-    const keyStart = i
-    while (i < blockContent.length && /\w/.test(blockContent[i])) i++
-    if (i === keyStart) { i++; continue }
-    const key = blockContent.slice(keyStart, i)
-
-    while (i < blockContent.length && (blockContent[i] === ' ' || blockContent[i] === '\t')) i++
-    if (blockContent[i] !== '=') { while (i < blockContent.length && blockContent[i] !== '\n') i++; continue }
-    i++ // consume '='
-    while (i < blockContent.length && (blockContent[i] === ' ' || blockContent[i] === '\t')) i++
-
-    if (blockContent[i] === '{') {
-      const block = extractBlock(blockContent, i)
-      if (/^\d+$/.test(key) && block) {
-        const province = parseInt(key)
-        for (const [, type, amount] of block.content.matchAll(/\b(\w+)\s*=\s*(\d+)\b/g)) {
-          results.push({ province, type, amount: parseInt(amount) })
-        }
-        i = block.end
-      } else {
-        i = block ? block.end : i + 1
-      }
-    } else if (!/^\d+$/.test(key)) {
-      const numMatch = blockContent.slice(i).match(/^(\d+)\b/)
-      if (numMatch) {
-        results.push({ type: key, amount: parseInt(numMatch[1]) })
-        i += numMatch[0].length
-      } else {
-        while (i < blockContent.length && blockContent[i] !== '\n') i++
-      }
-    } else {
-      while (i < blockContent.length && blockContent[i] !== '\n') i++
-    }
-  }
-
-  return results
-}
-
-function parseResources(content: string): StateResource[] | undefined {
-  const blockContent = parseBlockContent(content, 'resources')
-  if (!blockContent) return undefined
-  const results: StateResource[] = []
-  for (const [, type, amount] of blockContent.matchAll(/\b(\w+)\s*=\s*(\d+)\b/g)) {
-    results.push({ type, amount: parseInt(amount) })
-  }
-  return results.length > 0 ? results : undefined
-}
-
-function parseBlockContent(content: string, key: string): string | null {
-  const escaped = escapeRegExp(key)
-  const match = new RegExp(`\\b${escaped}\\s*=\\s*\\{`).exec(content)
-  if (!match) return null
-  const openIdx = match.index + match[0].length - 1
-  const block = extractBlock(content, openIdx)
-  return block ? block.content : null
-}
-
-function parseScalarString(content: string, key: string): string | null {
-  const escaped = escapeRegExp(key)
-  const quotedMatch = content.match(new RegExp(`\\b${escaped}\\s*=\\s*"([^"]*)"`))
-  if (quotedMatch) return quotedMatch[1]
-  const bareMatch = content.match(new RegExp(`\\b${escaped}\\s*=\\s*(\\w+)\\b`))
-  return bareMatch ? bareMatch[1] : null
-}
-
-function parseScalarFloat(content: string, key: string): number | null {
-  const escaped = escapeRegExp(key)
-  const match = content.match(new RegExp(`\\b${escaped}\\s*=\\s*([\\d.]+)\\b`))
-  if (!match) return null
-  const value = parseFloat(match[1])
-  return Number.isNaN(value) ? null : value
-}
-
-function parseScalarBool(content: string, key: string): boolean | null {
-  const escaped = escapeRegExp(key)
-  const match = content.match(new RegExp(`\\b${escaped}\\s*=\\s*(yes|no)\\b`))
-  if (!match) return null
-  return match[1] === 'yes'
-}
-
-function parseTopLevelNamedBlocks(content: string, blockName: string): string[] {
-  const results: string[] = []
-  let i = 0
-
-  while (i < content.length) {
-    const c = content[i]
-    if (isWhitespace(c)) { i++; continue }
-    if (c === '#') { i = skipComment(content, i); continue }
-
-    const nameStart = i
-    while (i < content.length && /[\w.]/.test(content[i])) i++
-    if (i === nameStart) { i++; continue }
-
-    const name = content.slice(nameStart, i)
-    while (i < content.length && (content[i] === ' ' || content[i] === '\t')) i++
-
-    if (content[i] !== '=') {
-      i = skipLine(content, i)
-      continue
-    }
-    i++
-    while (i < content.length && isWhitespace(content[i])) i++
-
-    if (content[i] !== '{') {
-      i = skipLine(content, i)
-      continue
-    }
-
-    const block = extractBlock(content, i)
-    if (!block) break
-
-    if (name === blockName) results.push(block.content)
-    i = block.end
-  }
-
-  return results
-}
-
-function parseScalarNumber(content: string, key: string): number | null {
-  const escaped = escapeRegExp(key)
-  const match = content.match(new RegExp(`\\b${escaped}\\s*=\\s*(\\d+)\\b`))
-  if (!match) return null
-  const value = parseInt(match[1], 10)
-  return Number.isNaN(value) ? null : value
-}
-
-function parseNumberListBlock(content: string, key: string): number[] {
-  const escaped = escapeRegExp(key)
-  const match = new RegExp(`\\b${escaped}\\s*=\\s*\\{`).exec(content)
-  if (!match) return []
-
-  const openIdx = match.index + match[0].length - 1
-  const block = extractBlock(content, openIdx)
-  if (!block) return []
-
-  return [...block.content.matchAll(/\b\d+\b/g)].map((entry) => parseInt(entry[0], 10))
-}
-
-interface Block {
-  content: string
-  end: number
-}
-
-function extractBlock(str: string, openIdx: number): Block | null {
-  let depth = 0
-  for (let i = openIdx; i < str.length; i++) {
-    if (str[i] === '{') depth++
-    else if (str[i] === '}') {
-      depth--
-      if (depth === 0) return { content: str.slice(openIdx + 1, i), end: i + 1 }
-    } else if (str[i] === '#') {
-      i = skipComment(str, i) - 1
-    }
-  }
-  return null
-}
-
-function skipComment(content: string, start: number): number {
-  let i = start
-  while (i < content.length && content[i] !== '\n') i++
-  return i
-}
-
-function skipLine(content: string, start: number): number {
-  let i = start
-  while (i < content.length && content[i] !== '\n') i++
-  return i
-}
-
-function isWhitespace(value: string): boolean {
-  return value === ' ' || value === '\t' || value === '\r' || value === '\n'
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+export function dateKey(date: DateHistory['date']): string {
+  return `${date.year}.${date.month}.${date.day}`
 }

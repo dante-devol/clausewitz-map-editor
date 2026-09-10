@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { channels } from '../../../shared/contract/events'
-import type { Continent, Province, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
+import type { Continent, Province } from '../../../shared/mapDataTypes'
+import type { StateSaveRequest, StrategicRegionSaveRequest } from '../../../shared/contract/api'
 import { getEventWindow, type IpcContext } from '../context'
 
 export function registerMapHandlers(context: IpcContext): void {
@@ -29,14 +30,14 @@ export function registerMapHandlers(context: IpcContext): void {
     return context.sessions.loadResourcesForWindow(window, projectId)
   })
 
-  ipcMain.handle(channels.map.saveStates, (event, projectId: string, states: StateDefinition[]) => {
+  ipcMain.handle(channels.map.saveStates, (event, projectId: string, requests: StateSaveRequest[]) => {
     const window = getEventWindow(event)
-    context.sessions.saveStatesForWindow(window, projectId, states)
+    context.sessions.saveStatesForWindow(window, projectId, requests)
   })
 
-  ipcMain.handle(channels.map.saveStrategicRegions, (event, projectId: string, regions: StrategicRegionDefinition[]) => {
+  ipcMain.handle(channels.map.saveStrategicRegions, (event, projectId: string, requests: StrategicRegionSaveRequest[]) => {
     const window = getEventWindow(event)
-    context.sessions.saveStrategicRegionsForWindow(window, projectId, regions)
+    context.sessions.saveStrategicRegionsForWindow(window, projectId, requests)
   })
 
   ipcMain.handle(channels.map.loadWeatherEntries, (event, projectId: string) => {

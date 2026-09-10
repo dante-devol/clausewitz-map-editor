@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs'
 import { packColor } from '../../shared/mapDataTypes'
 import type { StateCategory } from '../../shared/mapDataTypes'
+import { assignmentsOf, bareNumbers, blockOf, findAssignmentDeep, firstAssignment, numberOf, parseScript } from './script/ScriptParser'
 
 export class StateCategoryTxt {
   private readonly filePaths: string[]
@@ -19,80 +20,23 @@ export class StateCategoryTxt {
   }
 
   static parse(content: string): StateCategory[] {
+    const categories = blockOf(findAssignmentDeep(parseScript(content).root, 'state_categories'))
+    if (!categories) return []
+
     const results: StateCategory[] = []
-
-    const catIdx = content.search(/\bstate_categories\s*=\s*\{/)
-    if (catIdx === -1) return results
-
-    const catOpen = content.indexOf('{', catIdx)
-    const catBlock = extractBlock(content, catOpen)
-    if (!catBlock) return results
-
-    for (const { name, content: blockContent } of parseNamedBlocks(catBlock.content)) {
-      const slotsMatch = blockContent.match(/\blocal_building_slots\s*=\s*(\d+)\b/)
-      const colorMatch = blockContent.match(/\bcolor\s*=\s*\{\s*(\d+)\s+(\d+)\s+(\d+)\s*\}/)
-      if (!slotsMatch || !colorMatch) continue
-
+    for (const entry of assignmentsOf(categories)) {
+      const category = blockOf(entry)
+      if (!category) continue
+      const slots = numberOf(firstAssignment(category, 'local_building_slots'))
+      const colorBlock = blockOf(firstAssignment(category, 'color'))
+      const rgb = colorBlock ? bareNumbers(colorBlock) : []
+      if (slots === null || rgb.length < 3) continue
       results.push({
-        codeName: name,
-        localBuildingSlots: parseInt(slotsMatch[1]),
-        color: packColor(parseInt(colorMatch[1]), parseInt(colorMatch[2]), parseInt(colorMatch[3]))
+        codeName: entry.key.text,
+        localBuildingSlots: slots,
+        color: packColor(rgb[0], rgb[1], rgb[2])
       })
     }
-
     return results
   }
-}
-
-interface Block { content: string; end: number }
-
-function extractBlock(str: string, openIdx: number): Block | null {
-  let depth = 0
-  for (let i = openIdx; i < str.length; i++) {
-    if (str[i] === '{') depth++
-    else if (str[i] === '}') {
-      if (--depth === 0) return { content: str.slice(openIdx + 1, i), end: i + 1 }
-    }
-  }
-  return null
-}
-
-function parseNamedBlocks(content: string): Array<{ name: string; content: string }> {
-  const results: Array<{ name: string; content: string }> = []
-  let i = 0
-
-  while (i < content.length) {
-    const c = content[i]
-
-    if (c === ' ' || c === '\t' || c === '\r' || c === '\n') { i++; continue }
-    if (c === '#') { while (i < content.length && content[i] !== '\n') i++; continue }
-
-    const nameStart = i
-    while (i < content.length && /\w/.test(content[i])) i++
-    if (i === nameStart) { i++; continue }
-    const name = content.slice(nameStart, i)
-
-    while (i < content.length && (content[i] === ' ' || content[i] === '\t')) i++
-
-    if (content[i] !== '=') {
-      while (i < content.length && content[i] !== '\n') i++
-      continue
-    }
-    i++
-
-    while (i < content.length && (content[i] === ' ' || content[i] === '\t')) i++
-
-    if (content[i] !== '{') {
-      while (i < content.length && content[i] !== '\n') i++
-      continue
-    }
-
-    const block = extractBlock(content, i)
-    if (!block) break
-
-    results.push({ name, content: block.content })
-    i = block.end
-  }
-
-  return results
 }

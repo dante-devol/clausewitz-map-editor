@@ -1,7 +1,8 @@
-import { mkdirSync, readFileSync, watch, writeFileSync, type FSWatcher } from 'fs'
+import { existsSync, mkdirSync, readFileSync, watch, writeFileSync, type FSWatcher } from 'fs'
 import { dirname } from 'path'
 import type { BrowserWindow } from 'electron'
 import { channels } from '../../../shared/contract/events'
+import type { StateSaveRequest, StrategicRegionSaveRequest } from '../../../shared/contract/api'
 import type { ResolvedPaths } from '../../../shared/pathTypes'
 import type { Continent, Province, Resource, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
 import type { LoadedProject, ProjectLoader } from './ProjectLoader'
@@ -9,9 +10,9 @@ import { WorkerParsePool } from '../../workers/WorkerParsePool'
 import { encodeBmp } from '../../parsers/BmpWriter'
 import { DefinitionsCsv } from '../../parsers/DefinitionsCsv'
 import { StatesTxt } from '../../parsers/StatesTxt'
-import { serializeState } from '../../parsers/StatesTxtWriter'
+import { applyStateSaves } from '../../parsers/StatesTxtWriter'
 import { StrategicRegionsTxt } from '../../parsers/StrategicRegionsTxt'
-import { serializeRegion } from '../../parsers/StrategicRegionsTxtWriter'
+import { applyStrategicRegionSaves } from '../../parsers/StrategicRegionsTxtWriter'
 import { computeHash } from '../../fileManager'
 import { resolveWriteTarget } from './writeTargets'
 
@@ -162,7 +163,7 @@ export class ProjectSession {
   saveDefinitions(provinces: Province[], continents: Continent[]): void {
     const project = this.requireProject()
     const source = project.resolvedPaths.definitions
-    const content = DefinitionsCsv.serialize(provinces, continents, DefinitionsCsv.detectLineEnding(readFileSync(source, 'utf-8')))
+    const content = DefinitionsCsv.merge(readFileSync(source, 'utf-8'), provinces, continents)
     const target = resolveWriteTarget(project, source)
     this.writeProjectFile(target, content)
     this.relocate(source, target)
@@ -178,31 +179,42 @@ export class ProjectSession {
     this.refreshWatchers()
   }
 
-  saveStates(states: StateDefinition[]): void {
+  saveStates(requests: StateSaveRequest[]): void {
     const project = this.requireProject()
-    for (const state of states) {
-      const source = state.sourcePath
-      if (!source) throw new Error(`State ${state.id} has no sourcePath`)
+    for (const request of requests) {
+      const source = request.original.sourcePath
+      if (!source) throw new Error(`State ${request.original.id} has no source file`)
       const target = resolveWriteTarget(project, source)
-      this.writeProjectFile(target, serializeState(state))
+      // An earlier request in this batch may already have moved the file into the mod.
+      const readPath = existsSync(target) ? target : source
+      const content = readFileSync(readPath, 'utf-8')
+      const result = applyStateSaves(content, [request])
+      if (result.conflicts.length > 0) throw new Error(result.conflicts.join('\n'))
+      if (result.content === content) continue
+      this.writeProjectFile(target, result.content)
       this.relocate(source, target)
-      const items: StateDefinition[] = StatesTxt.parse(readFileSync(target, 'utf-8')).map((item) => ({ ...item, sourcePath: target }))
-      this.emit('states', { op: 'patch', sourcePath: source, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
+      const items: StateDefinition[] = StatesTxt.parse(result.content).map((state) => ({ ...state, sourcePath: target }))
+      this.emit('states', { op: 'patch', sourcePath: readPath, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
     }
     this.refreshWatchers()
   }
 
-  saveStrategicRegions(regions: StrategicRegionDefinition[]): void {
+  saveStrategicRegions(requests: StrategicRegionSaveRequest[]): void {
     const project = this.requireProject()
-    for (const region of regions) {
-      const source = region.sourcePath
-      if (!source) throw new Error(`Strategic region ${region.id} has no sourcePath`)
+    for (const request of requests) {
+      const source = request.original.sourcePath
+      if (!source) throw new Error(`Strategic region ${request.original.id} has no source file`)
       const target = resolveWriteTarget(project, source)
-      this.writeProjectFile(target, serializeRegion(region))
+      const readPath = existsSync(target) ? target : source
+      const content = readFileSync(readPath, 'utf-8')
+      const result = applyStrategicRegionSaves(content, [request])
+      if (result.conflicts.length > 0) throw new Error(result.conflicts.join('\n'))
+      if (result.content === content) continue
+      this.writeProjectFile(target, result.content)
       this.relocate(source, target)
-      const items: StrategicRegionDefinition[] = StrategicRegionsTxt.parse(readFileSync(target, 'utf-8'))
-        .map((item) => ({ ...item, sourcePath: target }))
-      this.emit('strategicRegions', { op: 'patch', sourcePath: source, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
+      const items: StrategicRegionDefinition[] = StrategicRegionsTxt.parse(result.content)
+        .map((region) => ({ ...region, sourcePath: target }))
+      this.emit('strategicRegions', { op: 'patch', sourcePath: readPath, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
     }
     this.refreshWatchers()
   }

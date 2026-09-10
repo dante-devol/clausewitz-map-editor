@@ -100,6 +100,19 @@ export interface StrategicRegionDatasetUpdate {
   origin?: DatasetPatchOrigin
 }
 
+// `original` is the object as it was when editing began; `updated` is the
+// desired result. The main process only writes fields that differ between the
+// two, and rejects the save if one of those fields also changed on disk.
+export interface StateSaveRequest {
+  original: StateDefinition
+  updated: StateDefinition
+}
+
+export interface StrategicRegionSaveRequest {
+  original: StrategicRegionDefinition
+  updated: StrategicRegionDefinition
+}
+
 export interface ImageChangedData {
   b64: string
   hash: string
@@ -134,8 +147,8 @@ export interface ApiContract {
   map: {
     load: (projectId: string) => Promise<MapDataSnapshot>
     save: (projectId: string, provinces: Province[], continents: Continent[]) => Promise<void>
-    saveStates: (projectId: string, states: StateDefinition[]) => Promise<void>
-    saveStrategicRegions: (projectId: string, regions: StrategicRegionDefinition[]) => Promise<void>
+    saveStates: (projectId: string, requests: StateSaveRequest[]) => Promise<void>
+    saveStrategicRegions: (projectId: string, requests: StrategicRegionSaveRequest[]) => Promise<void>
     loadStates: (projectId: string) => Promise<void>
     loadStrategicRegions: (projectId: string) => Promise<void>
     loadWeatherEntries: (projectId: string) => Promise<string[]>

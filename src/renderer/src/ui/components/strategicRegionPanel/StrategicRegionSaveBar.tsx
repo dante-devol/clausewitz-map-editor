@@ -55,12 +55,12 @@ export function StrategicRegionSaveBar(): JSX.Element {
     setIsSaving(true)
     setSaveError(null)
     try {
-      const regionsToSave = [...pendingStrategicRegionEdits.entries()].map(([id, patch]) => {
+      const requests = [...pendingStrategicRegionEdits.entries()].map(([id, patch]) => {
         const original = strategicRegionsById.get(id)
         if (!original) throw new Error(`Region ${id} not found`)
-        return applyStrategicRegionPatch(original, patch)
+        return { original, updated: applyStrategicRegionPatch(original, patch) }
       })
-      await window.api.map.saveStrategicRegions(projectId, regionsToSave)
+      await window.api.map.saveStrategicRegions(projectId, requests)
       clearStrategicRegionSavedChanges()
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : t('stratRegionPanel.save.error'))

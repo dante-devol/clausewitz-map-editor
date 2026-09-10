@@ -55,12 +55,14 @@ export function StateSaveBar(): JSX.Element {
     setIsSaving(true)
     setSaveError(null)
     try {
-      const statesToSave = [...pendingStateEdits.entries()].map(([id, patch]) => {
+      // Send each state as loaded plus the desired result; the main process
+      // writes only the edited fields.
+      const requests = [...pendingStateEdits.entries()].map(([id, patch]) => {
         const original = statesById.get(id)
         if (!original) throw new Error(`State ${id} not found`)
-        return applyStatePatch(original, patch)
+        return { original, updated: applyStatePatch(original, patch) }
       })
-      await window.api.map.saveStates(projectId, statesToSave)
+      await window.api.map.saveStates(projectId, requests)
       clearStateSavedChanges()
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : t('statePanel.save.error'))

@@ -1,8 +1,13 @@
 import type { BrowserWindow } from 'electron'
 import { ProjectLoader } from './ProjectLoader'
 import { ProjectSession } from './ProjectSession'
-import type { ProjectOpenRequest, ProjectOpenResult } from '../../../shared/contract/api'
-import type { Continent, Province, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
+import type {
+  ProjectOpenRequest,
+  ProjectOpenResult,
+  StateSaveRequest,
+  StrategicRegionSaveRequest
+} from '../../../shared/contract/api'
+import type { Continent, Province } from '../../../shared/mapDataTypes'
 
 export class ProjectSessionRegistry {
   private readonly sessions = new Map<number, ProjectSession>()
@@ -68,20 +73,20 @@ export class ProjectSessionRegistry {
     session.saveDefinitions(provinces, continents)
   }
 
-  saveStatesForWindow(window: BrowserWindow, projectId: string, states: StateDefinition[]) {
+  saveStatesForWindow(window: BrowserWindow, projectId: string, requests: StateSaveRequest[]) {
     const session = this.forWindow(window)
     if (session.projectId !== projectId) {
       throw new Error('Project session mismatch')
     }
-    return session.saveStates(states)
+    return session.saveStates(requests)
   }
 
-  saveStrategicRegionsForWindow(window: BrowserWindow, projectId: string, regions: StrategicRegionDefinition[]) {
+  saveStrategicRegionsForWindow(window: BrowserWindow, projectId: string, requests: StrategicRegionSaveRequest[]) {
     const session = this.forWindow(window)
     if (session.projectId !== projectId) {
       throw new Error('Project session mismatch')
     }
-    return session.saveStrategicRegions(regions)
+    return session.saveStrategicRegions(requests)
   }
 
   loadWeatherEntriesForWindow(window: BrowserWindow, projectId: string): string[] {
