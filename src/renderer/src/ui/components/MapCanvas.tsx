@@ -16,6 +16,7 @@ import { useNotificationStore } from '../../infra/store/notificationStore'
 import { notificationService } from '../../infra/services/notificationService'
 import { useCoreStore } from '../../infra/store/coreStore'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
+import { selectNextAvailableProvinceId } from '../../infra/store/provinceEditSelectors'
 import { useMapQueryApi } from '../../bridge/MapQueryProvider'
 import { unpackColor } from '../../../../shared/mapDataTypes'
 import type { BmpPixelStrokeDelta } from '../../../../shared/provinceEditing'
@@ -412,8 +413,7 @@ export function MapCanvas(): JSX.Element {
   const handleNewProvince = useCallback(() => {
     cleanupPendingAuto()
     const color = generateUniqueColor((packed) => !!query.getDraftProvinceByColor(packed))
-    const maxExisting = originalDefinitions.size > 0 ? Math.max(...originalDefinitions.keys()) : 0
-    const nextId = maxExisting + pendingNewProvinces.size + 1
+    const nextId = selectNextAvailableProvinceId(originalDefinitions, pendingNewProvinces)
     syncBmpOnlyEntries([color])
     const guid = useMapDataStore.getState().bmpOnlyByColor.get(color)!
     assignBmpProvince(guid, { type: 'register', assignedId: nextId })

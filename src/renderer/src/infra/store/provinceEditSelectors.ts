@@ -20,6 +20,21 @@ export interface ProvinceDraftTargetMaps {
   byColor: Map<number, ProvinceDraftTarget>
 }
 
+// The next province ID that isn't already used by a canonical province or by
+// another pending "register as new" assignment. Callers must use this rather
+// than deriving it from originalDefinitions.size alone: pending assignments
+// can be reverted out of order, so the id right after the largest one in use
+// is the only choice that can't collide with one already handed out.
+export function selectNextAvailableProvinceId(
+  originalDefinitions: ReadonlyMap<number, Province>,
+  pendingNewProvinces: ReadonlyMap<string, number>
+): number {
+  let max = 0
+  for (const id of originalDefinitions.keys()) if (id > max) max = id
+  for (const id of pendingNewProvinces.values()) if (id > max) max = id
+  return max + 1
+}
+
 export function selectPendingChanges(
   pendingEdits: Map<number, Partial<ProvinceDraftFields>>,
   pendingBmpOnlyEdits: Map<string, ProvinceDraftFields>,

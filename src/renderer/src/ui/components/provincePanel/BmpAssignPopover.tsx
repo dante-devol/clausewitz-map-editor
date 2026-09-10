@@ -12,6 +12,7 @@ import {
 } from '@fluentui/react-components'
 import { unpackColor } from '../../../../../shared/mapDataTypes'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
+import { selectNextAvailableProvinceId } from '../../../infra/store/provinceEditSelectors'
 import { useI18n } from '../../i18n/I18nProvider'
 import { TYPE_COLORS, continentColor } from '../../../infra/config/displayModes'
 
@@ -228,11 +229,10 @@ export function BmpAssignPopover({ guid, selectedGuids, onDismiss }: Props): JSX
     return claimed
   }, [bmpReplacements, guid, selectedGuids, isMulti])
 
-  const nextAvailableId = useMemo(() => {
-    if (originalDefinitions.size === 0) return 1
-    const maxExisting = Math.max(...originalDefinitions.keys())
-    return maxExisting + pendingNewProvinces.size + 1
-  }, [originalDefinitions, pendingNewProvinces])
+  const nextAvailableId = useMemo(
+    () => selectNextAvailableProvinceId(originalDefinitions, pendingNewProvinces),
+    [originalDefinitions, pendingNewProvinces]
+  )
 
   const sortedCanonical = useMemo(() => {
     const canonical = provinceCatalog.filter((e) => e.canonical && e.id !== null && e.id !== 0)

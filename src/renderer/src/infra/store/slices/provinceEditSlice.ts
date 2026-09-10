@@ -133,6 +133,15 @@ export const createProvinceEditSlice: StateCreator<ProvinceEditSlice, [], [], Pr
       const existing = pendingEdits.get(action.targetId) ?? {}
       pendingEdits.set(action.targetId, { ...existing, ...draft })
     } else {
+      // Callers should derive assignedId from selectNextAvailableProvinceId,
+      // but a stale caller (e.g. a batch computed before an earlier revert)
+      // could still hand out an ID that's since been taken — refuse rather
+      // than silently making two provinces share an ID.
+      const taken = state.originalDefinitions.has(action.assignedId)
+        || [...pendingNewProvinces.values()].includes(action.assignedId)
+      if (taken) {
+        throw new Error(`Province ID ${action.assignedId} is already in use.`)
+      }
       pendingNewProvinces.set(guid, action.assignedId)
       const existing = pendingEdits.get(action.assignedId) ?? {}
       pendingEdits.set(action.assignedId, { ...existing, ...draft })
