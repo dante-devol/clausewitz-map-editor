@@ -80,12 +80,19 @@ export class ProjectSession {
   async loadSnapshot() {
     if (!this.project) throw new Error('Project not open')
     if (!this.pool) throw new Error('Project not open')
+    const project = this.project
 
-    const snapshot = await this.loader.loadSnapshot(this.project, this.pool)
-    this.continents = snapshot.continents
-    this.knownHashes.set(this.project.resolvedPaths.definitions, snapshot.definitionsHash)
-    this.knownHashes.set(this.project.resolvedPaths.provinces, snapshot.provincesImageHash)
-    this.watchCoreProjectFiles()
+    const snapshot = await this.loader.loadSnapshot(project, this.pool)
+    // A different project may have been opened (or this one closed) while
+    // that load was in flight — its own promise still resolves normally for
+    // whoever's awaiting it (the renderer already ignores a stale reply), but
+    // this session's own state must not be overwritten with stale data.
+    if (this.project === project) {
+      this.continents = snapshot.continents
+      this.knownHashes.set(project.resolvedPaths.definitions, snapshot.definitionsHash)
+      this.knownHashes.set(project.resolvedPaths.provinces, snapshot.provincesImageHash)
+      this.watchCoreProjectFiles()
+    }
     return snapshot
   }
 
@@ -95,21 +102,26 @@ export class ProjectSession {
     if (this.statesLoadPromise) return this.statesLoadPromise
     if (this.statesLoaded) return Promise.resolve()
 
+    const project = this.project
     const pool = this.pool
-    const totalFiles = this.project.resolvedPaths.states.length
-    this.emit('states', { op: 'replace', items: [], loadedFiles: 0, totalFiles })
+    const totalFiles = project.resolvedPaths.states.length
+    this.emit(project, 'states', { op: 'replace', items: [], loadedFiles: 0, totalFiles })
     this.statesLoadPromise = this.loader.loadStatesProgressive(
-      this.project,
+      project,
       pool,
       (items, loadedFiles, totalFiles) => {
-        this.emit('states', { op: 'append', items, loadedFiles, totalFiles })
+        // This can keep arriving well after open()/dispose() moved this
+        // session on to a different (or no) project — ignore it then.
+        if (this.project !== project) return
+        this.emit(project, 'states', { op: 'append', items, loadedFiles, totalFiles })
       }
     ).then(() => {
+      if (this.project !== project) return
       this.statesLoaded = true
       this.statesLoadPromise = null
       this.watchStateFiles()
     }).catch((error) => {
-      this.statesLoadPromise = null
+      if (this.project === project) this.statesLoadPromise = null
       throw error
     })
 
@@ -126,12 +138,13 @@ export class ProjectSession {
     if (!this.pool) throw new Error('Project not open')
     if (this.resourcesLoadPromise) return this.resourcesLoadPromise
 
+    const project = this.project
     const pool = this.pool
-    this.resourcesLoadPromise = this.loader.loadResources(this.project, pool).then((resources) => {
-      this.resourcesLoadPromise = null
+    this.resourcesLoadPromise = this.loader.loadResources(project, pool).then((resources) => {
+      if (this.project === project) this.resourcesLoadPromise = null
       return resources
     }).catch((error) => {
-      this.resourcesLoadPromise = null
+      if (this.project === project) this.resourcesLoadPromise = null
       throw error
     })
 
@@ -144,21 +157,24 @@ export class ProjectSession {
     if (this.strategicRegionsLoadPromise) return this.strategicRegionsLoadPromise
     if (this.strategicRegionsLoaded) return Promise.resolve()
 
+    const project = this.project
     const pool = this.pool
-    const totalFiles = this.project.resolvedPaths.strategicRegions.length
-    this.emit('strategicRegions', { op: 'replace', items: [], loadedFiles: 0, totalFiles })
+    const totalFiles = project.resolvedPaths.strategicRegions.length
+    this.emit(project, 'strategicRegions', { op: 'replace', items: [], loadedFiles: 0, totalFiles })
     this.strategicRegionsLoadPromise = this.loader.loadStrategicRegionsProgressive(
-      this.project,
+      project,
       pool,
       (items, loadedFiles, totalFiles) => {
-        this.emit('strategicRegions', { op: 'append', items, loadedFiles, totalFiles })
+        if (this.project !== project) return
+        this.emit(project, 'strategicRegions', { op: 'append', items, loadedFiles, totalFiles })
       }
     ).then(() => {
+      if (this.project !== project) return
       this.strategicRegionsLoaded = true
       this.strategicRegionsLoadPromise = null
       this.watchStrategicRegionFiles()
     }).catch((error) => {
-      this.strategicRegionsLoadPromise = null
+      if (this.project === project) this.strategicRegionsLoadPromise = null
       throw error
     })
 
@@ -180,7 +196,7 @@ export class ProjectSession {
       // watcher, so the edits can be reviewed against it.
       const definitions = this.loader.loadDefinitions(project, this.continents)
       this.knownHashes.set(source, definitions.hash)
-      this.emit('definitions', definitions)
+      this.emit(project, 'definitions', definitions)
       throw new Error(`${basename(source)} changed on disk after it was loaded. Its new contents are being reloaded; review your changes and save again.`)
     }
 
@@ -224,7 +240,7 @@ export class ProjectSession {
       this.writeProjectFile(write.target, write.content)
       this.relocate(write.source, write.target)
       const items: StateDefinition[] = StatesTxt.parse(write.content).map((state) => ({ ...state, sourcePath: write.target }))
-      this.emit('states', { op: 'patch', sourcePath: write.source, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
+      this.emit(project, 'states', { op: 'patch', sourcePath: write.source, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
     }
     this.refreshWatchers()
   }
@@ -253,7 +269,7 @@ export class ProjectSession {
       this.relocate(write.source, write.target)
       const items: StrategicRegionDefinition[] = StrategicRegionsTxt.parse(write.content)
         .map((region) => ({ ...region, sourcePath: write.target }))
-      this.emit('strategicRegions', { op: 'patch', sourcePath: write.source, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
+      this.emit(project, 'strategicRegions', { op: 'patch', sourcePath: write.source, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
     }
     this.refreshWatchers()
   }
@@ -301,72 +317,82 @@ export class ProjectSession {
 
   private watchCoreProjectFiles(): void {
     if (!this.project) return
+    const project = this.project
     this.coreFilesWatched = true
 
-    this.watch(this.project.resolvedPaths.continent, () => {
-      if (!this.project) return
-      const continents = this.loader.loadContinents(this.project)
+    this.watch(project.resolvedPaths.continent, () => {
+      if (this.project !== project) return
+      const continents = this.loader.loadContinents(project)
       this.continents = continents
-      this.emit('continents', continents)
-      const definitions = this.loader.loadDefinitions(this.project, continents)
-      this.knownHashes.set(this.project.resolvedPaths.definitions, definitions.hash)
-      this.emit('definitions', definitions)
+      this.emit(project, 'continents', continents)
+      const definitions = this.loader.loadDefinitions(project, continents)
+      this.knownHashes.set(project.resolvedPaths.definitions, definitions.hash)
+      this.emit(project, 'definitions', definitions)
     })
 
-    this.watch(this.project.resolvedPaths.definitions, () => {
-      if (!this.project) return
-      this.emit('definitions', this.loader.loadDefinitions(this.project, this.continents))
+    this.watch(project.resolvedPaths.definitions, () => {
+      if (this.project !== project) return
+      this.emit(project, 'definitions', this.loader.loadDefinitions(project, this.continents))
     })
 
-    for (const filePath of this.project.resolvedPaths.provinceTerrain) {
+    for (const filePath of project.resolvedPaths.provinceTerrain) {
       this.watch(filePath, () => {
-        if (!this.project) return
-        this.emit('terrain', this.loader.loadTerrain(this.project))
+        if (this.project !== project) return
+        this.emit(project, 'terrain', this.loader.loadTerrain(project))
       })
     }
 
-    this.watch(this.project.resolvedPaths.provinces, () => {
-      if (!this.project) return
-      this.emit('image', this.loader.loadImageBase64(this.project))
+    this.watch(project.resolvedPaths.provinces, () => {
+      if (this.project !== project) return
+      this.emit(project, 'image', this.loader.loadImageBase64(project))
     })
   }
 
   private watchStateFiles(): void {
     if (!this.project) return
+    const project = this.project
 
-    for (const filePath of this.project.resolvedPaths.states) {
+    for (const filePath of project.resolvedPaths.states) {
       this.watch(filePath, () => {
-        if (!this.project || !this.pool) return
+        if (this.project !== project || !this.pool) return
         if (!this.statesLoaded) return
-        void this.reloadStateFile(filePath)
+        this.reloadStateFile(project, filePath).catch(() => {
+          // The file may have been removed, or the worker pool disposed by a
+          // project switch mid-read; the next change (or reopen) will retry.
+        })
       })
     }
   }
 
-  private async reloadStateFile(filePath: string): Promise<void> {
+  private async reloadStateFile(project: LoadedProject, filePath: string): Promise<void> {
     if (!this.pool) return
     const rawItems = await this.pool.dispatch(filePath, 'states')
+    if (this.project !== project) return
     const items = (rawItems as StateDefinition[]).map((item) => ({ ...item, sourcePath: filePath }))
-    this.emit('states', { op: 'patch', sourcePath: filePath, items, loadedFiles: 1, totalFiles: 1, origin: 'external' })
+    this.emit(project, 'states', { op: 'patch', sourcePath: filePath, items, loadedFiles: 1, totalFiles: 1, origin: 'external' })
   }
 
   private watchStrategicRegionFiles(): void {
     if (!this.project) return
+    const project = this.project
 
-    for (const filePath of this.project.resolvedPaths.strategicRegions) {
+    for (const filePath of project.resolvedPaths.strategicRegions) {
       this.watch(filePath, () => {
-        if (!this.project || !this.pool) return
+        if (this.project !== project || !this.pool) return
         if (!this.strategicRegionsLoaded) return
-        void this.reloadStrategicRegionFile(filePath)
+        this.reloadStrategicRegionFile(project, filePath).catch(() => {
+          // Same as reloadStateFile: a transient failure, safe to drop.
+        })
       })
     }
   }
 
-  private async reloadStrategicRegionFile(filePath: string): Promise<void> {
+  private async reloadStrategicRegionFile(project: LoadedProject, filePath: string): Promise<void> {
     if (!this.pool) return
     const rawItems = await this.pool.dispatch(filePath, 'strategicRegions')
+    if (this.project !== project) return
     const items = (rawItems as StrategicRegionDefinition[]).map((item) => ({ ...item, sourcePath: filePath }))
-    this.emit('strategicRegions', { op: 'patch', sourcePath: filePath, items, loadedFiles: 1, totalFiles: 1, origin: 'external' })
+    this.emit(project, 'strategicRegions', { op: 'patch', sourcePath: filePath, items, loadedFiles: 1, totalFiles: 1, origin: 'external' })
   }
 
   private watch(path: string, onChanged: () => void): void {
@@ -414,13 +440,17 @@ export class ProjectSession {
     this.watchers.delete(path)
   }
 
+  // `project` must be the one the caller captured before its own async gap
+  // (or requireProject(), for a synchronous caller) — never a fresh read of
+  // this.project, which may have moved on to a different project by the time
+  // an async operation gets around to emitting. See loadStates() and friends.
   private emit(
+    project: LoadedProject,
     type: 'continents' | 'definitions' | 'terrain' | 'image' | 'states' | 'strategicRegions' | 'stateCategories' | 'buildings',
     data: unknown
   ): void {
-    if (!this.project) return
     this.window.webContents.send(channels.map.changed, {
-      projectId: this.project.projectId,
+      projectId: project.projectId,
       type,
       data
     })
