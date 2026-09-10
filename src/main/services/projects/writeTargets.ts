@@ -1,4 +1,5 @@
-import { isAbsolute, join, relative, resolve, sep } from 'path'
+import { mkdirSync, renameSync, rmSync, writeFileSync } from 'fs'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'path'
 
 export interface ProjectRoots {
   gamePath: string
@@ -29,4 +30,19 @@ function relativeInside(root: string, absolute: string): string | null {
   const rel = relative(resolve(root), absolute)
   if (rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return null
   return rel
+}
+
+// Writes via a temporary sibling file and a rename, so a crash mid-write can't
+// leave a truncated file behind. Falls back to a direct write if the rename is
+// refused (e.g. the target is locked by another process on Windows).
+export function writeFileAtomic(path: string, data: string | Buffer): void {
+  mkdirSync(dirname(path), { recursive: true })
+  const temp = `${path}.${process.pid}.${Date.now()}.tmp`
+  writeFileSync(temp, data)
+  try {
+    renameSync(temp, path)
+  } catch {
+    rmSync(temp, { force: true })
+    writeFileSync(path, data)
+  }
 }

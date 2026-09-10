@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, watch, writeFileSync, type FSWatcher } from 'fs'
-import { dirname } from 'path'
+import { readFileSync, watch, type FSWatcher } from 'fs'
+import { basename } from 'path'
 import type { BrowserWindow } from 'electron'
 import { channels } from '../../../shared/contract/events'
 import type { StateSaveRequest, StrategicRegionSaveRequest } from '../../../shared/contract/api'
@@ -14,12 +14,18 @@ import { applyStateSaves } from '../../parsers/StatesTxtWriter'
 import { StrategicRegionsTxt } from '../../parsers/StrategicRegionsTxt'
 import { applyStrategicRegionSaves } from '../../parsers/StrategicRegionsTxtWriter'
 import { computeHash } from '../../fileManager'
-import { resolveWriteTarget } from './writeTargets'
+import { resolveWriteTarget, writeFileAtomic } from './writeTargets'
 
 interface WatchEntry {
   watcher: FSWatcher
   debounce: ReturnType<typeof setTimeout> | null
   onChanged: () => void
+}
+
+interface PlannedWrite {
+  source: string
+  target: string
+  content: string
 }
 
 export class ProjectSession {
@@ -181,52 +187,71 @@ export class ProjectSession {
 
   saveStates(requests: StateSaveRequest[]): void {
     const project = this.requireProject()
-    for (const request of requests) {
-      const source = request.original.sourcePath
-      if (!source) throw new Error(`State ${request.original.id} has no source file`)
-      const target = resolveWriteTarget(project, source)
-      // An earlier request in this batch may already have moved the file into the mod.
-      const readPath = existsSync(target) ? target : source
-      const content = readFileSync(readPath, 'utf-8')
-      const result = applyStateSaves(content, [request])
-      if (result.conflicts.length > 0) throw new Error(result.conflicts.join('\n'))
-      if (result.content === content) continue
-      this.writeProjectFile(target, result.content)
-      this.relocate(source, target)
-      const items: StateDefinition[] = StatesTxt.parse(result.content).map((state) => ({ ...state, sourcePath: target }))
-      this.emit('states', { op: 'patch', sourcePath: readPath, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
+    const groups = groupBySourceFile(
+      requests,
+      (request) => request.original.sourcePath,
+      (request) => `State ${request.original.id}`,
+      project.resolvedPaths.states
+    )
+
+    const writes: PlannedWrite[] = []
+    const conflicts: string[] = []
+    for (const [source, group] of groups) {
+      const content = readFileSync(source, 'utf-8')
+      const result = applyStateSaves(content, group)
+      conflicts.push(...result.conflicts.map((message) => `${basename(source)}: ${message}`))
+      if (result.content !== content) writes.push({ source, target: resolveWriteTarget(project, source), content: result.content })
+    }
+    if (conflicts.length > 0) throw new Error(`Nothing was saved.\n${conflicts.join('\n')}`)
+
+    for (const write of writes) {
+      this.writeProjectFile(write.target, write.content)
+      this.relocate(write.source, write.target)
+      const items: StateDefinition[] = StatesTxt.parse(write.content).map((state) => ({ ...state, sourcePath: write.target }))
+      this.emit('states', { op: 'patch', sourcePath: write.source, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
     }
     this.refreshWatchers()
   }
 
   saveStrategicRegions(requests: StrategicRegionSaveRequest[]): void {
     const project = this.requireProject()
-    for (const request of requests) {
-      const source = request.original.sourcePath
-      if (!source) throw new Error(`Strategic region ${request.original.id} has no source file`)
-      const target = resolveWriteTarget(project, source)
-      const readPath = existsSync(target) ? target : source
-      const content = readFileSync(readPath, 'utf-8')
-      const result = applyStrategicRegionSaves(content, [request])
-      if (result.conflicts.length > 0) throw new Error(result.conflicts.join('\n'))
-      if (result.content === content) continue
-      this.writeProjectFile(target, result.content)
-      this.relocate(source, target)
-      const items: StrategicRegionDefinition[] = StrategicRegionsTxt.parse(result.content)
-        .map((region) => ({ ...region, sourcePath: target }))
-      this.emit('strategicRegions', { op: 'patch', sourcePath: readPath, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
+    const groups = groupBySourceFile(
+      requests,
+      (request) => request.original.sourcePath,
+      (request) => `Strategic region ${request.original.id}`,
+      project.resolvedPaths.strategicRegions
+    )
+
+    const writes: PlannedWrite[] = []
+    const conflicts: string[] = []
+    for (const [source, group] of groups) {
+      const content = readFileSync(source, 'utf-8')
+      const result = applyStrategicRegionSaves(content, group)
+      conflicts.push(...result.conflicts.map((message) => `${basename(source)}: ${message}`))
+      if (result.content !== content) writes.push({ source, target: resolveWriteTarget(project, source), content: result.content })
+    }
+    if (conflicts.length > 0) throw new Error(`Nothing was saved.\n${conflicts.join('\n')}`)
+
+    for (const write of writes) {
+      this.writeProjectFile(write.target, write.content)
+      this.relocate(write.source, write.target)
+      const items: StrategicRegionDefinition[] = StrategicRegionsTxt.parse(write.content)
+        .map((region) => ({ ...region, sourcePath: write.target }))
+      this.emit('strategicRegions', { op: 'patch', sourcePath: write.source, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
     }
     this.refreshWatchers()
   }
 
-  // Writes the file and records its hash so the resulting watcher event is
+  // Writes atomically and records the hash so the resulting watcher event is
   // recognised as our own write. Returns the hash of the written content.
   private writeProjectFile(target: string, data: string | Buffer): string {
     const buffer = typeof data === 'string' ? Buffer.from(data, 'utf-8') : data
     const hash = computeHash(buffer)
     this.knownHashes.set(target, hash)
-    mkdirSync(dirname(target), { recursive: true })
-    writeFileSync(target, buffer)
+    writeFileAtomic(target, buffer)
+    // The rename replaces the file; re-arm its watcher so platforms that watch
+    // by inode keep following the path.
+    this.rewatch(target)
     return hash
   }
 
@@ -356,6 +381,13 @@ export class ProjectSession {
     this.watchers.set(path, entry)
   }
 
+  private rewatch(path: string): void {
+    const entry = this.watchers.get(path)
+    if (!entry) return
+    this.unwatch(path)
+    this.watch(path, entry.onChanged)
+  }
+
   private unwatch(path: string): void {
     const entry = this.watchers.get(path)
     if (!entry) return
@@ -404,4 +436,26 @@ export class ProjectSession {
     this.watchers.clear()
     this.knownHashes.clear()
   }
+}
+
+// Groups save requests by the file they came from, refusing any request whose
+// file isn't one this project loaded.
+function groupBySourceFile<T>(
+  requests: readonly T[],
+  sourceOf: (request: T) => string | undefined,
+  describe: (request: T) => string,
+  allowedPaths: readonly string[]
+): Map<string, T[]> {
+  const allowed = new Set(allowedPaths)
+  const groups = new Map<string, T[]>()
+  for (const request of requests) {
+    const source = sourceOf(request)
+    if (!source || !allowed.has(source)) {
+      throw new Error(`${describe(request)} does not come from a file in this project; nothing was saved.`)
+    }
+    const group = groups.get(source)
+    if (group) group.push(request)
+    else groups.set(source, [request])
+  }
+  return groups
 }

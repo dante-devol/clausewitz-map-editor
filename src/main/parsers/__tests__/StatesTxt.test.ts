@@ -166,6 +166,20 @@ describe('applyStateSaves', () => {
     expect(parseOne(result.content)).toEqual(updated)
   })
 
+  it('only touches the targeted state in a multi-state file', () => {
+    const other = STATE_FILE.replace('id=900', 'id=901').replace('owner = AAA', 'owner = ZZZ')
+    const file = STATE_FILE + other
+    const [first, second] = StatesTxt.parse(file)
+    const updated = clone(first)
+    updated.name = 'RENAMED'
+
+    const result = applyStateSaves(file, [{ original: first, updated }])
+    const [firstAfter, secondAfter] = StatesTxt.parse(result.content)
+    expect(firstAfter.name).toBe('RENAMED')
+    expect(secondAfter).toEqual(second)
+    expect(result.content.endsWith(other)).toBe(true)
+  })
+
   it('keeps on-disk changes to fields the user did not edit', () => {
     const diskFile = STATE_FILE.replace('state_category = rural', 'state_category = town')
     const updated = clone(state)
