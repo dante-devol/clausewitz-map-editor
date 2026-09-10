@@ -11,6 +11,8 @@ export const enMessages = {
   'projectSelection.noRecognizedFilesBody': "This folder doesn't contain any of the expected mod files. It may be a full vanilla overwrite or an empty project. You can still open it; missing files will fall back to the game installation.",
   'projectSelection.cancel': 'Cancel',
   'projectSelection.openAnyway': 'Open anyway',
+  'projectSelection.openFailedTitle': "Couldn't open project",
+  'projectSelection.dismiss': 'Dismiss',
   'path.descriptor': 'Descriptor',
   'path.defaultMap': 'Default Map',
   'path.definitions': 'Definitions',

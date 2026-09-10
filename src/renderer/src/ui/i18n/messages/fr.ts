@@ -13,6 +13,8 @@ export const frMessages: Record<MessageKey, string> = {
   'projectSelection.noRecognizedFilesBody': "Ce dossier ne contient aucun des fichiers de mod attendus. Il peut s'agir d'un remplacement vanilla complet ou d'un projet vide. Vous pouvez quand meme l'ouvrir ; les fichiers manquants utiliseront l'installation du jeu.",
   'projectSelection.cancel': 'Annuler',
   'projectSelection.openAnyway': 'Ouvrir quand meme',
+  'projectSelection.openFailedTitle': "Impossible d'ouvrir le projet",
+  'projectSelection.dismiss': 'Ignorer',
   'path.descriptor': 'Descripteur',
   'path.defaultMap': 'Carte par defaut',
   'path.definitions': 'Definitions',

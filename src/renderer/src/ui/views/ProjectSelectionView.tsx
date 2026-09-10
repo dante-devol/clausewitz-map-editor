@@ -105,12 +105,14 @@ interface ProjectSelectionViewProps {
   gameVerification: GameVerificationResult | null
   recentProjects: string[]
   pendingProject: { path: string; verification: ModVerificationResult } | null
+  sessionErrorMessage: string | null
   onBrowseGamePath: () => void
   onOpen: (path: string) => void
   onBrowse: () => void
   onRemove: (path: string) => void
   onConfirmPending: () => void
   onCancelPending: () => void
+  onDismissSessionError: () => void
 }
 
 const PATH_LABEL_KEYS: Record<string, MessageKey> = {
@@ -130,12 +132,14 @@ export function ProjectSelectionView({
   gameVerification,
   recentProjects,
   pendingProject,
+  sessionErrorMessage,
   onBrowseGamePath,
   onOpen,
   onBrowse,
   onRemove,
   onConfirmPending,
-  onCancelPending
+  onCancelPending,
+  onDismissSessionError
 }: ProjectSelectionViewProps) {
   const styles = useStyles()
   const { t } = useI18n()
@@ -151,6 +155,19 @@ export function ProjectSelectionView({
           {t('projectSelection.subtitle')}
         </Text>
       </div>
+
+      {sessionErrorMessage && (
+        <MessageBar intent="error">
+          <MessageBarBody>
+            <Text weight="semibold">{t('projectSelection.openFailedTitle')}</Text>{': '}{sessionErrorMessage}
+          </MessageBarBody>
+          <MessageBarActions>
+            <Button appearance="subtle" onClick={onDismissSessionError}>
+              {t('projectSelection.dismiss')}
+            </Button>
+          </MessageBarActions>
+        </MessageBar>
+      )}
 
       {!hasGamePath ? (
         <MessageBar intent="warning">

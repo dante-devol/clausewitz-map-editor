@@ -5,9 +5,12 @@ import { useProjectStore } from '../../infra/store/projectStore'
 export function useProjectSelection() {
   const projectId = useCoreStore((s) => s.projectId)
   const currentProject = useCoreStore((s) => s.projectPath)
+  const sessionStatus = useCoreStore((s) => s.sessionStatus)
+  const sessionErrorMessage = useCoreStore((s) => s.sessionErrorMessage)
   const openProjectStarted = useCoreStore((s) => s.openProjectStarted)
   const projectOpened = useCoreStore((s) => s.projectOpened)
   const sessionFailed = useCoreStore((s) => s.sessionFailed)
+  const sessionCleared = useCoreStore((s) => s.sessionCleared)
 
   const recentProjects = useProjectStore((s) => s.recentProjects)
   const gamePath = useProjectStore((s) => s.gamePath)
@@ -57,6 +60,15 @@ export function useProjectSelection() {
     setPendingProject(null)
   }
 
+  // Nothing was successfully opened while sessionStatus is 'error', so there's
+  // nothing to tear down beyond resetting back to idle.
+  function dismissSessionError() {
+    sessionCleared()
+  }
+
+  // Failure is reported through sessionStatus/sessionErrorMessage rather than
+  // by rejecting — callers fire this from onClick handlers and shouldn't have
+  // to handle a rejection themselves (nor leave one unhandled).
   async function loadProject(path: string) {
     openProjectStarted(path)
     try {
@@ -68,7 +80,6 @@ export function useProjectSelection() {
       await window.api.window.enterEditor()
     } catch (error) {
       sessionFailed(error instanceof Error ? error.message : 'Failed to open project')
-      throw error
     }
   }
 
@@ -87,6 +98,8 @@ export function useProjectSelection() {
   return {
     currentProjectId: projectId,
     currentProject,
+    sessionStatus,
+    sessionErrorMessage,
     recentProjects,
     gamePath,
     gamePathValid,
@@ -97,6 +110,7 @@ export function useProjectSelection() {
     browseForGamePath,
     confirmPendingProject,
     cancelPendingProject,
+    dismissSessionError,
     removeProject
   }
 }

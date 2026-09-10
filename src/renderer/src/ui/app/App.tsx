@@ -27,9 +27,9 @@ function App(): JSX.Element {
     void window.api.window.exitEditor()
   }
   const {
-    currentProject, recentProjects, gamePath, gamePathValid, gameVerification,
+    sessionStatus, sessionErrorMessage, recentProjects, gamePath, gamePathValid, gameVerification,
     pendingProject, selectProject, browseForProject, browseForGamePath,
-    confirmPendingProject, cancelPendingProject, removeProject
+    confirmPendingProject, cancelPendingProject, dismissSessionError, removeProject
   } = useProjectSelection()
 
   useDisplayModeConfig()
@@ -51,7 +51,13 @@ function App(): JSX.Element {
 
   const fluentTheme = theme === 'dark' ? webDarkTheme : webLightTheme
 
-  if (!currentProject) {
+  // A project is only actually open — and the editor safe to show — once the
+  // main process has confirmed it. A failed open leaves sessionStatus at
+  // 'error' (see sessionFailed) even though projectPath is still set, so the
+  // editor must gate on status rather than on projectPath alone.
+  const isProjectOpen = sessionStatus === 'project-open' || sessionStatus === 'loading-map' || sessionStatus === 'ready'
+
+  if (!isProjectOpen) {
     return (
       <FluentProvider theme={fluentTheme}>
         <ProjectSelectionView
@@ -60,12 +66,14 @@ function App(): JSX.Element {
           gameVerification={gameVerification}
           recentProjects={recentProjects}
           pendingProject={pendingProject}
+          sessionErrorMessage={sessionErrorMessage}
           onBrowseGamePath={browseForGamePath}
           onOpen={selectProject}
           onBrowse={browseForProject}
           onRemove={removeProject}
           onConfirmPending={confirmPendingProject}
           onCancelPending={cancelPendingProject}
+          onDismissSessionError={dismissSessionError}
         />
       </FluentProvider>
     )
