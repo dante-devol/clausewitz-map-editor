@@ -74,9 +74,14 @@ export class WorkerParsePool {
       }
     })
 
-    thread.on('error', (err) => {
+    // Rejects this worker's still-pending tasks and, unless the pool is being
+    // disposed, replaces it with a fresh one. Safe to call twice for the same
+    // failure (an uncaught exception fires 'error' then 'exit') — the second
+    // call finds an already-cleared taskIds set and an already-replaced
+    // workers[idx] (indexOf no longer finds this worker), so it's a no-op.
+    const handleWorkerFailure = (error: Error): void => {
       for (const taskId of worker.taskIds) {
-        this.pending.get(taskId)?.reject(err)
+        this.pending.get(taskId)?.reject(error)
         this.pending.delete(taskId)
       }
       worker.taskIds.clear()
@@ -85,6 +90,15 @@ export class WorkerParsePool {
         const idx = this.workers.indexOf(worker)
         if (idx !== -1) this.workers[idx] = this.spawnWorker()
       }
+    }
+
+    thread.on('error', handleWorkerFailure)
+
+    // A worker can also exit without ever emitting 'error' (e.g. it called
+    // process.exit(), or was killed) — without this, any task still assigned
+    // to it would sit in `pending` forever and its caller would hang.
+    thread.on('exit', (code) => {
+      handleWorkerFailure(new Error(`Parser worker exited unexpectedly with code ${code}`))
     })
 
     return worker

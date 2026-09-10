@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import type { AppConfig } from '../shared/contract/api'
+import { deepEqual } from '../shared/deepEqual'
 
 // Add new config keys here. Defaults are the source of truth —
 // only deviations from these are written to disk.
@@ -44,7 +45,16 @@ function writeOverrides(overrides: Partial<Config>): void {
 }
 
 export function getConfig(): Config {
-  return { ...DEFAULT_CONFIG, ...readOverrides() }
+  const overrides = readOverrides()
+  return {
+    ...DEFAULT_CONFIG,
+    ...overrides,
+    // `paths` is the one config value with independent leaf keys — a
+    // hand-edited (or otherwise partial) override for just one of them must
+    // not blank out the rest. The other config values are always written
+    // whole, so a plain override on top of the defaults is enough for them.
+    paths: { ...DEFAULT_CONFIG.paths, ...overrides.paths }
+  }
 }
 
 export function getConfigValue<K extends keyof Config>(key: K): Config[K] {
@@ -53,8 +63,10 @@ export function getConfigValue<K extends keyof Config>(key: K): Config[K] {
 
 export function setConfigValue<K extends keyof Config>(key: K, value: Config[K]): void {
   const overrides = readOverrides()
-  if (value === DEFAULT_CONFIG[key]) {
-    // If reverting to default, don't store it.
+  if (deepEqual(value, DEFAULT_CONFIG[key])) {
+    // If reverting to default, don't store it. Config values are objects
+    // (paths, displayModeOverrides) or primitives (locale), so a structural
+    // comparison is needed — `===` never matches for a freshly built object.
     delete overrides[key]
   } else {
     overrides[key] = value

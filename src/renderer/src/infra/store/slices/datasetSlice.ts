@@ -35,23 +35,32 @@ export const DATASET_EMPTY = {
   strategicRegionsRevision: 0,
 }
 
+// A mod's state file can coexist with the game's own file for the same state
+// ID under a different filename (the folder merge in pathResolver.ts only
+// dedupes by filename) — both get loaded. Building statesById first and
+// deriving the states array from it, rather than sorting the raw input list,
+// guarantees the two can never disagree on which (and how many) states there
+// are; whichever entry is set last for an ID wins, same as the map.
 function buildStatesSlice(statesInput: StateDefinition[]) {
-  const states = [...statesInput].sort((a, b) => a.id - b.id)
   const statesById = new Map<number, StateDefinition>()
+  for (const state of statesInput) statesById.set(state.id, state)
+  const states = [...statesById.values()].sort((a, b) => a.id - b.id)
+
   const stateProvinceToStateId = new Map<number, number>()
   for (const state of states) {
-    statesById.set(state.id, state)
     for (const provinceId of state.provinceIds) stateProvinceToStateId.set(provinceId, state.id)
   }
   return { states, statesById, stateProvinceToStateId }
 }
 
+// See buildStatesSlice — same reasoning, same fix.
 function buildStrategicRegionsSlice(strategicRegionsInput: StrategicRegionDefinition[]) {
-  const strategicRegions = [...strategicRegionsInput].sort((a, b) => a.id - b.id)
   const strategicRegionsById = new Map<number, StrategicRegionDefinition>()
+  for (const region of strategicRegionsInput) strategicRegionsById.set(region.id, region)
+  const strategicRegions = [...strategicRegionsById.values()].sort((a, b) => a.id - b.id)
+
   const strategicRegionProvinceToRegionId = new Map<number, number>()
   for (const region of strategicRegions) {
-    strategicRegionsById.set(region.id, region)
     for (const provinceId of region.provinceIds) strategicRegionProvinceToRegionId.set(provinceId, region.id)
   }
   return { strategicRegions, strategicRegionsById, strategicRegionProvinceToRegionId }

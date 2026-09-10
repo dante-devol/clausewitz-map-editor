@@ -16,6 +16,14 @@ export interface ProvinceEditSlice {
   pendingEdits: Map<number, Partial<ProvinceDraftFields>>
   pendingBmpOnlyEdits: Map<string, ProvinceDraftFields>
   bmpReplacements: Map<number, string>
+  // The province's pendingEdits patch from right before it first became a
+  // bmp-replacement target, keyed by provinceId — assignBmpProvince merges
+  // the bmp-only entry's draft fields into pendingEdits, and this is what
+  // revertBmpReplacement restores instead of leaving that merge in place.
+  // A key present with value undefined means there was no prior patch to
+  // restore (revert should delete the pendingEdits entry, not merely clear
+  // it); a missing key means there's nothing recorded to revert.
+  bmpReplacementOriginalEdits: Map<number, Partial<ProvinceDraftFields> | undefined>
   pendingNewProvinces: Map<string, number>
   loadOriginalDefinitions: (provinces: Province[], hash: string) => void
   pruneBmpOnlyEntries: (definedColors: ReadonlySet<number>) => void
@@ -40,6 +48,7 @@ export const PROVINCE_EDIT_EMPTY = {
   pendingEdits: new Map<number, Partial<ProvinceDraftFields>>(),
   pendingBmpOnlyEdits: new Map<string, ProvinceDraftFields>(),
   bmpReplacements: new Map<number, string>(),
+  bmpReplacementOriginalEdits: new Map<number, Partial<ProvinceDraftFields> | undefined>(),
   pendingNewProvinces: new Map<string, number>(),
 }
 
@@ -118,6 +127,7 @@ export const createProvinceEditSlice: StateCreator<ProvinceEditSlice, [], [], Pr
 
   assignBmpProvince: (guid, action) => set((state) => {
     const bmpReplacements = new Map(state.bmpReplacements)
+    const bmpReplacementOriginalEdits = new Map(state.bmpReplacementOriginalEdits)
     const pendingNewProvinces = new Map(state.pendingNewProvinces)
     const pendingBmpOnlyEdits = new Map(state.pendingBmpOnlyEdits)
     const pendingEdits = new Map(state.pendingEdits)
@@ -129,6 +139,14 @@ export const createProvinceEditSlice: StateCreator<ProvinceEditSlice, [], [], Pr
     pendingNewProvinces.delete(guid)
 
     if (action.type === 'replace') {
+      // Only record a backup the first time this province becomes a
+      // replacement target. If it's already one (the target is being
+      // reassigned to a different bmp-only color without reverting first),
+      // the existing backup already predates all replacement activity on
+      // this province and must be kept as-is.
+      if (!bmpReplacementOriginalEdits.has(action.targetId)) {
+        bmpReplacementOriginalEdits.set(action.targetId, state.pendingEdits.get(action.targetId))
+      }
       bmpReplacements.set(action.targetId, guid)
       const existing = pendingEdits.get(action.targetId) ?? {}
       pendingEdits.set(action.targetId, { ...existing, ...draft })
@@ -148,13 +166,24 @@ export const createProvinceEditSlice: StateCreator<ProvinceEditSlice, [], [], Pr
     }
 
     pendingBmpOnlyEdits.delete(guid)
-    return { bmpReplacements, pendingNewProvinces, pendingBmpOnlyEdits, pendingEdits }
+    return { bmpReplacements, bmpReplacementOriginalEdits, pendingNewProvinces, pendingBmpOnlyEdits, pendingEdits }
   }),
 
   revertBmpReplacement: (provinceId) => set((state) => {
+    if (!state.bmpReplacements.has(provinceId)) return {}
     const bmpReplacements = new Map(state.bmpReplacements)
     bmpReplacements.delete(provinceId)
-    return { bmpReplacements }
+
+    const bmpReplacementOriginalEdits = new Map(state.bmpReplacementOriginalEdits)
+    const pendingEdits = new Map(state.pendingEdits)
+    if (bmpReplacementOriginalEdits.has(provinceId)) {
+      const priorPatch = bmpReplacementOriginalEdits.get(provinceId)
+      if (priorPatch === undefined) pendingEdits.delete(provinceId)
+      else pendingEdits.set(provinceId, priorPatch)
+      bmpReplacementOriginalEdits.delete(provinceId)
+    }
+
+    return { bmpReplacements, bmpReplacementOriginalEdits, pendingEdits }
   }),
 
   removeBmpOnlyEntry: (color) => set((state) => {
@@ -181,12 +210,14 @@ export const createProvinceEditSlice: StateCreator<ProvinceEditSlice, [], [], Pr
     pendingEdits: new Map<number, Partial<ProvinceDraftFields>>(),
     pendingBmpOnlyEdits: new Map<string, ProvinceDraftFields>(),
     bmpReplacements: new Map<number, string>(),
+    bmpReplacementOriginalEdits: new Map<number, Partial<ProvinceDraftFields> | undefined>(),
     pendingNewProvinces: new Map<string, number>(),
   }),
 
   clearSavedChanges: () => set({
     pendingEdits: new Map<number, Partial<ProvinceDraftFields>>(),
     bmpReplacements: new Map<number, string>(),
+    bmpReplacementOriginalEdits: new Map<number, Partial<ProvinceDraftFields> | undefined>(),
     pendingNewProvinces: new Map<string, number>(),
   }),
 })

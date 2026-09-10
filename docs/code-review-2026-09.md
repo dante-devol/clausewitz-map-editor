@@ -116,6 +116,17 @@ Root causes:
 
 ## 2. Functional bugs (P1)
 
+> **Status (2026-09-10): addressed (2.1–2.8).**
+> - 2.1: `projectId` now comes from `useCoreStore`; BMP saves are explicit (a save bar in PaintPanel) and send a `Uint8Array` instead of a plain array.
+> - 2.2: `revertBmpStroke` only reverts the newest stroke; repeating it walks strokes back one at a time.
+> - 2.3: added `selectNextAvailableProvinceId` (`provinceEditSelectors.ts`), based on the highest ID actually in use rather than a count; `assignBmpProvince` also refuses an ID that's already taken.
+> - 2.4: added `moveProvincesToState`/`moveProvincesToRegion`, which add a province to one state/region and remove it from whichever other one currently holds it, in the same store update.
+> - 2.5: `App.tsx` switches views on `sessionStatus` instead of `projectPath`; a failed open shows the error on the selection screen instead of a broken editor, and no longer leaves an unhandled rejection.
+> - 2.6: Back and window close both ask before discarding unsaved changes (`selectHasUnsavedChanges`, a native confirm dialog), and Back now disposes the project session instead of leaving it running.
+> - 2.7: `ProjectSession`'s async loads and file-watcher reloads capture the project at the start and check it's still current before touching session state or emitting — a stale reply from a since-replaced project can no longer mislabel data or mark a new project as already loaded.
+> - 2.8: ContinentTxt's comment bug was already fixed by 1.2's shared parser. Fixed here: `config.ts` deep-merges `paths` and compares structurally; `WorkerParsePool` now handles a worker exiting without an `error` event; macOS `activate` no longer opens a second window; `datasetSlice` dedupes `states`/`strategicRegions` by ID; `revertBmpReplacement` restores the province's pre-replacement edit instead of leaving the replacement's draft merged in.
+> - Tests: `npm test`.
+
 ### 2.1 Paint-mode BMP save never runs
 
 **Problem.** [MapCanvas.tsx:352](../src/renderer/src/ui/components/MapCanvas.tsx) reads `projectId` from `useMapDataStore`, but it lives in `useCoreStore`. It's always `undefined`, so `window.api.map.saveBmp` is never called and painted pixels are lost. `tsc` reports this. Even if it ran, it would:
