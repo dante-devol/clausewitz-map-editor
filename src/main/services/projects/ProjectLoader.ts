@@ -12,7 +12,7 @@ import { TerrainTxt } from '../../parsers/TerrainTxt'
 import { StateCategoryTxt } from '../../parsers/StateCategoryTxt'
 import { BuildingsTxt } from '../../parsers/BuildingsTxt'
 import { ResourcesTxt } from '../../parsers/ResourcesTxt'
-import type { MapDataSnapshot, ProjectOpenRequest, ProjectOpenResult } from '../../../shared/contract/api'
+import type { DefinitionsChangedData, MapDataSnapshot, ProjectOpenRequest, ProjectOpenResult } from '../../../shared/contract/api'
 import type { Building, Continent, Resource, StateCategory } from '../../../shared/mapDataTypes'
 import { buildProvinceCatalog } from '../../../shared/provinceCatalog'
 import type { WorkerParsePool } from '../../workers/WorkerParsePool'
@@ -67,12 +67,13 @@ export class ProjectLoader {
       { continents }
     )
 
-    const [provincesBuffer, terrains, stateCategories, buildings, provinces] = await Promise.all([
+    const [provincesBuffer, terrains, stateCategories, buildings, provinces, definitionsBuffer] = await Promise.all([
       provincesBufferPromise,
       terrainPromise,
       stateCategoriesPromise,
       buildingsPromise,
       definitionsPromise,
+      readFile(project.resolvedPaths.definitions),
     ])
 
     const provinceCatalog = buildProvinceCatalog(provinces)
@@ -88,6 +89,7 @@ export class ProjectLoader {
       provinceCatalog,
       provincesImageB64,
       provincesImageHash,
+      definitionsHash: computeHash(definitionsBuffer),
     }
   }
 
@@ -95,8 +97,12 @@ export class ProjectLoader {
     return new ContinentTxt(project.resolvedPaths.continent).load()
   }
 
-  loadDefinitions(project: LoadedProject, continents: Continent[]) {
-    return new DefinitionsCsv(project.resolvedPaths.definitions).load(continents)
+  loadDefinitions(project: LoadedProject, continents: Continent[]): DefinitionsChangedData {
+    const buffer = readFileSync(project.resolvedPaths.definitions)
+    return {
+      provinces: DefinitionsCsv.parse(buffer.toString('utf-8'), continents),
+      hash: computeHash(buffer)
+    }
   }
 
   loadTerrain(project: LoadedProject) {

@@ -66,6 +66,7 @@ export function ProvincePanel(): JSX.Element {
   const pendingBmpOnlyEdits = useMapDataStore((s) => s.pendingBmpOnlyEdits)
   const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
   const pendingNewProvinces = useMapDataStore((s) => s.pendingNewProvinces)
+  const definitionsHash = useMapDataStore((s) => s.definitionsHash)
   const loadOriginalDefinitions = useMapDataStore((s) => s.loadOriginalDefinitions)
   const loadProvinces = useMapDataStore((s) => s.loadProvinces)
   const loadProvinceCatalog = useMapDataStore((s) => s.loadProvinceCatalog)
@@ -115,11 +116,12 @@ export function ProvincePanel(): JSX.Element {
     setIsSaving(true)
     setSaveError(null)
     try {
-      await window.api.map.save(projectId, provincesToSave, continentList)
+      if (!definitionsHash) throw new Error(t('provincePanel.save.error'))
+      const result = await window.api.map.save(projectId, provincesToSave, continentList, definitionsHash)
       // The main process ignores the watcher event for its own write, so bring
       // the loaded data in line with what was saved here.
       loadProvinces(provincesToSave)
-      loadOriginalDefinitions(provincesToSave)
+      loadOriginalDefinitions(provincesToSave, result.hash)
       loadProvinceCatalog(buildProvinceCatalog(provincesToSave))
       setProvinceBitmapStatus('idle')
       clearSavedChanges()

@@ -145,6 +145,8 @@ export const enMessages = {
   'notification.strategicRegionsLoad.failedTitle': 'Strategic region load failed',
   'notification.strategicRegionsLoad.failedMessage': 'Strategic region data could not be loaded.',
   'notification.fileReload.title': 'Files reloaded',
+  'notification.definitionsChanged.title': 'definition.csv changed on disk',
+  'notification.definitionsChanged.message': 'The file was reloaded. Your pending province changes were kept and now apply on top of the new contents; review them before saving.',
   'notification.validation.title': 'Validation complete',
   'notification.validation.clean': 'No validation issues found.',
   'notification.validation.summary': '{errors} errors, {warnings} warnings',

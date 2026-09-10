@@ -9,7 +9,7 @@ import type { ScriptSaveResult } from './StatesTxtWriter'
 
 // Applies strategic-region edits to the text of one file, in place. Same
 // contract as applyStateSaves: only fields changed by the user are written,
-// everything else is kept.
+// conflicting on-disk changes abort the whole file, everything else is kept.
 export function applyStrategicRegionSaves(
   source: string,
   requests: readonly StrategicRegionSaveRequest[]
@@ -37,14 +37,21 @@ export function applyStrategicRegionSaves(
       continue
     }
 
-    // Fields the user didn't edit keep their on-disk value.
-    const merge = <K extends 'name' | 'provinceIds' | 'weatherPeriods'>(key: K) =>
-      deepEqual(updated[key], original[key]) ? disk[key] : updated[key]
+    const conflictFields: string[] = []
+    const merge = <K extends 'name' | 'provinceIds' | 'weatherPeriods'>(key: K, label: string) => {
+      if (deepEqual(updated[key], original[key])) return disk[key]
+      if (!deepEqual(disk[key], original[key]) && !deepEqual(disk[key], updated[key])) conflictFields.push(label)
+      return updated[key]
+    }
     const target: StrategicRegionDefinition = {
       ...disk,
-      name: merge('name'),
-      provinceIds: merge('provinceIds'),
-      weatherPeriods: merge('weatherPeriods')
+      name: merge('name', 'name'),
+      provinceIds: merge('provinceIds', 'provinces'),
+      weatherPeriods: merge('weatherPeriods', 'weather')
+    }
+    if (conflictFields.length > 0) {
+      conflicts.push(`Strategic region ${original.id}: ${conflictFields.join(', ')} changed on disk since editing began.`)
+      continue
     }
     editRegion(editor, block, disk, target)
   }

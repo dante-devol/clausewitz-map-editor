@@ -8,6 +8,7 @@ import type {
   ProvinceBuildingDefinition,
   VictoryPoint
 } from '../../../../../shared/mapDataTypes'
+import type { DatasetSlice } from './datasetSlice'
 
 export interface StateEditPatch {
   // Required fields
@@ -33,6 +34,10 @@ export interface StateEditPatch {
 
 export interface StateEditSlice {
   pendingStateEdits: Map<number, StateEditPatch>
+  // Each edited state as it was when its first edit was made. Saves send it as
+  // the `original` so the main process can detect fields that changed on disk
+  // in the meantime instead of silently overwriting them.
+  stateEditBaselines: Map<number, StateDefinition>
   editState: (id: number, patch: StateEditPatch) => void
   revertStateEdit: (id: number) => void
   clearStateSavedChanges: () => void
@@ -41,30 +46,44 @@ export interface StateEditSlice {
 
 export const STATE_EDIT_EMPTY = {
   pendingStateEdits: new Map<number, StateEditPatch>(),
+  stateEditBaselines: new Map<number, StateDefinition>(),
 }
 
-export const createStateEditSlice: StateCreator<StateEditSlice, [], [], StateEditSlice> = (set) => ({
+type StateEditStore = StateEditSlice & Pick<DatasetSlice, 'statesById'>
+
+export const createStateEditSlice: StateCreator<StateEditStore, [], [], StateEditSlice> = (set) => ({
   ...STATE_EDIT_EMPTY,
 
   editState: (id, patch) => set((state) => {
     const pendingStateEdits = new Map(state.pendingStateEdits)
     const existing = pendingStateEdits.get(id) ?? {}
     pendingStateEdits.set(id, { ...existing, ...patch })
-    return { pendingStateEdits }
+
+    let stateEditBaselines = state.stateEditBaselines
+    const current = state.statesById.get(id)
+    if (!stateEditBaselines.has(id) && current) {
+      stateEditBaselines = new Map(stateEditBaselines)
+      stateEditBaselines.set(id, current)
+    }
+    return { pendingStateEdits, stateEditBaselines }
   }),
 
   revertStateEdit: (id) => set((state) => {
     const pendingStateEdits = new Map(state.pendingStateEdits)
     pendingStateEdits.delete(id)
-    return { pendingStateEdits }
+    const stateEditBaselines = new Map(state.stateEditBaselines)
+    stateEditBaselines.delete(id)
+    return { pendingStateEdits, stateEditBaselines }
   }),
 
   clearStateSavedChanges: () => set({
     pendingStateEdits: new Map<number, StateEditPatch>(),
+    stateEditBaselines: new Map<number, StateDefinition>(),
   }),
 
   clearStatePendingChanges: () => set({
     pendingStateEdits: new Map<number, StateEditPatch>(),
+    stateEditBaselines: new Map<number, StateDefinition>(),
   }),
 })
 

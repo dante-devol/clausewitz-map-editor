@@ -6,7 +6,12 @@ import {
   reconcileProvinceCatalogWithBitmap,
   type ProvinceBitmapFacts
 } from '../../../../shared/provinceCatalog'
-import type { ImageChangedData, StateDatasetUpdate, StrategicRegionDatasetUpdate } from '../../../../shared/contract/api'
+import type {
+  DefinitionsChangedData,
+  ImageChangedData,
+  StateDatasetUpdate,
+  StrategicRegionDatasetUpdate
+} from '../../../../shared/contract/api'
 import type { BitmapAnalysisOutput } from '../../infra/workers/bitmapAnalysis.worker'
 import { useProjectStore } from '../../infra/store/projectStore'
 import { notificationService } from '../../infra/services/notificationService'
@@ -189,7 +194,7 @@ export function useMapLoader(): void {
           message: tRef.current('notification.mapLoad.step.catalog'),
           progress: { current: 3, total: MAP_LOAD_TOTAL_STEPS }
         })
-        loadOriginalDefinitions(snapshot.provinces)
+        loadOriginalDefinitions(snapshot.provinces, snapshot.definitionsHash)
         loadProvinceCatalog(snapshot.provinceCatalog)
         setProvinceBitmapStatus('idle')
         notificationService.advanceProgress({
@@ -224,10 +229,25 @@ export function useMapLoader(): void {
       if (event.projectId !== projectId) return
       if (event.type === 'continents') loadContinents(event.data as import('../../../../shared/mapDataTypes').Continent[])
       else if (event.type === 'definitions') {
-        const provinces = event.data as import('../../../../shared/mapDataTypes').Province[]
+        // definition.csv changed outside the editor. Pending edits are patches
+        // over originalDefinitions, so rebase them on the new contents (and the
+        // new hash) instead of letting a later save overwrite the change.
+        const { provinces, hash } = event.data as DefinitionsChangedData
+        const { pendingEdits, bmpReplacements, pendingNewProvinces } = useMapDataStore.getState()
+        const hasPendingChanges = pendingEdits.size + bmpReplacements.size + pendingNewProvinces.size > 0
         loadProvinces(provinces)
+        loadOriginalDefinitions(provinces, hash)
         loadProvinceCatalog(buildProvinceCatalog(provinces))
         setProvinceBitmapStatus('idle')
+        if (hasPendingChanges) {
+          notificationService.pushAck({
+            id: `definitions-changed:${projectId}`,
+            tone: 'warning',
+            title: tRef.current('notification.definitionsChanged.title'),
+            message: tRef.current('notification.definitionsChanged.message'),
+            autoCloseAfterMs: null
+          })
+        }
       }
       else if (event.type === 'terrain') loadTerrains(event.data as import('../../../../shared/mapDataTypes').TerrainCategory[])
       else if (event.type === 'stateCategories') loadStateCategories(event.data as import('../../../../shared/mapDataTypes').StateCategory[])

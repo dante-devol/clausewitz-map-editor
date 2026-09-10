@@ -30,6 +30,14 @@ Severity key: **P0** = data loss or corruption, **P1** = broken feature or wrong
 
 ## 1. Saving can destroy or corrupt data (P0)
 
+> **Status (2026-09-10): addressed.**
+> - All writes go through `resolveWriteTarget` (`src/main/services/projects/writeTargets.ts`): game files are copied into the mod folder on first save and written atomically. A mod folder that is (or sits inside) the game install is refused at open.
+> - The six ad-hoc parsers are replaced by one span-preserving parser (`src/main/parsers/script/`). The state and strategic-region writers edit files in place and only touch fields that changed.
+> - Saves carry the pre-edit baseline and are refused if an edited field also changed on disk. `definition.csv` saves carry a content hash and preserve unchanged lines verbatim.
+> - Tests: `npm test`. Set `HOI4_GAME_PATH` to also round-trip every vanilla state and strategic region.
+>
+> Files saved by the old writers may already contain damage: quoted `"{ ... }"` blocks, `is_impassable`, sign-flipped temperatures, or cores hoisted out of dated blocks. The new writer won't repair them; check any files saved before this change.
+
 ### 1.1 Saves can write into the base game install
 
 **Problem.** `resolveFile` ([src/main/pathResolver.ts:8](../src/main/pathResolver.ts)) falls back to the game path when the mod doesn't override a file. The folder resolver does the same per file. Every writer then saves to that resolved path:

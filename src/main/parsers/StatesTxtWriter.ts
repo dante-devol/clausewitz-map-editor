@@ -39,9 +39,10 @@ export interface ScriptSaveResult {
 // Applies state edits to the text of one states file, in place.
 //
 // For each request only the fields that differ between `original` and
-// `updated` are written; every other field keeps its on-disk value. Everything
-// else in the file — other states, comments, unknown keys, conditional
-// blocks — is left byte-for-byte.
+// `updated` are written. If such a field also changed on disk (it differs from
+// `original` and from `updated`), the request is reported as a conflict and the
+// file is returned unchanged. Everything else in the file — other states,
+// comments, unknown keys, conditional blocks — is left byte-for-byte.
 export function applyStateSaves(source: string, requests: readonly StateSaveRequest[]): ScriptSaveResult {
   const doc = parseScript(source)
   const editor = new ScriptEditor(source)
@@ -66,7 +67,12 @@ export function applyStateSaves(source: string, requests: readonly StateSaveRequ
       continue
     }
 
-    const target = mergeState(disk, original, updated)
+    const conflictFields: string[] = []
+    const target = mergeState(disk, original, updated, conflictFields)
+    if (conflictFields.length > 0) {
+      conflicts.push(`State ${original.id}: ${conflictFields.join(', ')} changed on disk since editing began.`)
+      continue
+    }
     editState(editor, source, block, disk, target)
   }
 
@@ -74,41 +80,55 @@ export function applyStateSaves(source: string, requests: readonly StateSaveRequ
   return { content: editor.hasEdits ? editor.apply() : source, conflicts }
 }
 
-// ─── Merge ──────────────────────────────────────────────────────────────────
+// ─── Three-way merge ────────────────────────────────────────────────────────
 
-// Fields the user didn't edit keep their on-disk value.
-function pick<T>(disk: T, original: T, updated: T): T {
-  return deepEqual(updated, original) ? disk : updated
+function merge3<T>(disk: T, original: T, updated: T, label: string, conflicts: string[]): T {
+  if (deepEqual(updated, original)) return disk
+  if (deepEqual(disk, original) || deepEqual(disk, updated)) return updated
+  conflicts.push(label)
+  return updated
 }
 
-function mergeState(disk: StateDefinition, original: StateDefinition, updated: StateDefinition): StateDefinition {
-  const m = <K extends keyof StateDefinition>(key: K) => pick(disk[key], original[key], updated[key])
-  const h = <K extends keyof HistoryDef>(key: K) => pick(disk.history[key], original.history[key], updated.history[key])
+function mergeState(
+  disk: StateDefinition,
+  original: StateDefinition,
+  updated: StateDefinition,
+  conflicts: string[]
+): StateDefinition {
+  const m = <K extends keyof StateDefinition>(key: K, label: string) =>
+    merge3(disk[key], original[key], updated[key], label, conflicts)
+  const h = <K extends keyof HistoryDef>(key: K, label: string) =>
+    merge3(disk.history[key], original.history[key], updated.history[key], label, conflicts)
 
   return {
     ...disk,
-    name: m('name'),
-    manpower: m('manpower'),
-    stateCategory: m('stateCategory'),
-    isImpassable: m('isImpassable'),
-    localSupplies: m('localSupplies'),
-    buildingsMaxLevelFactor: m('buildingsMaxLevelFactor'),
-    resources: m('resources'),
-    provinceIds: m('provinceIds'),
+    name: m('name', 'name'),
+    manpower: m('manpower', 'manpower'),
+    stateCategory: m('stateCategory', 'state category'),
+    isImpassable: m('isImpassable', 'impassable'),
+    localSupplies: m('localSupplies', 'local supplies'),
+    buildingsMaxLevelFactor: m('buildingsMaxLevelFactor', 'buildings max level factor'),
+    resources: m('resources', 'resources'),
+    provinceIds: m('provinceIds', 'provinces'),
     history: {
-      owner: h('owner'),
-      coreOf: h('coreOf'),
-      victoryPoints: h('victoryPoints'),
-      buildings: h('buildings'),
-      effects: h('effects'),
-      dateHistory: mergeDateHistory(disk.history.dateHistory, original.history.dateHistory, updated.history.dateHistory)
+      owner: h('owner', 'owner'),
+      coreOf: h('coreOf', 'cores'),
+      victoryPoints: h('victoryPoints', 'victory points'),
+      buildings: h('buildings', 'buildings'),
+      effects: h('effects', 'history effects'),
+      dateHistory: mergeDateHistory(disk.history.dateHistory, original.history.dateHistory, updated.history.dateHistory, conflicts)
     }
   }
 }
 
 // Dated history blocks are merged per date (the n-th block for a date on one
 // side pairs with the n-th on the other).
-function mergeDateHistory(disk: DateHistory[], original: DateHistory[], updated: DateHistory[]): DateHistory[] {
+function mergeDateHistory(
+  disk: DateHistory[],
+  original: DateHistory[],
+  updated: DateHistory[],
+  conflicts: string[]
+): DateHistory[] {
   const originalByKey = keyedDates(original)
   const updatedByKey = keyedDates(updated)
   const result: DateHistory[] = []
@@ -117,15 +137,29 @@ function mergeDateHistory(disk: DateHistory[], original: DateHistory[], updated:
     const originalEntry = originalByKey.get(key)
     const updatedEntry = updatedByKey.get(key)
     updatedByKey.delete(key)
+    const label = `history ${diskEntry.date.year}.${diskEntry.date.month}.${diskEntry.date.day}`
+
     if (!updatedEntry) {
-      if (!originalEntry) result.push(diskEntry) // added on disk; otherwise removed by the user
+      if (!originalEntry) result.push(diskEntry) // added on disk
+      else if (!deepEqual(diskEntry, originalEntry)) { conflicts.push(label); result.push(diskEntry) }
+      continue // removed by the user
+    }
+    if (!originalEntry) {
+      if (!deepEqual(diskEntry, updatedEntry)) conflicts.push(label)
+      result.push(updatedEntry)
       continue
     }
-    result.push(originalEntry ? pick(diskEntry, originalEntry, updatedEntry) : updatedEntry)
+    result.push(merge3(diskEntry, originalEntry, updatedEntry, label, conflicts))
   }
 
   for (const [key, updatedEntry] of updatedByKey) {
-    if (!originalByKey.has(key)) result.push(updatedEntry)
+    const originalEntry = originalByKey.get(key)
+    if (originalEntry) {
+      // Removed on disk. Only a conflict if the user also changed it.
+      if (!deepEqual(originalEntry, updatedEntry)) conflicts.push(`history ${key.split('#')[0]}`)
+      continue
+    }
+    result.push(updatedEntry)
   }
 
   return result

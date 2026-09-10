@@ -52,6 +52,9 @@ export interface MapDataSnapshot {
   buildings: Building[]
   provincesImageB64: string
   provincesImageHash: string
+  // Hash of definition.csv as parsed into `provinces`. Sent back on save so the
+  // main process can refuse to overwrite a file that changed on disk since.
+  definitionsHash: string
 }
 
 export interface ProjectOpenRequest {
@@ -69,13 +72,18 @@ export interface MapChangedEvent {
   type: 'continents' | 'definitions' | 'terrain' | 'image' | 'states' | 'strategicRegions' | 'stateCategories' | 'buildings'
   data:
     | Continent[]
-    | Province[]
+    | DefinitionsChangedData
     | TerrainCategory[]
     | StateCategory[]
     | Building[]
     | StateDatasetUpdate
     | StrategicRegionDatasetUpdate
     | ImageChangedData
+}
+
+export interface DefinitionsChangedData {
+  provinces: Province[]
+  hash: string
 }
 
 // 'external' patches come from the file watcher; 'save' patches re-publish a
@@ -113,6 +121,10 @@ export interface StrategicRegionSaveRequest {
   updated: StrategicRegionDefinition
 }
 
+export interface DefinitionsSaveResult {
+  hash: string
+}
+
 export interface ImageChangedData {
   b64: string
   hash: string
@@ -146,7 +158,7 @@ export interface ApiContract {
   }
   map: {
     load: (projectId: string) => Promise<MapDataSnapshot>
-    save: (projectId: string, provinces: Province[], continents: Continent[]) => Promise<void>
+    save: (projectId: string, provinces: Province[], continents: Continent[], expectedHash: string) => Promise<DefinitionsSaveResult>
     saveStates: (projectId: string, requests: StateSaveRequest[]) => Promise<void>
     saveStrategicRegions: (projectId: string, requests: StrategicRegionSaveRequest[]) => Promise<void>
     loadStates: (projectId: string) => Promise<void>

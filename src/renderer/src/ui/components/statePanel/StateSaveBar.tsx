@@ -41,6 +41,7 @@ export function StateSaveBar(): JSX.Element {
 
   const pendingStateEdits = useMapDataStore((s) => s.pendingStateEdits)
   const statesById = useMapDataStore((s) => s.statesById)
+  const stateEditBaselines = useMapDataStore((s) => s.stateEditBaselines)
   const clearStateSavedChanges = useMapDataStore((s) => s.clearStateSavedChanges)
 
   const [isSaving, setIsSaving] = useState(false)
@@ -55,10 +56,10 @@ export function StateSaveBar(): JSX.Element {
     setIsSaving(true)
     setSaveError(null)
     try {
-      // Send each state as loaded plus the desired result; the main process
-      // writes only the edited fields.
+      // Send each state as it was when editing began plus the desired result;
+      // the main process writes only the edited fields and reports conflicts.
       const requests = [...pendingStateEdits.entries()].map(([id, patch]) => {
-        const original = statesById.get(id)
+        const original = stateEditBaselines.get(id) ?? statesById.get(id)
         if (!original) throw new Error(`State ${id} not found`)
         return { original, updated: applyStatePatch(original, patch) }
       })

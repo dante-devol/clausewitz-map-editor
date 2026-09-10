@@ -98,4 +98,12 @@ describe('applyStrategicRegionSaves', () => {
     expect(parseOne(result.content)).toEqual(updated)
   })
 
+  it('refuses to overwrite weather that also changed on disk', () => {
+    const diskFile = REGION_FILE.replace('snow=0.300', 'snow=0.900')
+    const updated = clone(region)
+    updated.weatherPeriods[0].temperature = [0, 5]
+    const result = applyStrategicRegionSaves(diskFile, [{ original: region, updated }])
+    expect(result.conflicts).toEqual([expect.stringContaining('weather')])
+    expect(result.content).toBe(diskFile)
+  })
 })

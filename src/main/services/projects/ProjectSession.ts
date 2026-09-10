@@ -2,7 +2,11 @@ import { readFileSync, watch, type FSWatcher } from 'fs'
 import { basename } from 'path'
 import type { BrowserWindow } from 'electron'
 import { channels } from '../../../shared/contract/events'
-import type { StateSaveRequest, StrategicRegionSaveRequest } from '../../../shared/contract/api'
+import type {
+  DefinitionsSaveResult,
+  StateSaveRequest,
+  StrategicRegionSaveRequest
+} from '../../../shared/contract/api'
 import type { ResolvedPaths } from '../../../shared/pathTypes'
 import type { Continent, Province, Resource, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
 import type { LoadedProject, ProjectLoader } from './ProjectLoader'
@@ -79,6 +83,7 @@ export class ProjectSession {
 
     const snapshot = await this.loader.loadSnapshot(this.project, this.pool)
     this.continents = snapshot.continents
+    this.knownHashes.set(this.project.resolvedPaths.definitions, snapshot.definitionsHash)
     this.knownHashes.set(this.project.resolvedPaths.provinces, snapshot.provincesImageHash)
     this.watchCoreProjectFiles()
     return snapshot
@@ -166,14 +171,25 @@ export class ProjectSession {
   // written to the same relative path inside the mod folder instead, and the
   // session then reads from that copy.
 
-  saveDefinitions(provinces: Province[], continents: Continent[]): void {
+  saveDefinitions(provinces: Province[], continents: Continent[], expectedHash: string): DefinitionsSaveResult {
     const project = this.requireProject()
     const source = project.resolvedPaths.definitions
-    const content = DefinitionsCsv.merge(readFileSync(source, 'utf-8'), provinces, continents)
+    const buffer = readFileSync(source)
+    if (computeHash(buffer) !== expectedHash) {
+      // Push the current file to the renderer now rather than waiting for the
+      // watcher, so the edits can be reviewed against it.
+      const definitions = this.loader.loadDefinitions(project, this.continents)
+      this.knownHashes.set(source, definitions.hash)
+      this.emit('definitions', definitions)
+      throw new Error(`${basename(source)} changed on disk after it was loaded. Its new contents are being reloaded; review your changes and save again.`)
+    }
+
+    const content = DefinitionsCsv.merge(buffer.toString('utf-8'), provinces, continents)
     const target = resolveWriteTarget(project, source)
-    this.writeProjectFile(target, content)
+    const hash = this.writeProjectFile(target, content)
     this.relocate(source, target)
     this.refreshWatchers()
+    return { hash }
   }
 
   saveBmp(rgbaData: number[], width: number, height: number): void {
@@ -292,7 +308,9 @@ export class ProjectSession {
       const continents = this.loader.loadContinents(this.project)
       this.continents = continents
       this.emit('continents', continents)
-      this.emit('definitions', this.loader.loadDefinitions(this.project, continents))
+      const definitions = this.loader.loadDefinitions(this.project, continents)
+      this.knownHashes.set(this.project.resolvedPaths.definitions, definitions.hash)
+      this.emit('definitions', definitions)
     })
 
     this.watch(this.project.resolvedPaths.definitions, () => {

@@ -34,7 +34,7 @@ const api: ApiContract = {
   },
   map: {
     load: (projectId) => ipcRenderer.invoke(channels.map.load, projectId),
-    save: (projectId, provinces, continents) => ipcRenderer.invoke(channels.map.save, projectId, provinces, continents),
+    save: (projectId, provinces, continents, expectedHash) => ipcRenderer.invoke(channels.map.save, projectId, provinces, continents, expectedHash),
     saveStates: (projectId, requests) => ipcRenderer.invoke(channels.map.saveStates, projectId, requests),
     saveStrategicRegions: (projectId, requests) => ipcRenderer.invoke(channels.map.saveStrategicRegions, projectId, requests),
     loadStates: (projectId) => ipcRenderer.invoke(channels.map.loadStates, projectId),

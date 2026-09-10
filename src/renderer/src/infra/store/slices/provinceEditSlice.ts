@@ -8,13 +8,16 @@ import type {
 
 export interface ProvinceEditSlice {
   originalDefinitions: Map<number, Province>
+  // Hash of the definition.csv content `originalDefinitions` came from; sent
+  // with saves so the main process refuses to overwrite a changed file.
+  definitionsHash: string | null
   bmpOnlyEntries: BmpOnlyEntry[]
   bmpOnlyByColor: Map<number, string>
   pendingEdits: Map<number, Partial<ProvinceDraftFields>>
   pendingBmpOnlyEdits: Map<string, ProvinceDraftFields>
   bmpReplacements: Map<number, string>
   pendingNewProvinces: Map<string, number>
-  loadOriginalDefinitions: (provinces: Province[]) => void
+  loadOriginalDefinitions: (provinces: Province[], hash: string) => void
   pruneBmpOnlyEntries: (definedColors: ReadonlySet<number>) => void
   syncBmpOnlyEntries: (colors: number[]) => void
   editProvince: (id: number, patch: Partial<ProvinceDraftFields>) => void
@@ -31,6 +34,7 @@ export interface ProvinceEditSlice {
 
 export const PROVINCE_EDIT_EMPTY = {
   originalDefinitions: new Map<number, Province>(),
+  definitionsHash: null as string | null,
   bmpOnlyEntries: [] as BmpOnlyEntry[],
   bmpOnlyByColor: new Map<number, string>(),
   pendingEdits: new Map<number, Partial<ProvinceDraftFields>>(),
@@ -50,10 +54,10 @@ function createEmptyDraftFields(): ProvinceDraftFields {
 export const createProvinceEditSlice: StateCreator<ProvinceEditSlice, [], [], ProvinceEditSlice> = (set) => ({
   ...PROVINCE_EDIT_EMPTY,
 
-  loadOriginalDefinitions: (incoming) => {
+  loadOriginalDefinitions: (incoming, definitionsHash) => {
     const originalDefinitions = new Map<number, Province>()
     for (const p of incoming) originalDefinitions.set(p.id, p)
-    set({ originalDefinitions })
+    set({ originalDefinitions, definitionsHash })
   },
 
   // Drops BMP-only entries whose colour now has a definition (e.g. after new

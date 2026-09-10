@@ -2,6 +2,7 @@ import type { BrowserWindow } from 'electron'
 import { ProjectLoader } from './ProjectLoader'
 import { ProjectSession } from './ProjectSession'
 import type {
+  DefinitionsSaveResult,
   ProjectOpenRequest,
   ProjectOpenResult,
   StateSaveRequest,
@@ -66,11 +67,12 @@ export class ProjectSessionRegistry {
     window: BrowserWindow,
     projectId: string,
     provinces: Province[],
-    continents: Continent[]
-  ): void {
+    continents: Continent[],
+    expectedHash: string
+  ): DefinitionsSaveResult {
     const session = this.forWindow(window)
     if (session.projectId !== projectId) throw new Error('Project session mismatch')
-    session.saveDefinitions(provinces, continents)
+    return session.saveDefinitions(provinces, continents, expectedHash)
   }
 
   saveStatesForWindow(window: BrowserWindow, projectId: string, requests: StateSaveRequest[]) {

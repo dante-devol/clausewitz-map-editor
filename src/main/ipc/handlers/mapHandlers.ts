@@ -10,10 +10,13 @@ export function registerMapHandlers(context: IpcContext): void {
     return context.sessions.loadForWindow(window, projectId)
   })
 
-  ipcMain.handle(channels.map.save, (event, projectId: string, provinces: Province[], continents: Continent[]) => {
-    const window = getEventWindow(event)
-    context.sessions.saveDefinitionsForWindow(window, projectId, provinces, continents)
-  })
+  ipcMain.handle(
+    channels.map.save,
+    (event, projectId: string, provinces: Province[], continents: Continent[], expectedHash: string) => {
+      const window = getEventWindow(event)
+      return context.sessions.saveDefinitionsForWindow(window, projectId, provinces, continents, expectedHash)
+    }
+  )
 
   ipcMain.handle(channels.map.loadStates, (event, projectId: string) => {
     const window = getEventWindow(event)

@@ -41,6 +41,7 @@ export function StrategicRegionSaveBar(): JSX.Element {
 
   const pendingStrategicRegionEdits = useMapDataStore((s) => s.pendingStrategicRegionEdits)
   const strategicRegionsById = useMapDataStore((s) => s.strategicRegionsById)
+  const strategicRegionEditBaselines = useMapDataStore((s) => s.strategicRegionEditBaselines)
   const clearStrategicRegionSavedChanges = useMapDataStore((s) => s.clearStrategicRegionSavedChanges)
 
   const [isSaving, setIsSaving] = useState(false)
@@ -56,7 +57,7 @@ export function StrategicRegionSaveBar(): JSX.Element {
     setSaveError(null)
     try {
       const requests = [...pendingStrategicRegionEdits.entries()].map(([id, patch]) => {
-        const original = strategicRegionsById.get(id)
+        const original = strategicRegionEditBaselines.get(id) ?? strategicRegionsById.get(id)
         if (!original) throw new Error(`Region ${id} not found`)
         return { original, updated: applyStrategicRegionPatch(original, patch) }
       })

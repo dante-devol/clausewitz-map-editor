@@ -190,6 +190,16 @@ describe('applyStateSaves', () => {
     expect(parseOne(result.content)).toMatchObject({ manpower: 1, stateCategory: 'town' })
   })
 
+  it('refuses to overwrite a field that also changed on disk', () => {
+    const diskFile = STATE_FILE.replace('manpower = 250000', 'manpower = 999')
+    const updated = clone(state)
+    updated.manpower = 1
+
+    const result = applyStateSaves(diskFile, [{ original: state, updated }])
+    expect(result.conflicts).toEqual([expect.stringContaining('manpower')])
+    expect(result.content).toBe(diskFile)
+  })
+
   it('reports a state that disappeared from the file', () => {
     const result = applyStateSaves('', [{ original: state, updated: clone(state) }])
     expect(result.conflicts).toEqual([expect.stringContaining('no longer present')])
