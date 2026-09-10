@@ -1,6 +1,5 @@
 import { ipcMain } from 'electron'
 import { channels } from '../../../shared/contract/events'
-import { DefinitionsCsv } from '../../parsers/DefinitionsCsv'
 import type { Continent, Province, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
 import { getEventWindow, type IpcContext } from '../context'
 
@@ -12,8 +11,7 @@ export function registerMapHandlers(context: IpcContext): void {
 
   ipcMain.handle(channels.map.save, (event, projectId: string, provinces: Province[], continents: Continent[]) => {
     const window = getEventWindow(event)
-    const project = context.sessions.projectForWindow(window, projectId)
-    new DefinitionsCsv(project.resolvedPaths.definitions).save(provinces, continents)
+    context.sessions.saveDefinitionsForWindow(window, projectId, provinces, continents)
   })
 
   ipcMain.handle(channels.map.loadStates, (event, projectId: string) => {

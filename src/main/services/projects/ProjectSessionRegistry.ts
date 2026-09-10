@@ -2,8 +2,7 @@ import type { BrowserWindow } from 'electron'
 import { ProjectLoader } from './ProjectLoader'
 import { ProjectSession } from './ProjectSession'
 import type { ProjectOpenRequest, ProjectOpenResult } from '../../../shared/contract/api'
-import type { LoadedProject } from './ProjectLoader'
-import type { StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
+import type { Continent, Province, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
 
 export class ProjectSessionRegistry {
   private readonly sessions = new Map<number, ProjectSession>()
@@ -58,6 +57,17 @@ export class ProjectSessionRegistry {
     return session.saveBmp(rgbaData, width, height)
   }
 
+  saveDefinitionsForWindow(
+    window: BrowserWindow,
+    projectId: string,
+    provinces: Province[],
+    continents: Continent[]
+  ): void {
+    const session = this.forWindow(window)
+    if (session.projectId !== projectId) throw new Error('Project session mismatch')
+    session.saveDefinitions(provinces, continents)
+  }
+
   saveStatesForWindow(window: BrowserWindow, projectId: string, states: StateDefinition[]) {
     const session = this.forWindow(window)
     if (session.projectId !== projectId) {
@@ -88,13 +98,5 @@ export class ProjectSessionRegistry {
       throw new Error('Project session mismatch')
     }
     return session.loadResources()
-  }
-
-  projectForWindow(window: BrowserWindow, projectId: string): LoadedProject {
-    const session = this.forWindow(window)
-    if (session.projectId !== projectId) {
-      throw new Error('Project session mismatch')
-    }
-    return session.requireProject()
   }
 }

@@ -78,12 +78,17 @@ export interface MapChangedEvent {
     | ImageChangedData
 }
 
+// 'external' patches come from the file watcher; 'save' patches re-publish a
+// file this app just wrote (its sourcePath may have moved into the mod folder).
+export type DatasetPatchOrigin = 'external' | 'save'
+
 export interface StateDatasetUpdate {
   op: 'replace' | 'append' | 'patch'
   items: StateDefinition[]
   loadedFiles: number
   totalFiles: number
   sourcePath?: string
+  origin?: DatasetPatchOrigin
 }
 
 export interface StrategicRegionDatasetUpdate {
@@ -92,6 +97,7 @@ export interface StrategicRegionDatasetUpdate {
   loadedFiles: number
   totalFiles: number
   sourcePath?: string
+  origin?: DatasetPatchOrigin
 }
 
 export interface ImageChangedData {

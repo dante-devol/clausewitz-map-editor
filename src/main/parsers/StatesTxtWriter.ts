@@ -9,11 +9,11 @@ import type {
 export class StatesTxtWriter {
   write(state: StateDefinition): void {
     if (!state.sourcePath) throw new Error(`State ${state.id} has no sourcePath`)
-    writeFileSync(state.sourcePath, serialize(state), 'utf-8')
+    writeFileSync(state.sourcePath, serializeState(state), 'utf-8')
   }
 }
 
-function serialize(s: StateDefinition): string {
+export function serializeState(s: StateDefinition): string {
   const lines: string[] = []
   lines.push('state = {')
   lines.push(`\tid = ${s.id}`)

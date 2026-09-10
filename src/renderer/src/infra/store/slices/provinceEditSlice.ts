@@ -15,6 +15,7 @@ export interface ProvinceEditSlice {
   bmpReplacements: Map<number, string>
   pendingNewProvinces: Map<string, number>
   loadOriginalDefinitions: (provinces: Province[]) => void
+  pruneBmpOnlyEntries: (definedColors: ReadonlySet<number>) => void
   syncBmpOnlyEntries: (colors: number[]) => void
   editProvince: (id: number, patch: Partial<ProvinceDraftFields>) => void
   editBmpOnlyProvince: (guid: string, patch: Partial<ProvinceDraftFields>) => void
@@ -54,6 +55,23 @@ export const createProvinceEditSlice: StateCreator<ProvinceEditSlice, [], [], Pr
     for (const p of incoming) originalDefinitions.set(p.id, p)
     set({ originalDefinitions })
   },
+
+  // Drops BMP-only entries whose colour now has a definition (e.g. after new
+  // provinces were saved), so they don't reappear as unregistered duplicates.
+  pruneBmpOnlyEntries: (definedColors) => set((state) => {
+    const removed = state.bmpOnlyEntries.filter((entry) => definedColors.has(entry.color))
+    if (removed.length === 0) return {}
+    const removedGuids = new Set(removed.map((entry) => entry.guid))
+    const bmpOnlyByColor = new Map(state.bmpOnlyByColor)
+    for (const entry of removed) bmpOnlyByColor.delete(entry.color)
+    const pendingBmpOnlyEdits = new Map(state.pendingBmpOnlyEdits)
+    for (const guid of removedGuids) pendingBmpOnlyEdits.delete(guid)
+    return {
+      bmpOnlyEntries: state.bmpOnlyEntries.filter((entry) => !removedGuids.has(entry.guid)),
+      bmpOnlyByColor,
+      pendingBmpOnlyEdits
+    }
+  }),
 
   syncBmpOnlyEntries: (colors) => set((state) => {
     const bmpOnlyByColor = new Map(state.bmpOnlyByColor)

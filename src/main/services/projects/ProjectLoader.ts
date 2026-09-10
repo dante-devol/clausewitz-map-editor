@@ -1,7 +1,5 @@
 import { readFileSync } from 'fs'
 import { readFile } from 'fs/promises'
-import { StatesTxtWriter } from '../../parsers/StatesTxtWriter'
-import { StrategicRegionsTxtWriter } from '../../parsers/StrategicRegionsTxtWriter'
 import { WeatherTxt } from '../../parsers/WeatherTxt'
 import { computeHash } from '../../fileManager'
 import { join } from 'path'
@@ -10,30 +8,39 @@ import { resolvePaths } from '../../pathResolver'
 import { ContinentTxt } from '../../parsers/ContinentTxt'
 import { DescriptorMod } from '../../parsers/DescriptorMod'
 import { DefinitionsCsv } from '../../parsers/DefinitionsCsv'
-import { StrategicRegionsTxt } from '../../parsers/StrategicRegionsTxt'
-import { StatesTxt } from '../../parsers/StatesTxt'
 import { TerrainTxt } from '../../parsers/TerrainTxt'
 import { StateCategoryTxt } from '../../parsers/StateCategoryTxt'
 import { BuildingsTxt } from '../../parsers/BuildingsTxt'
 import { ResourcesTxt } from '../../parsers/ResourcesTxt'
 import type { MapDataSnapshot, ProjectOpenRequest, ProjectOpenResult } from '../../../shared/contract/api'
-import type { Building, Continent, Resource, StateCategory, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
+import type { Building, Continent, Resource, StateCategory } from '../../../shared/mapDataTypes'
 import { buildProvinceCatalog } from '../../../shared/provinceCatalog'
 import type { WorkerParsePool } from '../../workers/WorkerParsePool'
 import type { ParserOutputMap } from '../../workers/parserRegistry'
+import { isSameOrInside } from './writeTargets'
 
 export interface LoadedProject {
   projectId: string
+  gamePath: string
+  modPath: string
   resolvedPaths: ProjectOpenResult['resolvedPaths']
 }
 
 export class ProjectLoader {
   open(request: ProjectOpenRequest): LoadedProject {
+    // Saves are redirected into the mod folder; if that folder is the game
+    // install (or inside it) the redirect would still modify the game.
+    if (isSameOrInside(request.gamePath, request.modPath)) {
+      throw new Error('The mod folder cannot be the game folder or a folder inside it.')
+    }
+
     const descriptorPath = join(request.modPath, getConfig().paths.descriptor)
     const descriptor = DescriptorMod.load(descriptorPath)
 
     return {
       projectId: crypto.randomUUID(),
+      gamePath: request.gamePath,
+      modPath: request.modPath,
       resolvedPaths: resolvePaths(request.gamePath, request.modPath, descriptor.replacePaths)
     }
   }
@@ -141,16 +148,6 @@ export class ProjectLoader {
       onChunk,
       (item, filePath) => ({ ...item, sourcePath: filePath })
     )
-  }
-
-  saveStates(states: StateDefinition[]): void {
-    const writer = new StatesTxtWriter()
-    for (const state of states) writer.write(state)
-  }
-
-  saveStrategicRegions(regions: StrategicRegionDefinition[]): void {
-    const writer = new StrategicRegionsTxtWriter()
-    for (const region of regions) writer.write(region)
   }
 
   loadWeatherEntries(project: LoadedProject): string[] {

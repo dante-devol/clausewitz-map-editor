@@ -18,6 +18,7 @@ import {
   selectEffectiveProvincesForSave,
   selectIncompleteProvinceDraftTargets
 } from '../../../infra/store/provinceEditSelectors'
+import { buildProvinceCatalog } from '../../../../../shared/provinceCatalog'
 import { CanonicalProvinceList } from './CanonicalProvinceList'
 import { BmpOnlyList } from './BmpOnlyList'
 import { ChangesList } from './ChangesList'
@@ -66,6 +67,10 @@ export function ProvincePanel(): JSX.Element {
   const bmpReplacements = useMapDataStore((s) => s.bmpReplacements)
   const pendingNewProvinces = useMapDataStore((s) => s.pendingNewProvinces)
   const loadOriginalDefinitions = useMapDataStore((s) => s.loadOriginalDefinitions)
+  const loadProvinces = useMapDataStore((s) => s.loadProvinces)
+  const loadProvinceCatalog = useMapDataStore((s) => s.loadProvinceCatalog)
+  const setProvinceBitmapStatus = useMapDataStore((s) => s.setProvinceBitmapStatus)
+  const pruneBmpOnlyEntries = useMapDataStore((s) => s.pruneBmpOnlyEntries)
   const clearSavedChanges = useMapDataStore((s) => s.clearSavedChanges)
 
   const [canonicalCollapsed, setCanonicalCollapsed] = useState(false)
@@ -111,8 +116,14 @@ export function ProvincePanel(): JSX.Element {
     setSaveError(null)
     try {
       await window.api.map.save(projectId, provincesToSave, continentList)
+      // The main process ignores the watcher event for its own write, so bring
+      // the loaded data in line with what was saved here.
+      loadProvinces(provincesToSave)
       loadOriginalDefinitions(provincesToSave)
+      loadProvinceCatalog(buildProvinceCatalog(provincesToSave))
+      setProvinceBitmapStatus('idle')
       clearSavedChanges()
+      pruneBmpOnlyEntries(new Set(provincesToSave.map((province) => province.color)))
       setShowSaveBlocker(false)
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : t('provincePanel.save.error'))

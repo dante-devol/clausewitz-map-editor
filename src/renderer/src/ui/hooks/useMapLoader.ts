@@ -236,7 +236,9 @@ export function useMapLoader(): void {
         const update = event.data as StateDatasetUpdate
         if (update.op === 'patch') {
           patchStates(update.sourcePath!, update.items)
-          showPatchReloadToast(update.sourcePath!, patchedFiles, patchReloadScope, tRef.current('notification.fileReload.title'))
+          if (update.origin !== 'save') {
+            showPatchReloadToast(update.sourcePath!, patchedFiles, patchReloadScope, tRef.current('notification.fileReload.title'))
+          }
         } else {
           const progress = resolveFileProgress(update.loadedFiles, update.totalFiles, resolvedPaths?.states.length ?? 0)
           notificationService.advanceProgress({
@@ -256,7 +258,9 @@ export function useMapLoader(): void {
         const update = event.data as StrategicRegionDatasetUpdate
         if (update.op === 'patch') {
           patchStrategicRegions(update.sourcePath!, update.items)
-          showPatchReloadToast(update.sourcePath!, patchedFiles, patchReloadScope, tRef.current('notification.fileReload.title'))
+          if (update.origin !== 'save') {
+            showPatchReloadToast(update.sourcePath!, patchedFiles, patchReloadScope, tRef.current('notification.fileReload.title'))
+          }
         } else {
           const progress = resolveFileProgress(update.loadedFiles, update.totalFiles, resolvedPaths?.strategicRegions.length ?? 0)
           notificationService.advanceProgress({

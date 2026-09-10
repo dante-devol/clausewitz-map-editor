@@ -4,11 +4,11 @@ import type { StrategicRegionDefinition, WeatherPeriod } from '../../shared/mapD
 export class StrategicRegionsTxtWriter {
   write(region: StrategicRegionDefinition): void {
     if (!region.sourcePath) throw new Error(`Strategic region ${region.id} has no sourcePath`)
-    writeFileSync(region.sourcePath, serialize(region), 'utf-8')
+    writeFileSync(region.sourcePath, serializeRegion(region), 'utf-8')
   }
 }
 
-function serialize(r: StrategicRegionDefinition): string {
+export function serializeRegion(r: StrategicRegionDefinition): string {
   const lines: string[] = []
   lines.push('strategic_region = {')
   lines.push(`\tid = ${r.id}`)

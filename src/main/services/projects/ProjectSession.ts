@@ -1,22 +1,36 @@
-import { readFileSync, watch, type FSWatcher } from 'fs'
+import { mkdirSync, readFileSync, watch, writeFileSync, type FSWatcher } from 'fs'
+import { dirname } from 'path'
 import type { BrowserWindow } from 'electron'
 import { channels } from '../../../shared/contract/events'
-import type { Continent, Resource, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
+import type { ResolvedPaths } from '../../../shared/pathTypes'
+import type { Continent, Province, Resource, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
 import type { LoadedProject, ProjectLoader } from './ProjectLoader'
 import { WorkerParsePool } from '../../workers/WorkerParsePool'
-import { writeBmp } from '../../parsers/BmpWriter'
+import { encodeBmp } from '../../parsers/BmpWriter'
+import { DefinitionsCsv } from '../../parsers/DefinitionsCsv'
+import { StatesTxt } from '../../parsers/StatesTxt'
+import { serializeState } from '../../parsers/StatesTxtWriter'
+import { StrategicRegionsTxt } from '../../parsers/StrategicRegionsTxt'
+import { serializeRegion } from '../../parsers/StrategicRegionsTxtWriter'
+import { computeHash } from '../../fileManager'
+import { resolveWriteTarget } from './writeTargets'
 
 interface WatchEntry {
   watcher: FSWatcher
   debounce: ReturnType<typeof setTimeout> | null
+  onChanged: () => void
 }
 
 export class ProjectSession {
   private readonly watchers = new Map<string, WatchEntry>()
-  private suppressImageChanges = 0
+  // Hash of the content this session last loaded or wrote, per path. Watcher
+  // events whose content matches are ignored, which filters out our own saves
+  // and editors that touch a file without changing it.
+  private readonly knownHashes = new Map<string, string>()
   private project: LoadedProject | null = null
   private pool: WorkerParsePool | null = null
   private continents: Continent[] = []
+  private coreFilesWatched = false
   private statesLoaded = false
   private strategicRegionsLoaded = false
   private statesLoadPromise: Promise<void> | null = null
@@ -34,6 +48,7 @@ export class ProjectSession {
     this.project = project
     this.pool = new WorkerParsePool()
     this.continents = []
+    this.coreFilesWatched = false
     this.statesLoaded = false
     this.strategicRegionsLoaded = false
     this.statesLoadPromise = null
@@ -57,6 +72,7 @@ export class ProjectSession {
 
     const snapshot = await this.loader.loadSnapshot(this.project, this.pool)
     this.continents = snapshot.continents
+    this.knownHashes.set(this.project.resolvedPaths.provinces, snapshot.provincesImageHash)
     this.watchCoreProjectFiles()
     return snapshot
   }
@@ -86,20 +102,6 @@ export class ProjectSession {
     })
 
     return this.statesLoadPromise
-  }
-
-  saveBmp(rgbaData: number[], width: number, height: number): void {
-    const project = this.requireProject()
-    this.suppressImageChanges++
-    writeBmp(project.resolvedPaths.provinces, rgbaData, width, height)
-  }
-
-  saveStates(states: StateDefinition[]): void {
-    this.loader.saveStates(states)
-  }
-
-  saveStrategicRegions(regions: StrategicRegionDefinition[]): void {
-    this.loader.saveStrategicRegions(regions)
   }
 
   loadWeatherEntries(): string[] {
@@ -151,8 +153,102 @@ export class ProjectSession {
     return this.strategicRegionsLoadPromise
   }
 
+  // ─── Saving ───────────────────────────────────────────────────────────────
+  //
+  // Every write goes through resolveWriteTarget: files from the base game are
+  // written to the same relative path inside the mod folder instead, and the
+  // session then reads from that copy.
+
+  saveDefinitions(provinces: Province[], continents: Continent[]): void {
+    const project = this.requireProject()
+    const source = project.resolvedPaths.definitions
+    const content = DefinitionsCsv.serialize(provinces, continents, DefinitionsCsv.detectLineEnding(readFileSync(source, 'utf-8')))
+    const target = resolveWriteTarget(project, source)
+    this.writeProjectFile(target, content)
+    this.relocate(source, target)
+    this.refreshWatchers()
+  }
+
+  saveBmp(rgbaData: number[], width: number, height: number): void {
+    const project = this.requireProject()
+    const source = project.resolvedPaths.provinces
+    const target = resolveWriteTarget(project, source)
+    this.writeProjectFile(target, encodeBmp(rgbaData, width, height))
+    this.relocate(source, target)
+    this.refreshWatchers()
+  }
+
+  saveStates(states: StateDefinition[]): void {
+    const project = this.requireProject()
+    for (const state of states) {
+      const source = state.sourcePath
+      if (!source) throw new Error(`State ${state.id} has no sourcePath`)
+      const target = resolveWriteTarget(project, source)
+      this.writeProjectFile(target, serializeState(state))
+      this.relocate(source, target)
+      const items: StateDefinition[] = StatesTxt.parse(readFileSync(target, 'utf-8')).map((item) => ({ ...item, sourcePath: target }))
+      this.emit('states', { op: 'patch', sourcePath: source, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
+    }
+    this.refreshWatchers()
+  }
+
+  saveStrategicRegions(regions: StrategicRegionDefinition[]): void {
+    const project = this.requireProject()
+    for (const region of regions) {
+      const source = region.sourcePath
+      if (!source) throw new Error(`Strategic region ${region.id} has no sourcePath`)
+      const target = resolveWriteTarget(project, source)
+      this.writeProjectFile(target, serializeRegion(region))
+      this.relocate(source, target)
+      const items: StrategicRegionDefinition[] = StrategicRegionsTxt.parse(readFileSync(target, 'utf-8'))
+        .map((item) => ({ ...item, sourcePath: target }))
+      this.emit('strategicRegions', { op: 'patch', sourcePath: source, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
+    }
+    this.refreshWatchers()
+  }
+
+  // Writes the file and records its hash so the resulting watcher event is
+  // recognised as our own write. Returns the hash of the written content.
+  private writeProjectFile(target: string, data: string | Buffer): string {
+    const buffer = typeof data === 'string' ? Buffer.from(data, 'utf-8') : data
+    const hash = computeHash(buffer)
+    this.knownHashes.set(target, hash)
+    mkdirSync(dirname(target), { recursive: true })
+    writeFileSync(target, buffer)
+    return hash
+  }
+
+  // After a copy-on-write save the mod copy shadows the game file: point the
+  // project's resolved paths at it and stop watching the game file.
+  private relocate(from: string, to: string): void {
+    if (from === to || !this.project) return
+    const paths = this.project.resolvedPaths
+    for (const key of Object.keys(paths) as (keyof ResolvedPaths)[]) {
+      const value = paths[key]
+      if (Array.isArray(value)) {
+        const index = value.indexOf(from)
+        if (index !== -1) value[index] = to
+      } else if (value === from) {
+        (paths[key] as string) = to
+      }
+    }
+    this.unwatch(from)
+    this.knownHashes.delete(from)
+  }
+
+  // ─── Watching ─────────────────────────────────────────────────────────────
+
+  // Registers watchers for any resolved path not yet watched (e.g. after a
+  // save relocated a file into the mod folder).
+  private refreshWatchers(): void {
+    if (this.coreFilesWatched) this.watchCoreProjectFiles()
+    if (this.statesLoaded) this.watchStateFiles()
+    if (this.strategicRegionsLoaded) this.watchStrategicRegionFiles()
+  }
+
   private watchCoreProjectFiles(): void {
     if (!this.project) return
+    this.coreFilesWatched = true
 
     this.watch(this.project.resolvedPaths.continent, () => {
       if (!this.project) return
@@ -176,7 +272,6 @@ export class ProjectSession {
 
     this.watch(this.project.resolvedPaths.provinces, () => {
       if (!this.project) return
-      if (this.suppressImageChanges > 0) { this.suppressImageChanges--; return }
       this.emit('image', this.loader.loadImageBase64(this.project))
     })
   }
@@ -197,7 +292,7 @@ export class ProjectSession {
     if (!this.pool) return
     const rawItems = await this.pool.dispatch(filePath, 'states')
     const items = (rawItems as StateDefinition[]).map((item) => ({ ...item, sourcePath: filePath }))
-    this.emit('states', { op: 'patch', sourcePath: filePath, items, loadedFiles: 1, totalFiles: 1 })
+    this.emit('states', { op: 'patch', sourcePath: filePath, items, loadedFiles: 1, totalFiles: 1, origin: 'external' })
   }
 
   private watchStrategicRegionFiles(): void {
@@ -216,26 +311,45 @@ export class ProjectSession {
     if (!this.pool) return
     const rawItems = await this.pool.dispatch(filePath, 'strategicRegions')
     const items = (rawItems as StrategicRegionDefinition[]).map((item) => ({ ...item, sourcePath: filePath }))
-    this.emit('strategicRegions', { op: 'patch', sourcePath: filePath, items, loadedFiles: 1, totalFiles: 1 })
+    this.emit('strategicRegions', { op: 'patch', sourcePath: filePath, items, loadedFiles: 1, totalFiles: 1, origin: 'external' })
   }
 
   private watch(path: string, onChanged: () => void): void {
     if (this.watchers.has(path)) return
 
-    const entry: WatchEntry = { watcher: null!, debounce: null }
+    const entry: WatchEntry = { watcher: null!, debounce: null, onChanged }
     entry.watcher = watch(path, () => {
       if (entry.debounce) clearTimeout(entry.debounce)
       entry.debounce = setTimeout(() => {
+        entry.debounce = null
+        let hash: string
         try {
-          readFileSync(path)
-          onChanged()
+          hash = computeHash(readFileSync(path))
         } catch {
-          // Ignore transient read failures during file replacement.
+          return // transient read failure during file replacement
+        }
+        if (this.knownHashes.get(path) === hash) return
+        this.knownHashes.set(path, hash)
+        try {
+          entry.onChanged()
+        } catch {
+          // A half-written or invalid file; the next change event will retry.
         }
       }, 100)
     })
+    // The watched file can disappear (e.g. replaced by another tool); a watcher
+    // error must not crash the main process.
+    entry.watcher.on('error', () => this.unwatch(path))
 
     this.watchers.set(path, entry)
+  }
+
+  private unwatch(path: string): void {
+    const entry = this.watchers.get(path)
+    if (!entry) return
+    if (entry.debounce) clearTimeout(entry.debounce)
+    entry.watcher.close()
+    this.watchers.delete(path)
   }
 
   private emit(
@@ -255,6 +369,7 @@ export class ProjectSession {
     this.disposePool()
     this.project = null
     this.continents = []
+    this.coreFilesWatched = false
     this.statesLoaded = false
     this.strategicRegionsLoaded = false
     this.statesLoadPromise = null
@@ -275,5 +390,6 @@ export class ProjectSession {
       entry.watcher.close()
     }
     this.watchers.clear()
+    this.knownHashes.clear()
   }
 }

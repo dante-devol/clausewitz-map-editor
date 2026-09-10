@@ -8,7 +8,8 @@
     "dev:inspect": "electron-vite dev --inspect",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "package": "electron-vite build && electron-builder"
+    "package": "electron-vite build && electron-builder",
+    "test": "vitest run"
   },
   "build": {
     "appId": "com.hoi4-map-editor.app",
@@ -35,7 +36,8 @@
     "electron-builder": "^25.1.7",
     "electron-vite": "^2.3.0",
     "typescript": "^5.6.2",
-    "vite": "^5.4.10"
+    "vite": "^5.4.10",
+    "vitest": "^3.2.7"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",

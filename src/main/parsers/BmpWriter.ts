@@ -1,13 +1,10 @@
-import { writeFileSync } from 'fs'
-
-// Write a 24bpp bottom-up RGB BMP file from top-down RGBA pixel data.
+// Encodes top-down RGBA pixel data as a 24bpp bottom-up RGB BMP.
 // HOI4 province maps use 24bpp RGB BMPs with no compression.
-export function writeBmp(
-  outputPath: string,
+export function encodeBmp(
   rgbaData: Uint8Array | number[],
   width: number,
   height: number
-): void {
+): Buffer {
   // Row stride must be padded to 4-byte boundary.
   const rowStride = Math.ceil((width * 3) / 4) * 4
   const pixelDataSize = rowStride * height
@@ -48,5 +45,5 @@ export function writeBmp(
     }
   }
 
-  writeFileSync(outputPath, buf)
+  return buf
 }
