@@ -4,9 +4,10 @@ import {
   shorthands,
 } from '@fluentui/react-components'
 import {
-  ChevronDownRegular, ChevronUpRegular, DismissRegular,
+  ChevronDownRegular, ChevronUpRegular, DismissRegular, SaveRegular,
 } from '@fluentui/react-icons'
 import { useI18n } from '../../i18n/I18nProvider'
+import { useCoreStore } from '../../../infra/store/coreStore'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import { unpackColor } from '../../../../../shared/mapDataTypes'
 import type { BmpPixelStroke } from '../../../../../shared/provinceEditing'
@@ -91,6 +92,26 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
     textAlign: 'center',
   },
+  saveBar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: tokens.spacingHorizontalS,
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalS}`,
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    flexShrink: 0,
+  },
+  saveBarText: {
+    color: tokens.colorNeutralForeground3,
+  },
+  saveBarActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalS,
+  },
+  errorText: {
+    color: tokens.colorPaletteRedForeground1,
+  },
 })
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -99,11 +120,16 @@ export function PaintPanel(): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
   const [collapsed, setCollapsed] = useState(false)
+  const projectId = useCoreStore((s) => s.projectId)
 
   const pendingBmpStrokes = useMapDataStore((s) => s.pendingBmpStrokes)
   const revertBmpStroke = useMapDataStore((s) => s.revertBmpStroke)
+  const bmpSaveStatus = useMapDataStore((s) => s.bmpSaveStatus)
+  const bmpSaveError = useMapDataStore((s) => s.bmpSaveError)
+  const requestBmpSave = useMapDataStore((s) => s.requestBmpSave)
 
   const hasPending = pendingBmpStrokes.length > 0
+  const isSaving = bmpSaveStatus === 'saving'
 
   return (
     <div className={styles.root}>
@@ -136,6 +162,26 @@ export function PaintPanel(): JSX.Element {
             )}
           </div>
         )}
+      </div>
+
+      <div className={styles.saveBar}>
+        <Text size={100} className={styles.saveBarText}>
+          {t('paintPanel.save.summary', { count: pendingBmpStrokes.length })}
+        </Text>
+        <div className={styles.saveBarActions}>
+          {bmpSaveError && (
+            <Text size={100} className={styles.errorText}>{bmpSaveError}</Text>
+          )}
+          <Button
+            size="small"
+            appearance="primary"
+            icon={<SaveRegular />}
+            disabled={!projectId || !hasPending || isSaving}
+            onClick={requestBmpSave}
+          >
+            {isSaving ? t('paintPanel.save.saving') : t('paintPanel.save.action')}
+          </Button>
+        </div>
       </div>
     </div>
   )

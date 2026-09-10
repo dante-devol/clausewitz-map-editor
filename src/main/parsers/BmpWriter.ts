@@ -1,7 +1,7 @@
 // Encodes top-down RGBA pixel data as a 24bpp bottom-up RGB BMP.
 // HOI4 province maps use 24bpp RGB BMPs with no compression.
 export function encodeBmp(
-  rgbaData: Uint8Array | number[],
+  rgbaData: Uint8Array,
   width: number,
   height: number
 ): Buffer {

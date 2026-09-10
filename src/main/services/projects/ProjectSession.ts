@@ -192,7 +192,7 @@ export class ProjectSession {
     return { hash }
   }
 
-  saveBmp(rgbaData: number[], width: number, height: number): void {
+  saveBmp(rgbaData: Uint8Array, width: number, height: number): void {
     const project = this.requireProject()
     const source = project.resolvedPaths.provinces
     const target = resolveWriteTarget(project, source)

@@ -48,7 +48,7 @@ export function registerMapHandlers(context: IpcContext): void {
     return context.sessions.loadWeatherEntriesForWindow(window, projectId)
   })
 
-  ipcMain.handle(channels.map.saveBmp, (event, projectId: string, rgbaData: number[], width: number, height: number) => {
+  ipcMain.handle(channels.map.saveBmp, (event, projectId: string, rgbaData: Uint8Array, width: number, height: number) => {
     const window = getEventWindow(event)
     context.sessions.saveBmpForWindow(window, projectId, rgbaData, width, height)
   })
