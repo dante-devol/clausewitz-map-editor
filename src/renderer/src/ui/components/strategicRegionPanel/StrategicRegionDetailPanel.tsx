@@ -226,6 +226,7 @@ export function StrategicRegionDetailPanel({ onCollapse }: Props): JSX.Element {
   const strategicRegionsById = useMapDataStore((s) => s.strategicRegionsById)
   const pendingStrategicRegionEdits = useMapDataStore((s) => s.pendingStrategicRegionEdits)
   const editStrategicRegion = useMapDataStore((s) => s.editStrategicRegion)
+  const moveProvincesToRegion = useMapDataStore((s) => s.moveProvincesToRegion)
   const revertStrategicRegionEdit = useMapDataStore((s) => s.revertStrategicRegionEdit)
 
   const [provincesOpen, setProvincesOpen] = useState(true)
@@ -290,7 +291,7 @@ export function StrategicRegionDetailPanel({ onCollapse }: Props): JSX.Element {
   const handleAddProvince = () => {
     const id = parseInt(addProvinceInput.trim(), 10)
     if (Number.isNaN(id) || effectiveProvinceIds.includes(id)) { setAddProvinceInput(''); return }
-    editStrategicRegion(region.id, { provinceIds: [...effectiveProvinceIds, id] })
+    moveProvincesToRegion([id], region.id)
     setAddProvinceInput('')
   }
 

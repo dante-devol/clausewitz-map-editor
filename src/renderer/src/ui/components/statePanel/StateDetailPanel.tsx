@@ -628,6 +628,7 @@ export function StateDetailPanel({ onCollapse }: Props): JSX.Element {
   const buildingsCatalog = useMapDataStore((s) => s.buildings)
   const pendingStateEdits = useMapDataStore((s) => s.pendingStateEdits)
   const editState = useMapDataStore((s) => s.editState)
+  const moveProvincesToState = useMapDataStore((s) => s.moveProvincesToState)
   const revertStateEdit = useMapDataStore((s) => s.revertStateEdit)
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set(['resources', 'history', 'provinces']))
@@ -964,7 +965,7 @@ export function StateDetailPanel({ onCollapse }: Props): JSX.Element {
                 if (e.key === 'Enter') {
                   const id = parseInt(addForm.value, 10)
                   if (!isNaN(id) && !effective.provinceIds.includes(id)) {
-                    dispatch({ provinceIds: [...effective.provinceIds, id] })
+                    moveProvincesToState([id], original.id)
                     setAddForm(null)
                   }
                 }
@@ -972,7 +973,7 @@ export function StateDetailPanel({ onCollapse }: Props): JSX.Element {
             <Button size="small" appearance="primary" onClick={() => {
               const id = parseInt(addForm.value, 10)
               if (!isNaN(id) && !effective.provinceIds.includes(id)) {
-                dispatch({ provinceIds: [...effective.provinceIds, id] })
+                moveProvincesToState([id], original.id)
                 setAddForm(null)
               }
             }}>{t('statePanel.add.confirm')}</Button>
