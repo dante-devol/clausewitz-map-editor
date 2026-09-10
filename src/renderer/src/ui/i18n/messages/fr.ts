@@ -2,6 +2,10 @@ import type { MessageKey } from './en'
 
 export const frMessages: Record<MessageKey, string> = {
   'app.title': 'Editeur de carte HOI4',
+  'app.unsavedChanges.title': 'Modifications non enregistrees',
+  'app.unsavedChanges.message': 'Vous avez des modifications non enregistrees. Quitter sans enregistrer ?',
+  'app.unsavedChanges.confirm': 'Quitter sans enregistrer',
+  'app.unsavedChanges.cancel': 'Annuler',
   'projectSelection.subtitle': 'Ouvrez un dossier de mod pour commencer',
   'projectSelection.gamePathRequired': "Le chemin du jeu vanilla est requis pour continuer.",
   'projectSelection.locateGameFolder': 'Localiser le dossier du jeu...',

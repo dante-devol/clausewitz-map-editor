@@ -7,7 +7,8 @@ const api: ApiContract = {
     getSystemLocale: () => ipcRenderer.invoke(channels.app.getSystemLocale)
   },
   dialogs: {
-    openFolder: () => ipcRenderer.invoke(channels.dialogs.openFolder)
+    openFolder: () => ipcRenderer.invoke(channels.dialogs.openFolder),
+    confirm: (options) => ipcRenderer.invoke(channels.dialogs.confirm, options)
   },
   files: {
     load: (path) => ipcRenderer.invoke(channels.files.load, path),
@@ -25,7 +26,8 @@ const api: ApiContract = {
     addRecent: (path) => ipcRenderer.invoke(channels.projects.addRecent, path),
     removeRecent: (path) => ipcRenderer.invoke(channels.projects.removeRecent, path),
     verifyModPath: (modPath) => ipcRenderer.invoke(channels.projects.verifyModPath, modPath),
-    open: (request) => ipcRenderer.invoke(channels.projects.open, request)
+    open: (request) => ipcRenderer.invoke(channels.projects.open, request),
+    close: (projectId) => ipcRenderer.invoke(channels.projects.close, projectId)
   },
   game: {
     getPath: () => ipcRenderer.invoke(channels.game.getPath),
@@ -56,7 +58,13 @@ const api: ApiContract = {
   },
   window: {
     enterEditor: () => ipcRenderer.invoke(channels.window.enterEditor),
-    exitEditor: () => ipcRenderer.invoke(channels.window.exitEditor)
+    exitEditor: () => ipcRenderer.invoke(channels.window.exitEditor),
+    confirmClose: () => ipcRenderer.invoke(channels.window.confirmClose),
+    onBeforeClose: (callback) => {
+      const listener = () => callback()
+      ipcRenderer.on(channels.window.beforeClose, listener)
+      return () => ipcRenderer.off(channels.window.beforeClose, listener)
+    }
   }
 }
 

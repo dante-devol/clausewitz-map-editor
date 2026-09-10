@@ -58,6 +58,18 @@ export type MapDataState =
     clear: () => void
   }
 
+// True if saving would write anything: pending province, state, region or
+// paint edits. Used to warn before leaving a project or closing the window.
+export function selectHasUnsavedChanges(state: MapDataState): boolean {
+  return state.pendingEdits.size > 0
+    || state.pendingBmpOnlyEdits.size > 0
+    || state.bmpReplacements.size > 0
+    || state.pendingNewProvinces.size > 0
+    || state.pendingStateEdits.size > 0
+    || state.pendingStrategicRegionEdits.size > 0
+    || state.pendingBmpStrokes.length > 0
+}
+
 export const useMapDataStore = create<MapDataState>()((...a) => {
   const [set] = a
   return {

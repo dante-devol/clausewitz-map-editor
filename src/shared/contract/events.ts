@@ -7,10 +7,12 @@ export const channels = {
     addRecent: 'projects:addRecent',
     removeRecent: 'projects:removeRecent',
     open: 'projects:open',
+    close: 'projects:close',
     verifyModPath: 'projects:verifyModPath'
   },
   dialogs: {
-    openFolder: 'dialogs:openFolder'
+    openFolder: 'dialogs:openFolder',
+    confirm: 'dialogs:confirm'
   },
   files: {
     load: 'files:load',
@@ -44,6 +46,8 @@ export const channels = {
   },
   window: {
     enterEditor: 'window:enterEditor',
-    exitEditor: 'window:exitEditor'
+    exitEditor: 'window:exitEditor',
+    beforeClose: 'window:beforeClose',
+    confirmClose: 'window:confirmClose'
   }
 } as const

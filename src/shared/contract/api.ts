@@ -130,12 +130,24 @@ export interface ImageChangedData {
   hash: string
 }
 
+// All display strings originate in the renderer (which owns i18n); main only
+// shows the native dialog and reports which button was pressed.
+export interface ConfirmDialogOptions {
+  title: string
+  message: string
+  confirmLabel: string
+  cancelLabel: string
+}
+
 export interface ApiContract {
   app: {
     getSystemLocale: () => Promise<AppLocale>
   }
   dialogs: {
     openFolder: () => Promise<string | null>
+    // Resolves true if the user picked confirmLabel, false for cancelLabel
+    // (including closing the dialog without choosing).
+    confirm: (options: ConfirmDialogOptions) => Promise<boolean>
   }
   files: {
     load: (path: string) => Promise<FileLoadResult>
@@ -150,6 +162,10 @@ export interface ApiContract {
     removeRecent: (path: string) => Promise<void>
     verifyModPath: (modPath: string) => Promise<ModVerificationResult>
     open: (request: ProjectOpenRequest) => Promise<ProjectOpenResult>
+    // Tears down the main-process session (file watchers, worker pool) for a
+    // project the renderer is leaving, without waiting for a new project to
+    // be opened or the window to close.
+    close: (projectId: string) => Promise<void>
   }
   game: {
     getPath: () => Promise<string | null>
@@ -177,5 +193,12 @@ export interface ApiContract {
   window: {
     enterEditor: () => Promise<void>
     exitEditor: () => Promise<void>
+    // Actually closes the window. Called once the renderer has decided it's
+    // OK to (no unsaved changes, or the user chose to discard them) in
+    // response to onBeforeClose.
+    confirmClose: () => Promise<void>
+    // Fires when the user tries to close the window; main withholds the
+    // real close until confirmClose is called.
+    onBeforeClose: (callback: () => void) => () => void
   }
 }

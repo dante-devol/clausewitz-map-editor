@@ -14,4 +14,9 @@ export function registerProjectHandlers(context: IpcContext): void {
     const window = getEventWindow(event)
     return context.sessions.openForWindow(window, request)
   })
+
+  ipcMain.handle(channels.projects.close, (event, projectId: string) => {
+    const window = getEventWindow(event)
+    context.sessions.closeForWindow(window, projectId)
+  })
 }

@@ -1,5 +1,9 @@
 export const enMessages = {
   'app.title': 'HOI4 Map Editor',
+  'app.unsavedChanges.title': 'Unsaved changes',
+  'app.unsavedChanges.message': 'You have unsaved changes. Leave without saving?',
+  'app.unsavedChanges.confirm': 'Leave without saving',
+  'app.unsavedChanges.cancel': 'Cancel',
   'projectSelection.subtitle': 'Open a mod folder to get started',
   'projectSelection.gamePathRequired': 'A vanilla game path is required to continue.',
   'projectSelection.locateGameFolder': 'Locate game folder...',

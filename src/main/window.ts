@@ -1,6 +1,7 @@
 import { BrowserWindow, shell, Menu } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
+import { channels } from '../shared/contract/events'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -39,6 +40,15 @@ export function createWindow(): void {
     return { action: 'deny' }
   })
 
+  // Give the renderer a chance to ask about unsaved changes before the window
+  // actually closes. It responds via confirmClose(), which uses destroy() —
+  // that bypasses this handler entirely, so there's no need to track "already
+  // confirmed" state here.
+  mainWindow.on('close', (event) => {
+    event.preventDefault()
+    mainWindow?.webContents.send(channels.window.beforeClose)
+  })
+
   // In dev, load from the Vite dev server (HMR). In production, load the built file.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -61,4 +71,11 @@ export function exitEditor(): void {
   mainWindow.unmaximize()
   mainWindow.setSize(480, 600)
   mainWindow.setResizable(false)
+}
+
+// Actually closes the window, once the renderer has decided it's OK to (see
+// the 'close' handler above). destroy() skips the 'close' event (and with it
+// beforeunload/unload), so this can't loop back into that handler.
+export function confirmClose(): void {
+  mainWindow?.destroy()
 }

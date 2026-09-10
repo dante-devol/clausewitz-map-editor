@@ -33,6 +33,16 @@ export class ProjectSessionRegistry {
     return session.open(this.loader.open(request))
   }
 
+  // Tears down watchers and the worker pool for a project the renderer is
+  // leaving (e.g. the Back button), without waiting for the window to close
+  // or a new project to be opened — open() would dispose them anyway, but
+  // until then they'd sit idle holding one worker thread per CPU core.
+  closeForWindow(window: BrowserWindow, projectId: string): void {
+    const session = this.forWindow(window)
+    if (session.projectId !== projectId) throw new Error('Project session mismatch')
+    session.dispose()
+  }
+
   loadForWindow(window: BrowserWindow, projectId: string) {
     const session = this.forWindow(window)
     if (session.projectId !== projectId) {

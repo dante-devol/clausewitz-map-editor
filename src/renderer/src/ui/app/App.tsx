@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components'
 import { Shell } from '../components/layout/Shell'
 import { MapView } from '../views/MapView'
@@ -7,10 +7,12 @@ import { ProjectSelectionView } from '../views/ProjectSelectionView'
 import { DebugPanel } from '../components/DebugPanel'
 import { useAppState } from '../hooks/useAppState'
 import { useCoreStore } from '../../infra/store/coreStore'
+import { useMapDataStore, selectHasUnsavedChanges } from '../../infra/store/mapDataStore'
 import { useDisplayModeConfig } from '../hooks/useDisplayModeConfig'
 import { useProjectSelection } from '../hooks/useProjectSelection'
 import { useMapLoader } from '../hooks/useMapLoader'
 import { useProvinceValidation } from '../hooks/useProvinceValidation'
+import { useI18n } from '../i18n/I18nProvider'
 
 const VIEWS = {
   map: <MapView />,
@@ -19,13 +21,52 @@ const VIEWS = {
 }
 
 function App(): JSX.Element {
+  const { t } = useI18n()
   const { theme, activeView, setActiveView, toggleTheme } = useAppState()
+  const projectId = useCoreStore((s) => s.projectId)
   const sessionCleared = useCoreStore((s) => s.sessionCleared)
+  const hasUnsavedChanges = useMapDataStore(selectHasUnsavedChanges)
 
-  function handleBack() {
+  // Asks the user before discarding unsaved changes. Resolves true when
+  // there's nothing to lose, or the user chose to leave anyway.
+  const confirmDiscardUnsavedChanges = useCallback(async () => {
+    if (!hasUnsavedChanges) return true
+    return window.api.dialogs.confirm({
+      title: t('app.unsavedChanges.title'),
+      message: t('app.unsavedChanges.message'),
+      confirmLabel: t('app.unsavedChanges.confirm'),
+      cancelLabel: t('app.unsavedChanges.cancel')
+    })
+  }, [hasUnsavedChanges, t])
+
+  // Tears down the current project's main-process session (file watchers,
+  // worker pool) instead of leaving it running until a new project opens.
+  const closeCurrentProject = useCallback(async () => {
+    if (projectId) await window.api.projects.close(projectId)
     sessionCleared()
-    void window.api.window.exitEditor()
+  }, [projectId, sessionCleared])
+
+  async function handleBack() {
+    if (!(await confirmDiscardUnsavedChanges())) return
+    await closeCurrentProject()
+    await window.api.window.exitEditor()
   }
+
+  // Read the latest confirm/close logic without re-subscribing onBeforeClose
+  // on every change to hasUnsavedChanges/projectId.
+  const handleWindowCloseRef = useRef<() => void>(() => {})
+  handleWindowCloseRef.current = () => {
+    void (async () => {
+      if (!(await confirmDiscardUnsavedChanges())) return
+      await closeCurrentProject()
+      await window.api.window.confirmClose()
+    })()
+  }
+
+  useEffect(() => {
+    return window.api.window.onBeforeClose(() => handleWindowCloseRef.current())
+  }, [])
+
   const {
     sessionStatus, sessionErrorMessage, recentProjects, gamePath, gamePathValid, gameVerification,
     pendingProject, selectProject, browseForProject, browseForGamePath,
