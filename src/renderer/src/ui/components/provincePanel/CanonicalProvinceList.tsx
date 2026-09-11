@@ -28,6 +28,7 @@ import { unpackColor } from '../../../../../shared/mapDataTypes'
 import type { ProvinceCatalogEntry } from '../../../../../shared/provinceCatalog'
 import { TYPE_COLORS, continentColor } from '../../../infra/config/displayModes'
 import { useI18n } from '../../i18n/I18nProvider'
+import type { MessageKey } from '../../i18n/messages/en'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import { useProvinceValidationStore } from '../../../infra/store/provinceValidationStore'
 import { useCrossSelection } from './useCrossSelection'
@@ -782,7 +783,7 @@ export function CanonicalProvinceList({ collapsed, onToggleCollapse }: Props): J
                                     >
                                       {renderSeverityIcon(issue.severity, styles.issueEntryIcon)}
                                       <Text size={100} className={styles.issueEntryText}>
-                                        {issue.message}
+                                        {t(issue.code as MessageKey, issue.messageParams)}
                                       </Text>
                                     </div>
                                   ))}

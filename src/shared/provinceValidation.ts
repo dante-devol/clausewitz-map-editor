@@ -13,11 +13,15 @@ export interface ProvinceValidationSnapshot {
 }
 
 export interface ProvinceValidationIssue {
+  // Also used as the renderer's i18n message key (e.g. 'province.missing-id')
+  // — kept as a plain string here since shared/ has no dependency on the
+  // renderer's i18n message-key type.
   code: string
   severity: ProvinceValidationSeverity
   provinceKey: ProvinceCatalogEntryKey
   provinceId: number | null
-  message: string
+  // Interpolation values for the i18n message identified by `code`.
+  messageParams?: Record<string, string | number>
 }
 
 export interface ProvinceValidator {

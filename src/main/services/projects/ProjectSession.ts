@@ -77,6 +77,17 @@ export class ProjectSession {
     return this.project
   }
 
+  // True if `path` is one of this project's own resolved files — used to keep
+  // the generic files:load/files:read channel from reading arbitrary paths a
+  // (buggy or compromised) renderer might send.
+  isKnownPath(path: string): boolean {
+    if (!this.project) return false
+    for (const value of Object.values(this.project.resolvedPaths)) {
+      if (Array.isArray(value) ? value.includes(path) : value === path) return true
+    }
+    return false
+  }
+
   async loadSnapshot() {
     if (!this.project) throw new Error('Project not open')
     if (!this.pool) throw new Error('Project not open')
@@ -339,6 +350,20 @@ export class ProjectSession {
       this.watch(filePath, () => {
         if (this.project !== project) return
         this.emit(project, 'terrain', this.loader.loadTerrain(project))
+      })
+    }
+
+    for (const filePath of project.resolvedPaths.stateCategories) {
+      this.watch(filePath, () => {
+        if (this.project !== project) return
+        this.emit(project, 'stateCategories', this.loader.loadStateCategories(project))
+      })
+    }
+
+    for (const filePath of project.resolvedPaths.buildings) {
+      this.watch(filePath, () => {
+        if (this.project !== project) return
+        this.emit(project, 'buildings', this.loader.loadBuildings(project))
       })
     }
 

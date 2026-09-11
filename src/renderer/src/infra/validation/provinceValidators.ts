@@ -15,11 +15,11 @@ export const provinceValidators: readonly ProvinceValidator[] = [
     validate(snapshot, province) {
       return subjectProvinces(snapshot, province).flatMap((province) => {
         if (province.id === null) {
-          return [issue('province.missing-id', 'warning', province, 'Province has no ID.')]
+          return [issue('province.missing-id', 'warning', province)]
         }
         if (province.id === 0) return []
         if (!Number.isInteger(province.id) || province.id <= 0) {
-          return [issue('province.invalid-id', 'error', province, 'Province ID must be a positive integer.')]
+          return [issue('province.invalid-id', 'error', province)]
         }
         return []
       })
@@ -29,9 +29,21 @@ export const provinceValidators: readonly ProvinceValidator[] = [
     id: 'province/id-unique',
     phase: 'metadata',
     validate(snapshot, province) {
-      return collectDuplicateIssues(snapshot, province, 'id', 'province.duplicate-id', 'warning', (value) => (
-        `Province ID ${value} is used more than once.`
-      ))
+      return collectDuplicateIssues(snapshot, province, 'id', 'province.duplicate-id', 'warning', (value) => ({ id: value }))
+    }
+  },
+  // A gap entry (an ID between two real provinces that no definition uses)
+  // is reported once here rather than through type/color/terrain-valid below
+  // — those would each separately call it "missing", which is both noisy and
+  // beside the point: the actual problem is that HOI4 needs contiguous IDs.
+  {
+    id: 'province/id-gap',
+    phase: 'metadata',
+    validate(snapshot, province) {
+      return subjectProvinces(snapshot, province).flatMap((province) => {
+        if (!province.sources.includes('id-gap')) return []
+        return [issue('province.id-gap', 'error', province, { id: province.id ?? '' })]
+      })
     }
   },
   {
@@ -39,11 +51,12 @@ export const provinceValidators: readonly ProvinceValidator[] = [
     phase: 'metadata',
     validate(snapshot, province) {
       return subjectProvinces(snapshot, province).flatMap((province) => {
+        if (province.sources.includes('id-gap')) return []
         if (province.type === null) {
-          return [issue('province.missing-type', 'warning', province, 'Province type is missing.')]
+          return [issue('province.missing-type', 'warning', province)]
         }
         if (!VALID_TYPES.has(province.type)) {
-          return [issue('province.invalid-type', 'warning', province, `Province type "${province.type}" is invalid.`)]
+          return [issue('province.invalid-type', 'warning', province, { type: province.type })]
         }
         return []
       })
@@ -55,11 +68,12 @@ export const provinceValidators: readonly ProvinceValidator[] = [
     validate(snapshot, province) {
       return subjectProvinces(snapshot, province).flatMap((province) => {
         if (province.id === 0) return []
+        if (province.sources.includes('id-gap')) return []
         if (province.color === null) {
-          return [issue('province.missing-color', 'warning', province, 'Province color is missing.')]
+          return [issue('province.missing-color', 'warning', province)]
         }
         if (!Number.isInteger(province.color) || province.color < 0 || province.color > 0xffffff) {
-          return [issue('province.invalid-color', 'warning', province, 'Province color must be a packed RGB value.')]
+          return [issue('province.invalid-color', 'warning', province)]
         }
         return []
       })
@@ -69,9 +83,9 @@ export const provinceValidators: readonly ProvinceValidator[] = [
     id: 'province/color-unique',
     phase: 'metadata',
     validate(snapshot, province) {
-      return collectDuplicateIssues(snapshot, province, 'color', 'province.duplicate-color', 'warning', (value) => (
-        `Province color ${formatPackedColor(value)} is used more than once.`
-      ))
+      return collectDuplicateIssues(snapshot, province, 'color', 'province.duplicate-color', 'warning', (value) => ({
+        color: formatPackedColor(value)
+      }))
     }
   },
   {
@@ -79,11 +93,12 @@ export const provinceValidators: readonly ProvinceValidator[] = [
     phase: 'metadata',
     validate(snapshot, province) {
       return subjectProvinces(snapshot, province).flatMap((province) => {
+        if (province.sources.includes('id-gap')) return []
         if (!province.terrain) {
-          return [issue('province.missing-terrain', 'warning', province, 'Province terrain is missing.')]
+          return [issue('province.missing-terrain', 'warning', province)]
         }
         if (!snapshot.terrains.has(province.terrain)) {
-          return [issue('province.invalid-terrain', 'warning', province, `Province terrain "${province.terrain}" does not exist.`)]
+          return [issue('province.invalid-terrain', 'warning', province, { terrain: province.terrain })]
         }
         return []
       })
@@ -98,7 +113,7 @@ export const provinceValidators: readonly ProvinceValidator[] = [
         if (province.color === null) return []
         if (province.sources.includes('bmp-color')) return []
         if (province.mapPresence === 'missing') {
-          return [issue('province.color-missing-on-map', 'warning', province, 'Province color is not present on provinces.bmp.')]
+          return [issue('province.color-missing-on-map', 'warning', province)]
         }
         return []
       })
@@ -110,7 +125,7 @@ export const provinceValidators: readonly ProvinceValidator[] = [
     validate(snapshot, province) {
       return subjectProvinces(snapshot, province).flatMap((province) => {
         if (!province.sources.includes('bmp-color')) return []
-        return [issue('province.bmp-color-without-definition', 'error', province, 'Map color exists on provinces.bmp but has no definition entry.')]
+        return [issue('province.bmp-color-without-definition', 'error', province)]
       })
     }
   }
@@ -122,7 +137,7 @@ function collectDuplicateIssues(
   field: 'id' | 'color',
   code: string,
   severity: ProvinceValidationIssue['severity'],
-  messageForValue: (value: number) => string
+  paramsForValue: (value: number) => Record<string, string | number>
 ): ProvinceValidationIssue[] {
   const seen = new Map<number, ProvinceCatalogEntry[]>()
 
@@ -138,7 +153,7 @@ function collectDuplicateIssues(
   for (const [value, provinces] of seen) {
     if (provinces.length < 2) continue
     for (const province of provincesForDuplicateGroup(provinces, subjectProvince)) {
-      issues.push(issue(code, severity, province, messageForValue(value)))
+      issues.push(issue(code, severity, province, paramsForValue(value)))
     }
   }
 
@@ -149,14 +164,14 @@ function issue(
   code: string,
   severity: ProvinceValidationIssue['severity'],
   province: ProvinceCatalogEntry,
-  message: string
+  messageParams?: Record<string, string | number>
 ): ProvinceValidationIssue {
   return {
     code,
     severity,
     provinceKey: province.key,
     provinceId: province.id,
-    message
+    messageParams
   }
 }
 

@@ -33,6 +33,13 @@ export class ProjectSessionRegistry {
     return session.open(this.loader.open(request))
   }
 
+  // Whether `path` belongs to whatever project is currently open in this
+  // window — regardless of what projectId the caller believes it's using,
+  // since there's exactly one active project per window.
+  isPathKnownForWindow(window: BrowserWindow, path: string): boolean {
+    return this.forWindow(window).isKnownPath(path)
+  }
+
   // Tears down watchers and the worker pool for a project the renderer is
   // leaving (e.g. the Back button), without waiting for the window to close
   // or a new project to be opened — open() would dispose them anyway, but

@@ -21,7 +21,9 @@ export function createWindow(): void {
     icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      // The preload only uses contextBridge/ipcRenderer, both fully
+      // supported in a sandboxed preload — no reason to disable it.
+      sandbox: true
     }
   })
 

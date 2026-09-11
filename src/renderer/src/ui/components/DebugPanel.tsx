@@ -13,6 +13,7 @@ import {
   Badge
 } from '@fluentui/react-components'
 import { useI18n } from '../i18n/I18nProvider'
+import type { MessageKey } from '../i18n/messages/en'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
 import { unpackColor } from '../../../../shared/mapDataTypes'
 import { useProvinceValidationStore } from '../../infra/store/provinceValidationStore'
@@ -441,7 +442,7 @@ function ValidationTab() {
                 <td className={styles.td}>{issue.severity}</td>
                 <td className={styles.td}>{issue.provinceId ?? 'xxxxx'}</td>
                 <td className={styles.td}>{issue.code}</td>
-                <td className={`${styles.td} ${styles.message}`}>{issue.message}</td>
+                <td className={`${styles.td} ${styles.message}`}>{t(issue.code as MessageKey, issue.messageParams)}</td>
               </tr>
             ))}
           </tbody>

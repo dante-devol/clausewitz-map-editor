@@ -424,5 +424,19 @@ export const frMessages: Record<MessageKey, string> = {
   'stratRegionPanel.add.province': 'Ajouter province',
   'stratRegionPanel.add.provinceId': 'ID de province',
   'stratRegionPanel.add.confirm': 'Ajouter',
-  'debug.column.weatherPeriods': 'Periodes meteo'
+  'debug.column.weatherPeriods': 'Periodes meteo',
+
+  'province.missing-id': "La province n'a pas d'ID.",
+  'province.invalid-id': "L'ID de province doit etre un entier positif.",
+  'province.duplicate-id': "L'ID de province {id} est utilise plus d'une fois.",
+  'province.id-gap': "L'ID de province {id} n'existe pas. HOI4 exige des IDs de province contigus.",
+  'province.missing-type': 'Le type de province est manquant.',
+  'province.invalid-type': 'Le type de province "{type}" est invalide.',
+  'province.missing-color': 'La couleur de province est manquante.',
+  'province.invalid-color': 'La couleur de province doit etre une valeur RGB compactee.',
+  'province.duplicate-color': "La couleur de province {color} est utilisee plus d'une fois.",
+  'province.missing-terrain': 'Le terrain de province est manquant.',
+  'province.invalid-terrain': 'Le terrain de province "{terrain}" n\'existe pas.',
+  'province.color-missing-on-map': "La couleur de province n'est pas presente sur provinces.bmp.",
+  'province.bmp-color-without-definition': "Une couleur existe sur provinces.bmp mais n'a pas d'entree de definition."
 }
