@@ -12,7 +12,7 @@ export function registerIpcHandlers(): void {
   const context = createIpcContext()
   registerAppHandlers()
   registerDialogHandlers()
-  registerFileHandlers()
+  registerFileHandlers(context)
   registerGameHandlers()
   registerProjectHandlers(context)
   registerMapHandlers(context)
