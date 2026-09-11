@@ -99,6 +99,13 @@ export function selectPendingChanges(
   return changes
 }
 
+// Every slice above is replaced (never mutated) on change, so the inputs can
+// be compared by reference: caching the last result keyed on those six
+// references turns repeated calls with an unchanged store (e.g. on every
+// hover move) into a no-op instead of an O(provinces) rebuild.
+let lastDraftTargetMapsArgs: readonly unknown[] | null = null
+let lastDraftTargetMapsResult: ProvinceDraftTargetMaps | null = null
+
 export function selectProvinceDraftTargetMaps(
   originalDefinitions: Map<number, Province>,
   pendingEdits: Map<number, Partial<ProvinceDraftFields>>,
@@ -107,6 +114,22 @@ export function selectProvinceDraftTargetMaps(
   pendingNewProvinces: Map<string, number>,
   bmpOnlyEntries: BmpOnlyEntry[]
 ): ProvinceDraftTargetMaps {
+  const args = [
+    originalDefinitions,
+    pendingEdits,
+    pendingBmpOnlyEdits,
+    bmpReplacements,
+    pendingNewProvinces,
+    bmpOnlyEntries
+  ]
+  if (
+    lastDraftTargetMapsResult
+    && lastDraftTargetMapsArgs
+    && args.every((arg, i) => arg === lastDraftTargetMapsArgs![i])
+  ) {
+    return lastDraftTargetMapsResult
+  }
+
   const byProvinceId = new Map<number, ProvinceDraftTarget>()
   const byBmpGuid = new Map<string, ProvinceDraftTarget>()
   const byColor = new Map<number, ProvinceDraftTarget>()
@@ -168,7 +191,10 @@ export function selectProvinceDraftTargetMaps(
     byColor.set(entry.color, target)
   }
 
-  return { byProvinceId, byBmpGuid, byColor }
+  const result = { byProvinceId, byBmpGuid, byColor }
+  lastDraftTargetMapsArgs = args
+  lastDraftTargetMapsResult = result
+  return result
 }
 
 export function selectEffectiveProvincesForSave(
