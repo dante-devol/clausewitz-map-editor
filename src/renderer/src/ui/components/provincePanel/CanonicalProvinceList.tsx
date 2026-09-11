@@ -638,8 +638,10 @@ export function CanonicalProvinceList({ collapsed, onToggleCollapse }: Props): J
                           key={tag.key}
                           dismissible
                           className={styles.activeTag}
-                          dismissIcon={{ 'aria-label': t('provinceList.filter.remove') }}
-                          onDismiss={() => setFilters((current) => removeFilterTag(current, tag.key))}
+                          dismissIcon={{
+                            'aria-label': t('provinceList.filter.remove'),
+                            onClick: () => setFilters((current) => removeFilterTag(current, tag.key))
+                          }}
                         >
                           {tag.label}
                         </Tag>
@@ -811,7 +813,7 @@ export function CanonicalProvinceList({ collapsed, onToggleCollapse }: Props): J
                       <Text size={100} className={styles.id}>
                         {p.id !== null ? String(p.id) : '—'}
                       </Text>
-                      <Text size={100} className={styles.type} style={typeChipStyle(display.type)}>
+                      <Text size={100} className={styles.type} style={typeChipStyle(display.type ?? null)}>
                         {display.type ?? '—'}
                       </Text>
                       <Text

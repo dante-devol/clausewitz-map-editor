@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "electron-vite dev",
     "dev:inspect": "electron-vite dev --inspect",
-    "build": "electron-vite build",
+    "typecheck": "tsc -b",
+    "build": "tsc -b && electron-vite build",
     "preview": "electron-vite preview",
     "package": "electron-vite build && electron-builder",
     "test": "vitest run"

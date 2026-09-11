@@ -79,6 +79,7 @@ export function useMapLoader(): void {
 
   useEffect(() => {
     if (!projectId) return
+    const currentProjectId = projectId
 
     let cancelled = false
     let settled = false
@@ -104,7 +105,7 @@ export function useMapLoader(): void {
         progress: { current: 0, total: Math.max(resolvedPaths?.states.length ?? 0, 1) }
       })
       try {
-        await window.api.map.loadStates(projectId)
+        await window.api.map.loadStates(currentProjectId)
         if (cancelled) return
         setStatesStatus('ready')
         notificationService.completeProgress({
@@ -139,7 +140,7 @@ export function useMapLoader(): void {
         progress: { current: 0, total: Math.max(resolvedPaths?.strategicRegions.length ?? 0, 1) }
       })
       try {
-        await window.api.map.loadStrategicRegions(projectId)
+        await window.api.map.loadStrategicRegions(currentProjectId)
         if (cancelled) return
         setStrategicRegionsStatus('ready')
         notificationService.completeProgress({
@@ -174,7 +175,7 @@ export function useMapLoader(): void {
       })
       mapLoadingStarted()
       try {
-        const snapshot = await window.api.map.load(projectId)
+        const snapshot = await window.api.map.load(currentProjectId)
         if (cancelled) return
         notificationService.advanceProgress({
           scope: loadScope,
@@ -342,6 +343,8 @@ export function useMapLoader(): void {
 
   useEffect(() => {
     if (!projectId || !provincesImageB64 || !provincesImageHash) return
+    const currentProvincesImageB64 = provincesImageB64
+    const currentProvincesImageHash = provincesImageHash
 
     let cancelled = false
     let settled = false
@@ -357,7 +360,7 @@ export function useMapLoader(): void {
         progress: { current: 1, total: BITMAP_RECONCILE_TOTAL_STEPS }
       })
 
-      const cachedFacts = provinceBitmapFactsCache.get(provincesImageHash)
+      const cachedFacts = provinceBitmapFactsCache.get(currentProvincesImageHash)
       if (cachedFacts) {
         notificationService.advanceProgress({
           scope: bitmapScope,
@@ -382,9 +385,9 @@ export function useMapLoader(): void {
         message: tRef.current('notification.bitmapLoad.step.analyze'),
         progress: { current: 2, total: BITMAP_RECONCILE_TOTAL_STEPS }
       })
-      const bitmapFacts = await runBitmapAnalysis(provincesImageB64, abortController.signal)
+      const bitmapFacts = await runBitmapAnalysis(currentProvincesImageB64, abortController.signal)
       if (cancelled) return
-      provinceBitmapFactsCache.set(provincesImageHash, bitmapFacts)
+      provinceBitmapFactsCache.set(currentProvincesImageHash, bitmapFacts)
 
       notificationService.advanceProgress({
         scope: bitmapScope,

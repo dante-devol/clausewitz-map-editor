@@ -550,7 +550,7 @@ export function useMapCanvas({
 
 // ─── Canvas utilities (no React deps) ────────────────────────────────────────
 
-function getOverlayRenderSource(entry: OverlayBitmapEntry, overlay: BitmapCanvasOverlay): CanvasImageSource {
+function getOverlayRenderSource(entry: OverlayBitmapEntry, overlay: BitmapCanvasOverlay): ImageBitmap | OffscreenCanvas {
   const signature = JSON.stringify({ configuration: overlay.configuration, filterRules: overlay.filterRules })
   if (overlay.filterRules.length === 0) {
     entry.filteredCanvas = null

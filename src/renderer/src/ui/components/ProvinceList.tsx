@@ -538,8 +538,10 @@ export function ProvinceList({ provinceCatalog, selectedIds, onSelect }: Props):
                         key={tag.key}
                         dismissible
                         className={styles.activeTag}
-                        dismissIcon={{ 'aria-label': t('provinceList.filter.remove') }}
-                        onDismiss={() => setFilters((current) => removeFilterTag(current, tag.key))}
+                        dismissIcon={{
+                          'aria-label': t('provinceList.filter.remove'),
+                          onClick: () => setFilters((current) => removeFilterTag(current, tag.key))
+                        }}
                       >
                         {tag.label}
                       </Tag>
