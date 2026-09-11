@@ -169,45 +169,48 @@ function compileShader(gl: WebGL2RenderingContext, type: number, src: string): W
 
 export class MapRenderer {
   private readonly gl: WebGL2RenderingContext
-  private readonly program: WebGLProgram
-  private readonly quadBuffer: WebGLBuffer
-  private readonly posLoc: number
-  private readonly matrixLoc: WebGLUniformLocation
-  private readonly idTexLoc: WebGLUniformLocation
-  private readonly paletteTexLoc: WebGLUniformLocation
-  private readonly paletteHeightLoc: WebGLUniformLocation
+  // Not readonly: every GL object/location below is recreated by
+  // initGLResources() when the WebGL context is lost and restored (see the
+  // constructor's webglcontextlost/webglcontextrestored listeners).
+  private program!: WebGLProgram
+  private quadBuffer!: WebGLBuffer
+  private posLoc!: number
+  private matrixLoc!: WebGLUniformLocation
+  private idTexLoc!: WebGLUniformLocation
+  private paletteTexLoc!: WebGLUniformLocation
+  private paletteHeightLoc!: WebGLUniformLocation
   private paletteHeight = 1
-  private readonly overlayProgram: WebGLProgram
-  private readonly overlayPosLoc: number
-  private readonly overlayMatrixLoc: WebGLUniformLocation
-  private readonly overlayTexLoc: WebGLUniformLocation
-  private readonly overlayOpacityLoc: WebGLUniformLocation
+  private overlayProgram!: WebGLProgram
+  private overlayPosLoc!: number
+  private overlayMatrixLoc!: WebGLUniformLocation
+  private overlayTexLoc!: WebGLUniformLocation
+  private overlayOpacityLoc!: WebGLUniformLocation
   private overlayEntries: { id: string; texture: WebGLTexture; opacity: number }[] = []
-  private readonly outlineOverlayProgram: WebGLProgram
-  private readonly outlineOverlayPosLoc: number
-  private readonly outlineOverlayMatrixLoc: WebGLUniformLocation
-  private readonly outlineOverlayTexLoc: WebGLUniformLocation
-  private readonly outlineOverlayOpacityLoc: WebGLUniformLocation
-  private readonly outlineOverlayColorLoc: WebGLUniformLocation
-  private readonly outlineOverlayPoffLoc: WebGLUniformLocation
+  private outlineOverlayProgram!: WebGLProgram
+  private outlineOverlayPosLoc!: number
+  private outlineOverlayMatrixLoc!: WebGLUniformLocation
+  private outlineOverlayTexLoc!: WebGLUniformLocation
+  private outlineOverlayOpacityLoc!: WebGLUniformLocation
+  private outlineOverlayColorLoc!: WebGLUniformLocation
+  private outlineOverlayPoffLoc!: WebGLUniformLocation
   private outlineOverlayEntries: { id: string; texture: WebGLTexture; opacity: number; color: [number, number, number, number] }[] = []
 
   // --- Province outline pipeline ---
-  private readonly outlineProgram: WebGLProgram
-  private readonly outlinePosLoc: number
-  private readonly outlineMatrixLoc: WebGLUniformLocation
-  private readonly outlineIdTexLoc: WebGLUniformLocation
-  private readonly outlineSelTexLoc: WebGLUniformLocation
-  private readonly outlineSelHeightLoc: WebGLUniformLocation
-  private readonly outlinePoffLoc: WebGLUniformLocation
-  private readonly validationOutlineProgram: WebGLProgram
-  private readonly validationOutlinePosLoc: number
-  private readonly validationOutlineMatrixLoc: WebGLUniformLocation
-  private readonly validationOutlineIdTexLoc: WebGLUniformLocation
-  private readonly validationOutlineSelTexLoc: WebGLUniformLocation
-  private readonly validationOutlineSelHeightLoc: WebGLUniformLocation
-  private readonly validationOutlinePoffLoc: WebGLUniformLocation
-  private readonly validationOutlineColorLoc: WebGLUniformLocation
+  private outlineProgram!: WebGLProgram
+  private outlinePosLoc!: number
+  private outlineMatrixLoc!: WebGLUniformLocation
+  private outlineIdTexLoc!: WebGLUniformLocation
+  private outlineSelTexLoc!: WebGLUniformLocation
+  private outlineSelHeightLoc!: WebGLUniformLocation
+  private outlinePoffLoc!: WebGLUniformLocation
+  private validationOutlineProgram!: WebGLProgram
+  private validationOutlinePosLoc!: number
+  private validationOutlineMatrixLoc!: WebGLUniformLocation
+  private validationOutlineIdTexLoc!: WebGLUniformLocation
+  private validationOutlineSelTexLoc!: WebGLUniformLocation
+  private validationOutlineSelHeightLoc!: WebGLUniformLocation
+  private validationOutlinePoffLoc!: WebGLUniformLocation
+  private validationOutlineColorLoc!: WebGLUniformLocation
 
   // Selection texture: 256×paletteHeight R8 (stored as RGBA8, R channel = 1 if selected).
   // Same UV indexing as the palette texture — cell (id%256, id/256) = 1 when id is selected.
@@ -222,10 +225,10 @@ export class MapRenderer {
   private validationErrorCount = 0
 
   // Bounding-box outline: 4 thin screen-space quads per contiguous selection group.
-  private readonly bboxProgram: WebGLProgram
-  private readonly bboxPosLoc: number
-  private readonly bboxColorLoc: WebGLUniformLocation
-  private readonly bboxDynBuffer: WebGLBuffer
+  private bboxProgram!: WebGLProgram
+  private bboxPosLoc!: number
+  private bboxColorLoc!: WebGLUniformLocation
+  private bboxDynBuffer!: WebGLBuffer
 
   // Contiguous groups of the current selection; one bbox per group.
   private selectionBboxGroups: ProvinceBboxGroup[] = []
@@ -249,6 +252,17 @@ export class MapRenderer {
 
   private _imageSize = { width: 0, height: 0 }
 
+  // True between webglcontextlost and webglcontextrestored. GL calls made
+  // while true are spec-guaranteed no-ops, but render() checks this too so
+  // it doesn't waste time building a matrix/binding textures for nothing.
+  private contextLost = false
+  // Set by the owner (useMapCanvas) right after construction, so it can
+  // surface a notification and — for restoration — re-sync anything it
+  // owns that this class can't reconstruct on its own (overlay textures,
+  // whose source ImageBitmaps/OffscreenCanvases live in the hook, not here).
+  onContextLost: (() => void) | null = null
+  onContextRestored: (() => void) | null = null
+
   get imageSize() { return this._imageSize }
   get index() { return this.provinceIndex }
 
@@ -256,6 +270,29 @@ export class MapRenderer {
     const gl = canvas.getContext('webgl2', { preserveDrawingBuffer: true }) as WebGL2RenderingContext | null
     if (!gl) throw new Error('WebGL2 not available')
     this.gl = gl
+    this.initGLResources()
+
+    // Without preventDefault(), a lost context is permanent — the browser
+    // never fires webglcontextrestored and the canvas stays blank forever
+    // with no error surfaced anywhere (this was the actual prior behavior).
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault()
+      this.contextLost = true
+      this.onContextLost?.()
+    })
+    canvas.addEventListener('webglcontextrestored', () => {
+      this.contextLost = false
+      this.initGLResources()
+      this.reuploadCoreTexturesAfterContextRestore()
+      this.onContextRestored?.()
+    })
+  }
+
+  // Everything here is GL-object/location setup with no dependency on
+  // loaded-image state, so it's safe to re-run verbatim after a context
+  // restore — see the constructor's webglcontextrestored listener.
+  private initGLResources(): void {
+    const { gl } = this
 
     const vert = compileShader(gl, gl.VERTEX_SHADER, VERT)
     const frag = compileShader(gl, gl.FRAGMENT_SHADER, FRAG)
@@ -461,6 +498,58 @@ export class MapRenderer {
     this.provinceCentroid = null
   }
 
+  // Re-uploads the id/palette/selection/validation textures from the CPU
+  // state loadImage/setHighlightColors/etc. already keep around (idData,
+  // paletteData, selectionData, ...) — no need to rebuild the province index
+  // or recompute anything, just push the same bytes to the fresh GL objects
+  // initGLResources() just created. A no-op if no image was loaded yet.
+  // Overlay textures aren't handled here: their source ImageBitmaps live in
+  // useMapCanvas, not in this class, so onContextRestored asks the owner to
+  // re-supply them via setOverlayTextures() instead.
+  private reuploadCoreTexturesAfterContextRestore(): void {
+    const { gl } = this
+    const index = this.provinceIndex
+    const { width, height } = this._imageSize
+    if (!index || !this.paletteData || width === 0) return
+
+    const idRgba = new Uint8Array(width * height * 4)
+    for (let i = 0; i < index.idData.length; i++) {
+      const id = index.idData[i]
+      idRgba[i * 4]     = id & 0xff
+      idRgba[i * 4 + 1] = (id >> 8) & 0xff
+      idRgba[i * 4 + 2] = 0
+      idRgba[i * 4 + 3] = 255
+    }
+    this.idTexture = gl.createTexture()!
+    gl.bindTexture(gl.TEXTURE_2D, this.idTexture)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, idRgba)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+
+    this.paletteTexture = gl.createTexture()!
+    gl.bindTexture(gl.TEXTURE_2D, this.paletteTexture)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, this.paletteHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.paletteData)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+
+    if (this.selectionData) {
+      this.selectionTexture = gl.createTexture()!
+      initializeMaskTexture(gl, this.selectionTexture, this.selectionData, this.paletteHeight)
+    }
+    if (this.validationWarningData) {
+      this.validationWarningTexture = gl.createTexture()!
+      initializeMaskTexture(gl, this.validationWarningTexture, this.validationWarningData, this.paletteHeight)
+    }
+    if (this.validationErrorData) {
+      this.validationErrorTexture = gl.createTexture()!
+      initializeMaskTexture(gl, this.validationErrorTexture, this.validationErrorData, this.paletteHeight)
+    }
+  }
+
   setOverlayTextures(input: {
     bitmapEntries: { id: string; source: ImageBitmap | OffscreenCanvas; opacity: number }[]
     outlineEntries: { id: string; source: ImageBitmap | OffscreenCanvas; opacity: number; color: [number, number, number, number] }[]
@@ -543,7 +632,7 @@ export class MapRenderer {
 
   render(tx: number, ty: number, scale: number): void {
     const { gl } = this
-    if (!this.idTexture || !this.paletteTexture || this._imageSize.width === 0) return
+    if (this.contextLost || !this.idTexture || !this.paletteTexture || this._imageSize.width === 0) return
 
     const matrix = this.buildMatrix(tx, ty, scale)
     const w = gl.drawingBufferWidth

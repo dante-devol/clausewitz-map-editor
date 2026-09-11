@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { MapRenderer } from '../../infra/lib/MapRenderer'
 import { BmpProvinceMapSource } from '../../infra/lib/BmpProvinceMapSource'
 import { computeCanvasBackingSize } from '../../infra/lib/canvasSizing'
+import { notificationService } from '../../infra/services/notificationService'
+import { useI18n } from '../i18n/I18nProvider'
 import type { CanvasOverlay, BitmapCanvasOverlay } from '../contracts/CanvasOverlay'
 import type { OverlayFilterRule } from '../../core/contracts/MapOverlay'
 import type { ProvinceIndex } from '../../infra/lib/provinceAnalysis'
@@ -105,6 +107,7 @@ export function useMapCanvas({
   onHoverColorChange,
   onBrushStrokeComplete,
 }: UseMapCanvasProps): UseMapCanvasResult {
+  const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const brushCursorCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -184,7 +187,34 @@ export function useMapCanvas({
     resizeCanvasForDpr(canvas, container.clientWidth, container.clientHeight)
     const cursorCanvas = brushCursorCanvasRef.current
     if (cursorCanvas) resizeCanvasForDpr(cursorCanvas, container.clientWidth, container.clientHeight)
-    rendererRef.current = new MapRenderer(canvas)
+    const renderer = new MapRenderer(canvas)
+    rendererRef.current = renderer
+    renderer.onContextLost = () => {
+      notificationService.pushAck({
+        id: 'map:webgl-context-lost',
+        scope: 'map:webgl-context',
+        tone: 'warning',
+        title: t('notification.webglContextLost.title'),
+        message: t('notification.webglContextLost.message'),
+        autoCloseAfterMs: null
+      })
+    }
+    renderer.onContextRestored = () => {
+      // The renderer rebuilds its own id/palette/selection/validation
+      // textures from CPU state it already retains, but overlay textures'
+      // source ImageBitmaps live in overlayBitmapsRef here, not in the
+      // renderer, so they need to be re-supplied explicitly.
+      syncOverlaysToRenderer()
+      const t2 = transformRef.current
+      renderer.render(t2.x, t2.y, t2.scale)
+      notificationService.pushAck({
+        id: 'map:webgl-context-restored',
+        scope: 'map:webgl-context',
+        tone: 'success',
+        title: t('notification.webglContextRestored.title'),
+        message: t('notification.webglContextRestored.message')
+      })
+    }
     return () => {
       cancelPanRef.current?.()
       for (const entry of overlayBitmapsRef.current.values()) entry.bitmap.close()
