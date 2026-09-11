@@ -238,6 +238,13 @@ Root causes:
 
 ## 4. Performance (P3)
 
+> **Status (2026-09-11): 4.1, 4.2 and half of 4.4 addressed; 4.3 and 4.5 deferred.**
+> - 4.1: `selectProvinceDraftTargetMaps` (`provinceEditSelectors.ts`) now caches its result keyed on its six input references, which the edit slices already replace (never mutate) on change — repeat calls with an unchanged store return the cached object instead of rebuilding.
+> - 4.2: `mergeCollidingBboxGroups` (`useMapCanvas.ts`) now merges via union-find over one O(n²) pairwise scan instead of restarting a full scan from scratch after every merge, and skips merging above 300 groups (drawing the raw boxes instead) rather than let the scan grow unbounded.
+> - 4.4 (partial): `selectEffectiveProvinceCatalog` now caches the same way as 4.1, so `useProvinceEditTargets` and `useProvinceValidation` no longer each rebuild the whole catalog (including the id-gap scan) on the same render. Running validation itself in a Web Worker is not done.
+> - 4.3 and the rest of 4.5 (painted-index staleness, HiDPI canvas sizing, WebGL context loss) are unaddressed: each requires changing the BMP/WebGL pipeline in ways I can't verify without running the built app against real HOI4 assets, so they're left for a change that can be checked visually.
+> - Tests: `npm test` (added cases in `provinceEditSelectors.test.ts` and `useMapCanvas.mergeBboxGroups.test.ts`).
+
 ### 4.1 Draft maps are rebuilt on every query
 
 `MapQueryProvider` rebuilds `selectProvinceDraftTargetMaps` (O(provinces)) on every call ([MapQueryProvider.tsx:63](../src/renderer/src/bridge/MapQueryProvider.tsx)). It's called on every hover move ([useMapViewportState.ts:261](../src/renderer/src/ui/hooks/useMapViewportState.ts)) and for every candidate in `generateUniqueColor`.
