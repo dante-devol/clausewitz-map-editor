@@ -19,7 +19,7 @@ import { DismissRegular, ErrorCircleRegular, InfoRegular, SearchRegular, Warning
 import { unpackColor } from '../../../../shared/mapDataTypes'
 import type { ProvinceCatalogEntry } from '../../../../shared/provinceCatalog'
 import { TYPE_COLORS, continentColor } from '../../infra/config/displayModes'
-import { useI18n } from '../i18n/I18nProvider'
+import { useI18n, type MessageParams } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/messages/en'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
 import { useProvinceValidationStore } from '../../infra/store/provinceValidationStore'
@@ -768,7 +768,7 @@ function matchesProvinceFilters(
 function buildFilterSuggestions(
   provinceCatalog: readonly ProvinceCatalogEntry[],
   filters: ProvinceListFilters,
-  t: (key: string, params?: Record<string, string | number>) => string
+  t: (key: MessageKey, params?: MessageParams) => string
 ): FilterSuggestion[] {
   const types = uniqueSorted(provinceCatalog.map((province) => province.type))
     .filter((value) => !filters.types.includes(value))
@@ -891,7 +891,7 @@ function applyFilterSuggestion(filters: ProvinceListFilters, suggestion: FilterS
 
 function buildActiveFilterTags(
   filters: ProvinceListFilters,
-  t: (key: string, params?: Record<string, string | number>) => string
+  t: (key: MessageKey, params?: MessageParams) => string
 ): Array<{ key: string; label: string }> {
   return [
     ...filters.types.map((value) => ({

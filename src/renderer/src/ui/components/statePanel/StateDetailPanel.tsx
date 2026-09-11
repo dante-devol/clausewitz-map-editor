@@ -15,7 +15,8 @@ import {
   ChevronRightRegular,
   DismissRegular
 } from '@fluentui/react-icons'
-import { useI18n } from '../../i18n/I18nProvider'
+import { useI18n, type MessageParams } from '../../i18n/I18nProvider'
+import type { MessageKey } from '../../i18n/messages/en'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import { applyStatePatch, type StateEditPatch } from '../../../infra/store/slices/stateEditSlice'
 import type {
@@ -343,7 +344,7 @@ interface HistoryBlockProps {
   setAddForm: (f: AddFormKind) => void
   buildingTypeList: string[]
   styles: ReturnType<typeof useStyles>
-  t: (key: string, params?: Record<string, unknown>) => string
+  t: (key: MessageKey, params?: MessageParams) => string
 }
 
 function HistoryBlock({ def, target, onChange, addForm, setAddForm, buildingTypeList, styles, t }: HistoryBlockProps): JSX.Element {

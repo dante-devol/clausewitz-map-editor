@@ -7,6 +7,11 @@
     "target": "ESNext",
     "jsx": "react-jsx",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    // Required for "paths" to resolve at all — without it tsc fails before
+    // checking a single file, which is how this project went unchecked.
+    "baseUrl": ".",
+    "skipLibCheck": true,
+    "outDir": "out/web-typecheck",
     "paths": {
       "@renderer/*": ["src/renderer/src/*"]
     }

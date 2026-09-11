@@ -4,7 +4,7 @@ import { enMessages, type MessageKey } from './messages/en'
 import { frMessages } from './messages/fr'
 
 type MessageDictionary = Record<MessageKey, string>
-type MessageParams = Record<string, string | number>
+export type MessageParams = Record<string, string | number>
 
 interface I18nContextValue {
   locale: AppLocale
