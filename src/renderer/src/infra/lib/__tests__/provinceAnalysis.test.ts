@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildProvinceIndex, type PixelBuffer } from '../provinceAnalysis'
+import { buildProvinceIndex, updateProvinceBboxesForRegion, type PixelBuffer } from '../provinceAnalysis'
 
 // Builds an RGBA PixelBuffer from a grid of packed 0xRRGGBB colors (or null
 // for a fully-transparent/unmapped pixel), row 0 = top.
@@ -72,40 +72,68 @@ describe('buildProvinceIndex', () => {
     expect(index.adjacency.get(redId) ?? new Set()).not.toContain(greenId)
   })
 
-  // Regression / spec-pinning test for docs/code-review-2026-09.md 4.5: "the
-  // painted-province index (bounding boxes, adjacency) goes stale after
-  // painting, so selection outlines drift." MapRenderer.paintBrush and
-  // revertBrushStroke mutate `idData` directly (so hit-testing/color lookup
-  // stay correct) but never touch `bboxes`/`adjacency` — this test simulates
-  // exactly that direct idData mutation and shows the stale bboxes/adjacency
-  // diverge from what a fresh rebuild would produce. It should be updated (or
-  // replaced by one asserting the corrected behavior) once painting
-  // incrementally updates the index instead of leaving this gap.
-  it('[known gap] bboxes and adjacency go stale when idData is mutated directly, as paintBrush does', () => {
-    const original = bufferFromGrid([
+})
+
+// docs/code-review-2026-09.md 4.5: "the painted-province index (bounding
+// boxes, adjacency) goes stale after painting, so selection outlines drift."
+// MapRenderer.paintBrush/revertBrushStroke mutate `idData` directly (so
+// hit-testing/color lookup stay correct) and now also call this to keep
+// `bboxes` correct, without a full-image rescan — see its doc comment for
+// why scanning old-bbox-union-changed-region is exact.
+describe('updateProvinceBboxesForRegion', () => {
+  it('shrinks a province bbox when it loses pixels on its edge', () => {
+    const index = buildProvinceIndex(bufferFromGrid([
       [RED, RED, GREEN],
       [RED, RED, GREEN]
-    ])
-    const index = buildProvinceIndex(original)
+    ]))
     const redId = index.colorToId.get(RED)!
     const greenId = index.colorToId.get(GREEN)!
     expect(index.bboxes.get(redId)).toEqual({ minX: 0, minY: 0, maxX: 1, maxY: 1 })
 
-    // Simulate painting the right column of the red province green — exactly
-    // the per-pixel idData mutation paintBrush performs, with no bbox/adjacency update.
+    // Repaint the right red column green — exactly the idData mutation
+    // paintBrush performs.
     const paintedOffsets = [1, 4] // (x=1,y=0) and (x=1,y=1)
     for (const offset of paintedOffsets) index.idData[offset] = greenId
 
-    // The red province visually shrank to a single column, but its recorded
-    // bbox still claims the old two-column extent.
-    expect(index.bboxes.get(redId)).toEqual({ minX: 0, minY: 0, maxX: 1, maxY: 1 })
+    updateProvinceBboxesForRegion(index, 3, 2, new Set([redId, greenId]), { minX: 1, minY: 0, maxX: 1, maxY: 1 })
 
-    // What a correct index for the new pixel layout actually looks like:
     const rebuilt = buildProvinceIndex(bufferFromGrid([
       [RED, GREEN, GREEN],
       [RED, GREEN, GREEN]
     ]))
-    expect(rebuilt.bboxes.get(redId)).toEqual({ minX: 0, minY: 0, maxX: 0, maxY: 1 })
-    expect(rebuilt.bboxes.get(redId)).not.toEqual(index.bboxes.get(redId))
+    expect(index.bboxes.get(redId)).toEqual(rebuilt.bboxes.get(redId))
+    expect(index.bboxes.get(greenId)).toEqual(rebuilt.bboxes.get(greenId))
+  })
+
+  it('grows a province bbox when it gains pixels beyond its old extent', () => {
+    const index = buildProvinceIndex(bufferFromGrid([[RED, GREEN, GREEN]]))
+    const redId = index.colorToId.get(RED)!
+    const greenId = index.colorToId.get(GREEN)!
+    expect(index.bboxes.get(greenId)).toEqual({ minX: 1, minY: 0, maxX: 2, maxY: 0 })
+
+    index.idData[0] = greenId // paint the red pixel green
+    updateProvinceBboxesForRegion(index, 3, 1, new Set([redId, greenId]), { minX: 0, minY: 0, maxX: 0, maxY: 0 })
+
+    expect(index.bboxes.get(greenId)).toEqual({ minX: 0, minY: 0, maxX: 2, maxY: 0 })
+  })
+
+  it('removes the bbox entry for a province painted over completely', () => {
+    const index = buildProvinceIndex(bufferFromGrid([[RED, GREEN]]))
+    const redId = index.colorToId.get(RED)!
+    const greenId = index.colorToId.get(GREEN)!
+
+    index.idData[0] = greenId
+    updateProvinceBboxesForRegion(index, 2, 1, new Set([redId, greenId]), { minX: 0, minY: 0, maxX: 0, maxY: 0 })
+
+    expect(index.bboxes.has(redId)).toBe(false)
+    expect(index.bboxes.get(greenId)).toEqual({ minX: 0, minY: 0, maxX: 1, maxY: 0 })
+  })
+
+  it('is a no-op for ids not in affectedIds', () => {
+    const index = buildProvinceIndex(bufferFromGrid([[RED, GREEN, BLUE]]))
+    const blueId = index.colorToId.get(BLUE)!
+    const before = index.bboxes.get(blueId)
+    updateProvinceBboxesForRegion(index, 3, 1, new Set([index.colorToId.get(RED)!]), { minX: 0, minY: 0, maxX: 0, maxY: 0 })
+    expect(index.bboxes.get(blueId)).toEqual(before)
   })
 })

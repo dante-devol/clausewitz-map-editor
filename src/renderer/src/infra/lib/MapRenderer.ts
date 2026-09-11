@@ -1,4 +1,4 @@
-import { buildProvinceIndex } from './provinceAnalysis'
+import { buildProvinceIndex, updateProvinceBboxesForRegion } from './provinceAnalysis'
 import type { ProvinceMapSource } from './ProvinceMapSource'
 import type { ProvinceIndex } from './provinceAnalysis'
 import type { BmpPixelStrokeDelta } from '../../../../shared/provinceEditing'
@@ -923,6 +923,11 @@ export class MapRenderer {
 
     const deltas: BmpPixelStrokeDelta[] = []
     const affectedIds = new Set<number>()
+    // Ids whose bbox needs updating: affectedIds (lost pixels) plus targetId
+    // (gains pixels) — kept separate from affectedIds since that set has its
+    // own external meaning (which provinces to re-validate) and callers
+    // already rely on it not including the paint target.
+    const touchedIds = new Set<number>()
 
     for (let py = minY; py <= maxY; py++) {
       const dy = py - cy
@@ -941,7 +946,7 @@ export class MapRenderer {
         if (pixels[byteOff + 3] === 0) continue
 
         const prevId = index.idData[flatIdx]
-        if (prevId !== 0) affectedIds.add(prevId)
+        if (prevId !== 0) { affectedIds.add(prevId); touchedIds.add(prevId) }
 
         deltas.push({ offset: flatIdx, oldR, oldG, oldB, newR: targetR, newG: targetG, newB: targetB })
 
@@ -953,6 +958,9 @@ export class MapRenderer {
     }
 
     if (deltas.length === 0) return { pixels: [], affectedIds }
+
+    touchedIds.add(targetId)
+    updateProvinceBboxesForRegion(index, w, h, touchedIds, { minX, minY, maxX, maxY })
 
     // Upload dirty rect to ID texture.
     const rw = maxX - minX + 1
@@ -982,7 +990,9 @@ export class MapRenderer {
     if (!index || !pixelData || !this.idTexture || pixels.length === 0) return
 
     const w = this.pixelDataWidth
+    const h = this._imageSize.height
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    const touchedIds = new Set<number>()
 
     for (const d of pixels) {
       const py = Math.floor(d.offset / w)
@@ -992,12 +1002,16 @@ export class MapRenderer {
       pixelData[byteOff + 1] = d.oldG
       pixelData[byteOff + 2] = d.oldB
       const packed = (d.oldR << 16) | (d.oldG << 8) | d.oldB
+      touchedIds.add(index.idData[d.offset]) // id before revert (the paint's target)
       index.idData[d.offset] = index.colorToId.get(packed) ?? 0
+      touchedIds.add(index.idData[d.offset]) // id after revert
       if (px < minX) minX = px
       if (px > maxX) maxX = px
       if (py < minY) minY = py
       if (py > maxY) maxY = py
     }
+
+    updateProvinceBboxesForRegion(index, w, h, touchedIds, { minX, minY, maxX, maxY })
 
     const rw = maxX - minX + 1
     const rh = maxY - minY + 1

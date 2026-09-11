@@ -87,3 +87,46 @@ function addAdj(map: Map<number, Set<number>>, a: number, b: number): void {
   if (!sb) { sb = new Set(); map.set(b, sb) }
   sb.add(a)
 }
+
+// Recomputes tight bounding boxes for `affectedIds` after some of their
+// pixels changed within `changedRegion` (a paint stroke or its revert) —
+// without a full-image rescan. Before the edit, each id's existing bbox
+// already bounded every pixel it had; the only pixels that could have
+// changed are inside `changedRegion`. So scanning each id's old bbox
+// unioned with `changedRegion` is guaranteed to cover every pixel that
+// could now belong to it, however the edit moved that id's pixels around.
+// An id with no remaining pixels in that scan has its bbox entry removed
+// (it was fully painted over). Fixes the bboxes/adjacency staleness
+// documented in provinceAnalysis.test.ts — bboxes only; adjacency isn't
+// touched here (see that test for why).
+export function updateProvinceBboxesForRegion(
+  index: Pick<ProvinceIndex, 'idData' | 'bboxes'>,
+  width: number,
+  height: number,
+  affectedIds: ReadonlySet<number>,
+  changedRegion: { minX: number; minY: number; maxX: number; maxY: number }
+): void {
+  for (const id of affectedIds) {
+    if (id === 0) continue
+    const old = index.bboxes.get(id)
+    const scanMinX = Math.max(0, Math.min(changedRegion.minX, old?.minX ?? changedRegion.minX))
+    const scanMinY = Math.max(0, Math.min(changedRegion.minY, old?.minY ?? changedRegion.minY))
+    const scanMaxX = Math.min(width - 1, Math.max(changedRegion.maxX, old?.maxX ?? changedRegion.maxX))
+    const scanMaxY = Math.min(height - 1, Math.max(changedRegion.maxY, old?.maxY ?? changedRegion.maxY))
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (let y = scanMinY; y <= scanMaxY; y++) {
+      const rowBase = y * width
+      for (let x = scanMinX; x <= scanMaxX; x++) {
+        if (index.idData[rowBase + x] !== id) continue
+        if (x < minX) minX = x
+        if (x > maxX) maxX = x
+        if (y < minY) minY = y
+        if (y > maxY) maxY = y
+      }
+    }
+
+    if (minX === Infinity) index.bboxes.delete(id)
+    else index.bboxes.set(id, { minX, minY, maxX, maxY })
+  }
+}
