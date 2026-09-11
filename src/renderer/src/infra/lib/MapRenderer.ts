@@ -687,17 +687,6 @@ export class MapRenderer {
     gl.clear(gl.COLOR_BUFFER_BIT)
   }
 
-  // Reads the displayed RGBA color at a canvas-pixel coordinate via readPixels.
-  // Returns null when the coordinate falls outside the rendered image (alpha = 0).
-  readPixel(canvasX: number, canvasY: number): { r: number; g: number; b: number } | null {
-    const { gl } = this
-    const buf = new Uint8Array(4)
-    const glY = gl.drawingBufferHeight - Math.floor(canvasY) - 1
-    gl.readPixels(Math.floor(canvasX), glY, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf)
-    if (buf[3] === 0) return null
-    return { r: buf[0], g: buf[1], b: buf[2] }
-  }
-
   // Reads the original province color at a canvas coordinate (bypasses colorMap).
   readOriginalPixel(
     canvasX: number, canvasY: number,

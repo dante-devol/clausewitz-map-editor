@@ -12,9 +12,7 @@ const api: ApiContract = {
   },
   files: {
     load: (path) => ipcRenderer.invoke(channels.files.load, path),
-    read: (path) => ipcRenderer.invoke(channels.files.read, path),
     unload: (path) => ipcRenderer.invoke(channels.files.unload, path),
-    getHash: (path) => ipcRenderer.invoke(channels.files.getHash, path),
     onChanged: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on(channels.files.changed, listener)

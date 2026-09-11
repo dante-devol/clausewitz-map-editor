@@ -16,9 +16,7 @@ export const channels = {
   },
   files: {
     load: 'files:load',
-    read: 'files:read',
     unload: 'files:unload',
-    getHash: 'files:getHash',
     changed: 'files:changed'
   },
   game: {
