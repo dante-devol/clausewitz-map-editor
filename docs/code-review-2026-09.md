@@ -238,12 +238,16 @@ Root causes:
 
 ## 4. Performance (P3)
 
-> **Status (2026-09-11): 4.1, 4.2 and half of 4.4 addressed; 4.3 and 4.5 deferred.**
+> **Status (2026-09-11): 4.1, 4.2, HiDPI and WebGL context loss (both 4.5) fixed; half of 4.4 addressed; 4.3 and the painted-index part of 4.5 remain.**
 > - 4.1: `selectProvinceDraftTargetMaps` (`provinceEditSelectors.ts`) now caches its result keyed on its six input references, which the edit slices already replace (never mutate) on change — repeat calls with an unchanged store return the cached object instead of rebuilding.
 > - 4.2: `mergeCollidingBboxGroups` (`useMapCanvas.ts`) now merges via union-find over one O(n²) pairwise scan instead of restarting a full scan from scratch after every merge, and skips merging above 300 groups (drawing the raw boxes instead) rather than let the scan grow unbounded.
 > - 4.4 (partial): `selectEffectiveProvinceCatalog` now caches the same way as 4.1, so `useProvinceEditTargets` and `useProvinceValidation` no longer each rebuild the whole catalog (including the id-gap scan) on the same render. Running validation itself in a Web Worker is not done.
-> - 4.3 and the rest of 4.5 (painted-index staleness, HiDPI canvas sizing, WebGL context loss) are unaddressed: each requires changing the BMP/WebGL pipeline in ways I can't verify without running the built app against real HOI4 assets, so they're left for a change that can be checked visually.
-> - Tests: `npm test` (added cases in `provinceEditSelectors.test.ts` and `useMapCanvas.mergeBboxGroups.test.ts`).
+> - 4.5, HiDPI: the canvas backing store is now sized at `devicePixelRatio` (`canvasSizing.ts`) while its CSS box is pinned to the container size; every canvas-relative pointer coordinate is converted to device pixels to match, and the displayed zoom % stays DPR-independent.
+> - 4.5, WebGL context loss: `MapRenderer` now calls `preventDefault()` on `webglcontextlost` (without it the loss was permanent — the actual prior behavior), rebuilds its shaders and re-uploads its core textures from retained CPU state on `webglcontextrestored`, and `useMapCanvas` re-syncs overlay textures and surfaces a notification for both events.
+> - 4.5, painted-index staleness: not fixed. A regression test now pins the gap (`provinceAnalysis.test.ts`) so it's documented and easy to re-check once fixed.
+> - 4.3 remains deferred: it needs changing the BMP transfer/decode pipeline across ~11 files, which is a larger, riskier change than the others here.
+> - A dev-only test harness (`docs/testing-issue-4.md`) now runs the real renderer and main-process loader against a small, real HOI4-derived fixture in a plain browser tab, which is how the HiDPI and WebGL fixes above were actually verified (DPR-2 numeric checks, click-to-select accuracy, and a live `WEBGL_lose_context` round-trip) rather than just reasoned about from source. A pure, dependency-free `decodeBmp24` (`decodeBmp24.ts`) was also added as groundwork for 4.3, verified against a real cropped `provinces.bmp`.
+> - Tests: `npm test` (added `provinceEditSelectors.test.ts`, `useMapCanvas.mergeBboxGroups.test.ts`, `canvasSizing.test.ts`, `provinceAnalysis.test.ts`, `decodeBmp24.test.ts`).
 
 ### 4.1 Draft maps are rebuilt on every query
 
