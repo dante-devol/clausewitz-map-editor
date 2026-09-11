@@ -1,10 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MapRenderer } from '../../infra/lib/MapRenderer'
 import { BmpProvinceMapSource } from '../../infra/lib/BmpProvinceMapSource'
+import { computeCanvasBackingSize } from '../../infra/lib/canvasSizing'
 import type { CanvasOverlay, BitmapCanvasOverlay } from '../contracts/CanvasOverlay'
 import type { OverlayFilterRule } from '../../core/contracts/MapOverlay'
 import type { ProvinceIndex } from '../../infra/lib/provinceAnalysis'
 import type { BmpPixelStrokeDelta } from '../../../../shared/provinceEditing'
+
+// The canvas is absolutely positioned with inset:0, but as a replaced
+// element its CSS box falls back to its width/height *attribute* when no
+// explicit CSS width/height is set — inset:0 alone doesn't stretch it to the
+// container. So the CSS size has to be pinned explicitly here, independent
+// of the (now devicePixelRatio-scaled) attribute size that controls the
+// backing store resolution. All canvas-relative pointer coordinates below
+// are converted from CSS to device pixels with the same ratio so they line
+// up with the backing store and the WebGL transform, which already operates
+// in backing-store pixels (canvas.width/height).
+function resizeCanvasForDpr(canvas: HTMLCanvasElement, clientWidth: number, clientHeight: number): void {
+  const { width, height } = computeCanvasBackingSize(clientWidth, clientHeight, window.devicePixelRatio || 1)
+  canvas.width = width
+  canvas.height = height
+  canvas.style.width = `${clientWidth}px`
+  canvas.style.height = `${clientHeight}px`
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -139,7 +157,10 @@ export function useMapCanvas({
 
   const applyTransform = useCallback((next: Transform) => {
     transformRef.current = next
-    setDisplayScale(next.scale)
+    // next.scale is device-pixel (image px -> backing-store px); the zoom %
+    // shown to the user should reflect CSS-pixel zoom, independent of DPR,
+    // so a fit-to-screen reads the same "100%"-ish value on any display.
+    setDisplayScale(next.scale / (window.devicePixelRatio || 1))
     rendererRef.current?.render(next.x, next.y, next.scale)
     const pos = cursorCanvasPositionRef.current
     if (pos && brushPaintConfigRef.current) drawBrushCursorRef.current?.(pos.x, pos.y)
@@ -160,10 +181,9 @@ export function useMapCanvas({
   useEffect(() => {
     const canvas    = canvasRef.current!
     const container = containerRef.current!
-    canvas.width = container.clientWidth
-    canvas.height = container.clientHeight
+    resizeCanvasForDpr(canvas, container.clientWidth, container.clientHeight)
     const cursorCanvas = brushCursorCanvasRef.current
-    if (cursorCanvas) { cursorCanvas.width = container.clientWidth; cursorCanvas.height = container.clientHeight }
+    if (cursorCanvas) resizeCanvasForDpr(cursorCanvas, container.clientWidth, container.clientHeight)
     rendererRef.current = new MapRenderer(canvas)
     return () => {
       cancelPanRef.current?.()
@@ -321,10 +341,9 @@ export function useMapCanvas({
     const canvas    = canvasRef.current
     if (!container || !canvas) return
     const observer = new ResizeObserver(() => {
-      canvas.width = container.clientWidth
-      canvas.height = container.clientHeight
+      resizeCanvasForDpr(canvas, container.clientWidth, container.clientHeight)
       const cursorCanvas = brushCursorCanvasRef.current
-      if (cursorCanvas) { cursorCanvas.width = container.clientWidth; cursorCanvas.height = container.clientHeight }
+      if (cursorCanvas) resizeCanvasForDpr(cursorCanvas, container.clientWidth, container.clientHeight)
       const t = transformRef.current
       syncSelectionStructure(rendererRef.current, provinceIndexRef.current, highlightColorsRef.current, t.scale)
       syncValidationStructure(rendererRef.current, provinceIndexRef.current, validationWarningColorsRef.current, validationErrorColorsRef.current, t.scale)
@@ -345,8 +364,9 @@ export function useMapCanvas({
       const canvas = canvasRef.current
       if (!canvas) return
       const rect   = canvas.getBoundingClientRect()
-      const mx     = e.clientX - rect.left
-      const my     = e.clientY - rect.top
+      const dpr    = window.devicePixelRatio || 1
+      const mx     = (e.clientX - rect.left) * dpr
+      const my     = (e.clientY - rect.top) * dpr
       const factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP
       const prev   = transformRef.current
       const newScale = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, prev.scale * factor))
@@ -465,8 +485,9 @@ export function useMapCanvas({
     const canvas = canvasRef.current
     if (canvas) {
       const rect = canvas.getBoundingClientRect()
-      const cx = e.clientX - rect.left
-      const cy = e.clientY - rect.top
+      const dpr = window.devicePixelRatio || 1
+      const cx = (e.clientX - rect.left) * dpr
+      const cy = (e.clientY - rect.top) * dpr
       if (activeTool === 'brush') {
         isPaintingRef.current = true
         doBrushPaint(cx, cy)
@@ -486,10 +507,16 @@ export function useMapCanvas({
     const canvas = canvasRef.current
     if (canvas) {
       const rect = canvas.getBoundingClientRect()
-      const cx = e.clientX - rect.left
-      const cy = e.clientY - rect.top
+      const dpr = window.devicePixelRatio || 1
+      // CSS pixels: for DOM-positioned things (the hover tooltip translates
+      // by this in px). Device pixels (cx, cy): for anything matched against
+      // the transform/canvas backing store, which are both device-pixel space.
+      const cssX = e.clientX - rect.left
+      const cssY = e.clientY - rect.top
+      const cx = cssX * dpr
+      const cy = cssY * dpr
       cursorCanvasPositionRef.current = { x: cx, y: cy }
-      setCursorPosition({ x: cx, y: cy })
+      setCursorPosition({ x: cssX, y: cssY })
       if (!dragRef.current) {
         if (activeTool === 'brush') {
           drawBrushCursor(cx, cy)
@@ -499,17 +526,18 @@ export function useMapCanvas({
         clearBrushCursor()
         const { x: tx, y: ty, scale } = transformRef.current
         const color = rendererRef.current?.readOriginalPixel(cx, cy, tx, ty, scale)
-        onHoverColorChange?.(color ? { ...color, x: cx, y: cy } : null)
+        onHoverColorChange?.(color ? { ...color, x: cssX, y: cssY } : null)
       } else {
         clearBrushCursor()
         onHoverColorChange?.(null)
       }
     }
     if (!dragRef.current) return
+    const dpr = window.devicePixelRatio || 1
     applyTransform({
       ...transformRef.current,
-      x: dragRef.current.startTX + (e.clientX - dragRef.current.startX),
-      y: dragRef.current.startTY + (e.clientY - dragRef.current.startY)
+      x: dragRef.current.startTX + (e.clientX - dragRef.current.startX) * dpr,
+      y: dragRef.current.startTY + (e.clientY - dragRef.current.startY) * dpr
     })
   }, [activeTool, applyTransform, clearBrushCursor, doBrushPaint, drawBrushCursor, onHoverColorChange])
 
