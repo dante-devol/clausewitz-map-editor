@@ -5,6 +5,5 @@ export interface ProvinceMapSource {
   readonly height: number
   // RGBA pixel data in row-major order, top-left origin.
   readonly pixelData: Uint8ClampedArray
-  readonly imageBitmap: ImageBitmap
   dispose(): void
 }

@@ -409,7 +409,7 @@ export class MapRenderer {
 
   async loadImage(source: ProvinceMapSource): Promise<void> {
     const { gl } = this
-    const { width, height, pixelData, imageBitmap } = source
+    const { width, height, pixelData } = source
 
     this._imageSize     = { width, height }
     this.pixelData      = pixelData
@@ -468,8 +468,6 @@ export class MapRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-
-    void imageBitmap
 
     // Selection texture — same 256×paletteHeight layout as palette.
     // R channel = 1.0 (255) for selected province IDs, 0 otherwise.

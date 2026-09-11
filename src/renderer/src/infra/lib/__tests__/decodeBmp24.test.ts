@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decodeBmp24 } from '../decodeBmp24'
+import { decodeBmp24, decodeBmp24FromBase64 } from '../decodeBmp24'
 import { encodeBmp24 } from './bmpTestFixtures'
 
 const RED = [200, 10, 10] as const
@@ -76,5 +76,26 @@ describe('decodeBmp24', () => {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
     view.setUint16(28, 32, true)
     expect(() => decodeBmp24(bytes)).toThrow(/bit depth/)
+  })
+})
+
+describe('decodeBmp24FromBase64', () => {
+  function toBase64(bytes: Uint8Array): string {
+    let binary = ''
+    for (const byte of bytes) binary += String.fromCharCode(byte)
+    return btoa(binary)
+  }
+
+  it('decodes a bare base64 payload', () => {
+    const bytes = encodeBmp24(2, 1, (x) => (x === 0 ? RED : GREEN))
+    const decoded = decodeBmp24FromBase64(toBase64(bytes))
+    expect(pixelAt(decoded, 0, 0)).toEqual([...RED, 255])
+    expect(pixelAt(decoded, 1, 0)).toEqual([...GREEN, 255])
+  })
+
+  it('strips a data: URL prefix before decoding', () => {
+    const bytes = encodeBmp24(1, 1, () => BLUE)
+    const decoded = decodeBmp24FromBase64(`data:image/bmp;base64,${toBase64(bytes)}`)
+    expect(pixelAt(decoded, 0, 0)).toEqual([...BLUE, 255])
   })
 })

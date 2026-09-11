@@ -54,3 +54,15 @@ export function decodeBmp24(buffer: ArrayBuffer | ArrayBufferView): DecodedBmp {
 
   return { width, height, pixels }
 }
+
+// atob/Uint8Array conversion for a base64 BMP payload (with or without a
+// leading `data:...;base64,` prefix) — the form the app carries provinces.bmp
+// in over IPC and through the store. `atob` is available in both window and
+// worker global scopes.
+export function decodeBmp24FromBase64(base64: string): DecodedBmp {
+  const payload = base64.includes(',') ? base64.slice(base64.indexOf(',') + 1) : base64
+  const binary = atob(payload)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return decodeBmp24(bytes)
+}
