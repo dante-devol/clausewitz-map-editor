@@ -200,6 +200,13 @@ Root causes:
 
 ## 3. Structural and design gaps (P2)
 
+> **Status (2026-09-11): partially addressed.**
+> - 3.2 (partial): the three misleading id-gap warnings are now one `province.id-gap` error, and every province validator message moved from hardcoded English into i18n keys with interpolated params (`messageParams` on `ProvinceValidationIssue`). The state/region validator set and the `MapValidator` generalization this section calls for are not done — see below.
+> - 3.3: `files:load`/`files:read`/`unload`/`getHash` now refuse any path outside the window's open project (`ProjectSession.isKnownPath`); `sandbox: true` is enabled (verified by launching the app); a production-only CSP was added to `index.ts` (verified by launching the built app with it force-enabled and confirming the UI still renders — Griffel's CSSOM-based style injection isn't governed by `style-src`, but React's inline `style` prop needed `'unsafe-inline'` kept). The writers-trusting-any-sourcePath half of this item was already fixed by section 1's `groupBySourceFile`.
+> - 3.4 (partial): `stateCategories`/`buildings` change events were declared in `MapChangedEvent` and handled by the renderer, but main never sent them — they're now watched and emitted. Watching by directory (new/deleted files) and resources/weather watching are not done. The save-suppression counter this item describes was already replaced by section 1's hash-based `knownHashes` check.
+> - Not attempted: 3.1 in full (create/delete states and regions, paint-based membership tools, `default.map`/`adjacencies.csv` parsing, `descriptor.mod` sub-mod dependencies), 3.2's full state/region validator set and `MapValidator` generalization, 3.4's directory watching, and 3.5's unified `saveService`. These are substantial new features or redesigns rather than defects, and are better scoped and reviewed as their own pieces of work than rushed here.
+> - Tests: `npm test`.
+
 ### 3.1 Missing editing features
 
 - States and strategic regions can't be created or deleted (the edit slices only patch existing IDs).
