@@ -509,7 +509,7 @@ export function MapCanvas(): JSX.Element {
     ? query.getDraftProvinceByColor(paintProvinceColor)
     : undefined
   const provinceIdLabel = draftProvince?.provinceId != null
-    ? `Province ${draftProvince.provinceId}`
+    ? t('paintPanel.provinceLabel', { id: draftProvince.provinceId })
     : draftProvince
       ? t('paintPanel.unregistered')
       : t('paintPanel.noProvince')

@@ -12,6 +12,7 @@ import { StateDetailPanel } from '../components/statePanel/StateDetailPanel'
 import { StrategicRegionDetailPanel } from '../components/strategicRegionPanel/StrategicRegionDetailPanel'
 import { PaintPanel } from '../components/paintPanel/PaintPanel'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
+import { useI18n } from '../i18n/I18nProvider'
 
 const useStyles = makeStyles({
   root: {
@@ -73,6 +74,7 @@ const useStyles = makeStyles({
 
 export function MapView() {
   const styles = useStyles()
+  const { t } = useI18n()
   const editorMode = useMapDataStore((s) => s.editorMode)
   const selectedStateId = useMapDataStore((s) => s.selectedStateId)
   const selectedStrategicRegionId = useMapDataStore((s) => s.selectedStrategicRegionId)
@@ -117,7 +119,7 @@ export function MapView() {
         )}
         {showDrawer && detailCollapsed && (
           <div className={styles.collapsedTab}>
-            <Tooltip content="Expand detail panel" relationship="label" positioning="above">
+            <Tooltip content={t('mapView.expandDetailPanel')} relationship="label" positioning="above">
               <Button
                 size="small"
                 appearance="subtle"
