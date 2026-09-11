@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo } from 'react'
-import type { Continent, Province, TerrainCategory } from '../../../../shared/mapDataTypes'
-import type { ProvinceDraftTarget } from '../../../../shared/provinceEditing'
+import type { Continent, Province, TerrainCategory } from '../../../shared/mapDataTypes'
+import type { ProvinceDraftTarget } from '../../../shared/provinceEditing'
 import { useMapDataStore } from '../infra/store/mapDataStore'
 import { selectProvinceDraftTargetMaps } from '../infra/store/provinceEditSelectors'
 

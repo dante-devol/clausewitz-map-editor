@@ -5,7 +5,8 @@
     "moduleResolution": "bundler",
     "strict": true,
     "target": "ESNext",
-    "outDir": "out"
+    "outDir": "out",
+    "skipLibCheck": true
   },
   "include": [
     "electron.vite.config.*",

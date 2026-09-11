@@ -5,7 +5,7 @@ import type { ProvinceValidationSnapshot } from '../../../../shared/provinceVali
 import { selectEffectiveProvinceCatalog } from '../../infra/store/provinceEditSelectors'
 import type { ProvinceCatalogEntry, ProvinceCatalogEntryKey } from '../../../../shared/provinceCatalog'
 import { notificationService } from '../../infra/services/notificationService'
-import { useI18n } from '../i18n/I18nProvider'
+import { useI18n, type MessageParams } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/messages/en'
 import type { ProvinceValidationWorkerRequest, ProvinceValidationWorkerResponse } from '../../infra/workers/provinceValidation.worker'
 
@@ -210,7 +210,7 @@ function sameSources(a: readonly string[], b: readonly string[]): boolean {
 }
 
 function formatValidationSummaryMessage(
-  t: (key: MessageKey, params?: Record<string, string | number>) => string,
+  t: (key: MessageKey, params?: MessageParams) => string,
   summary: { infoCount: number; warningCount: number; errorCount: number }
 ): string {
   if (summary.errorCount === 0 && summary.warningCount === 0) {

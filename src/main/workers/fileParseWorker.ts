@@ -1,6 +1,6 @@
 import { readFile } from 'fs/promises'
 import { parentPort } from 'worker_threads'
-import { parserRegistry, type ParserKey, type ParserInputMap, type ParserOutputMap } from './parserRegistry'
+import { runParser, type ParserKey, type ParserInputMap, type ParserOutputMap } from './parserRegistry'
 
 export interface WorkerTask {
   taskId: number
@@ -45,7 +45,7 @@ async function runTask(task: WorkerTask): Promise<void> {
   try {
     const content = await readFile(task.filePath, 'utf-8')
     const input = { content, ...task.extra } as ParserInputMap[typeof task.key]
-    const result = parserRegistry[task.key](input)
+    const result = runParser(task.key, input)
     parentPort!.postMessage({ taskId: task.taskId, result } satisfies WorkerSuccess)
   } catch (err) {
     parentPort!.postMessage({ taskId: task.taskId, error: (err as Error).message } satisfies WorkerFailure)

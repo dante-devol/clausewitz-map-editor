@@ -4,6 +4,7 @@ node_modules/
 # Build outputs
 out/
 dist/
+*.tsbuildinfo
 
 # Electron builder cache
 .electron-builder-cache/

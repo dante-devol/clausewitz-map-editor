@@ -86,7 +86,7 @@ export function reconcileProvinceCatalogWithBitmap(
 ): ProvinceCatalogEntry[] {
   const remainingColors = new Map(bitmapFacts.byColor)
 
-  const reconciled = catalog.map((entry) => {
+  const reconciled = catalog.map<ProvinceCatalogEntry>((entry) => {
     if (entry.color === null) return entry
 
     const bitmapFact = remainingColors.get(entry.color)

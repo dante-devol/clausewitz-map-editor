@@ -6,6 +6,7 @@ import {
   Option,
   Select,
   makeStyles,
+  shorthands,
   tokens,
   Text
 } from '@fluentui/react-components'
@@ -15,7 +16,8 @@ import {
   ChevronRightRegular,
   DismissRegular
 } from '@fluentui/react-icons'
-import { useI18n } from '../../i18n/I18nProvider'
+import { useI18n, type MessageParams } from '../../i18n/I18nProvider'
+import type { MessageKey } from '../../i18n/messages/en'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import { applyStatePatch, type StateEditPatch } from '../../../infra/store/slices/stateEditSlice'
 import type {
@@ -187,15 +189,15 @@ const useStyles = makeStyles({
     fontWeight: tokens.fontWeightSemibold
   },
   chipOwner: {
-    borderColor: tokens.colorPaletteBlueBorder2,
+    ...shorthands.borderColor(tokens.colorPaletteBlueBorderActive),
     backgroundColor: tokens.colorPaletteBlueBackground2
   },
   chipCore: {
-    borderColor: tokens.colorPaletteGreenBorder2,
+    ...shorthands.borderColor(tokens.colorPaletteGreenBorder2),
     backgroundColor: tokens.colorPaletteGreenBackground2
   },
   chipEffect: {
-    borderColor: tokens.colorPaletteYellowBorder2,
+    ...shorthands.borderColor(tokens.colorPaletteYellowBorder2),
     backgroundColor: tokens.colorPaletteYellowBackground2
   },
   chipDismiss: {
@@ -309,11 +311,12 @@ interface CollapsibleSectionProps {
   expanded: boolean
   onToggle: () => void
   action?: React.ReactNode
+  onRemove?: () => void
   children: React.ReactNode
   styles: ReturnType<typeof useStyles>
 }
 
-function CollapsibleSection({ id: _id, title, expanded, onToggle, action, children, styles }: CollapsibleSectionProps): JSX.Element {
+function CollapsibleSection({ id: _id, title, expanded, onToggle, action, onRemove, children, styles }: CollapsibleSectionProps): JSX.Element {
   return (
     <div className={styles.sectionContainer}>
       <div className={styles.sectionHeader} onClick={onToggle} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onToggle() }}>
@@ -323,6 +326,11 @@ function CollapsibleSection({ id: _id, title, expanded, onToggle, action, childr
         }
         <Text size={100} className={styles.sectionTitle}>{title}</Text>
         {action && <span onClick={(e) => e.stopPropagation()}>{action}</span>}
+        {onRemove && (
+          <span onClick={(e) => { e.stopPropagation(); onRemove() }}>
+            <Button size="small" appearance="subtle" icon={<DismissRegular />} />
+          </span>
+        )}
       </div>
       {expanded && (
         <div className={styles.sectionBody}>{children}</div>
@@ -343,7 +351,7 @@ interface HistoryBlockProps {
   setAddForm: (f: AddFormKind) => void
   buildingTypeList: string[]
   styles: ReturnType<typeof useStyles>
-  t: (key: string, params?: Record<string, unknown>) => string
+  t: (key: MessageKey, params?: MessageParams) => string
 }
 
 function HistoryBlock({ def, target, onChange, addForm, setAddForm, buildingTypeList, styles, t }: HistoryBlockProps): JSX.Element {

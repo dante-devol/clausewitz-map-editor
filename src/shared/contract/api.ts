@@ -153,9 +153,7 @@ export interface ApiContract {
   }
   files: {
     load: (path: string) => Promise<FileLoadResult>
-    read: (path: string) => Promise<FileLoadResult>
     unload: (path: string) => Promise<void>
-    getHash: (path: string) => Promise<string | null>
     onChanged: (callback: (event: FileChangedEvent) => void) => () => void
   }
   projects: {

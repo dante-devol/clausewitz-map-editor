@@ -10,7 +10,8 @@ import {
 import { ChevronDownRegular, ChevronUpRegular, DismissRegular } from '@fluentui/react-icons'
 import { unpackColor } from '../../../../../shared/mapDataTypes'
 import type { PendingChange } from '../../../../../shared/provinceEditing'
-import { useI18n } from '../../i18n/I18nProvider'
+import { useI18n, type MessageParams } from '../../i18n/I18nProvider'
+import type { MessageKey } from '../../i18n/messages/en'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import { useCrossSelection } from './useCrossSelection'
 
@@ -299,7 +300,7 @@ function FieldEditRow({
 }: {
   change: Extract<PendingChange, { kind: 'field-edit' }>
   styles: ReturnType<typeof useStyles>
-  t: (key: string, params?: Record<string, string | number>) => string
+  t: (key: MessageKey, params?: MessageParams) => string
 }) {
   const { r, g, b } = unpackColor(change.original.color)
   return (
@@ -321,7 +322,7 @@ function BmpFieldEditRow({
 }: {
   change: Extract<PendingChange, { kind: 'bmp-field-edit' }>
   styles: ReturnType<typeof useStyles>
-  t: (key: string, params?: Record<string, string | number>) => string
+  t: (key: MessageKey, params?: MessageParams) => string
 }) {
   const { r, g, b } = unpackColor(change.bmpColor)
   return (

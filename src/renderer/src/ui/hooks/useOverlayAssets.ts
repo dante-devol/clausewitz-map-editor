@@ -167,6 +167,7 @@ export function useOverlayAssets(): {
 
   useEffect(() => {
     if (!resolvedPaths) return
+    const currentResolvedPaths = resolvedPaths
 
     let cancelled = false
 
@@ -184,7 +185,7 @@ export function useOverlayAssets(): {
         if (!overlay.visible) continue
 
         if (overlay.kind === 'bitmap') {
-          const resolvedPath = resolveOverlayPath(overlay.id, resolvedPaths)
+          const resolvedPath = resolveOverlayPath(overlay.id, currentResolvedPaths)
           if (!resolvedPath) continue
 
           const existing = bitmapCacheRef.current.get(overlay.id)

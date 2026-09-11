@@ -6,7 +6,7 @@ import { deepEqual } from '../shared/deepEqual'
 
 // Add new config keys here. Defaults are the source of truth —
 // only deviations from these are written to disk.
-export interface Config extends AppConfig {}
+export type Config = AppConfig
 
 export const DEFAULT_CONFIG: Config = {
   locale: null,

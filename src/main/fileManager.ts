@@ -28,10 +28,6 @@ export function loadFile(path: string): FileRecord {
   return record
 }
 
-export function getRecord(path: string): FileRecord | undefined {
-  return records.get(path)
-}
-
 // Starts watching a file for external changes.
 // Fires file:changed on the window when the hash changes.
 // onChanged is also called after the hash check confirms a real change — use it

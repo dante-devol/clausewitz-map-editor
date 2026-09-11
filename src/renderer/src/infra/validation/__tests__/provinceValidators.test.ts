@@ -33,13 +33,13 @@ describe('province/id-gap', () => {
   it('does not suppress the normal missing-field warnings for a real (non-gap) province', () => {
     const snapshot = snapshotFor([
       province(1),
-      { id: 2, color: null, type: null, isCoastal: null, terrain: undefined, continent: undefined }
+      { id: 2, color: 2, type: undefined, isCoastal: undefined, terrain: undefined, continent: undefined }
     ])
     const result = runProvinceValidation(snapshot, provinceValidators, 'metadata')
 
     const codesForProvince2 = result.issues.filter((i) => i.provinceId === 2).map((i) => i.code)
     expect(codesForProvince2).toEqual(
-      expect.arrayContaining(['province.missing-type', 'province.missing-color', 'province.missing-terrain'])
+      expect.arrayContaining(['province.missing-type', 'province.missing-terrain'])
     )
     expect(codesForProvince2).not.toContain('province.id-gap')
   })
@@ -64,10 +64,10 @@ describe('messageParams', () => {
   })
 
   it('has no messageParams for non-parameterized messages', () => {
-    const snapshot = snapshotFor([{ id: 1, color: null, type: null, isCoastal: null, terrain: undefined, continent: undefined }])
+    const snapshot = snapshotFor([{ id: 1, color: 1, type: undefined, isCoastal: undefined, terrain: undefined, continent: undefined }])
     const result = runProvinceValidation(snapshot, provinceValidators, 'metadata')
 
-    const missingColor = result.issues.find((i) => i.code === 'province.missing-color')
-    expect(missingColor?.messageParams).toBeUndefined()
+    const missingType = result.issues.find((i) => i.code === 'province.missing-type')
+    expect(missingType?.messageParams).toBeUndefined()
   })
 })

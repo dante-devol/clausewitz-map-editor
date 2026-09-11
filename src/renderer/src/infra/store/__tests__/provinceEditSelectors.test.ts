@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { Province } from '../../../../../shared/mapDataTypes'
+import type { BmpOnlyEntry } from '../../../../../shared/provinceEditing'
 import {
   selectEffectiveProvinceCatalog,
   selectNextAvailableProvinceId,
   selectProvinceDraftTargetMaps
 } from '../provinceEditSelectors'
+
+const NO_BMP_ONLY_ENTRIES: BmpOnlyEntry[] = []
 
 function province(id: number): Province {
   return { id, color: 0, type: 'land', isCoastal: false, terrain: undefined, continent: undefined }
@@ -38,7 +41,7 @@ describe('selectNextAvailableProvinceId', () => {
 })
 
 describe('selectProvinceDraftTargetMaps', () => {
-  const emptyArgs = [new Map(), new Map(), new Map(), new Map(), new Map(), []] as const
+  const emptyArgs = [new Map(), new Map(), new Map(), new Map(), new Map(), NO_BMP_ONLY_ENTRIES] as const
 
   it('returns the same result object when called again with the same references', () => {
     const first = selectProvinceDraftTargetMaps(...emptyArgs)
@@ -56,7 +59,7 @@ describe('selectProvinceDraftTargetMaps', () => {
 })
 
 describe('selectEffectiveProvinceCatalog', () => {
-  const emptyArgs = [new Map(), new Map(), new Map(), new Map(), new Map(), [], []] as const
+  const emptyArgs = [new Map(), new Map(), new Map(), new Map(), new Map(), NO_BMP_ONLY_ENTRIES, []] as const
 
   it('returns the same array when called again with the same references', () => {
     const first = selectEffectiveProvinceCatalog(...emptyArgs)

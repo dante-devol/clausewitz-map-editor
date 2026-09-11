@@ -12,7 +12,7 @@ import {
   WeatherMoonRegular,
   WeatherSunnyRegular
 } from '@fluentui/react-icons'
-import type { View, Theme } from '../../../core/contracts/CoreState'
+import type { View, Theme } from '../../hooks/useAppState'
 import { useI18n } from '../../i18n/I18nProvider'
 
 const useStyles = makeStyles({
@@ -70,7 +70,7 @@ interface ShellProps {
   children: React.ReactNode
 }
 
-const NAV_ITEMS: { view: View; icon: React.ReactNode; labelKey: 'shell.nav.map' | 'shell.nav.settings' }[] = [
+const NAV_ITEMS: { view: View; icon: JSX.Element; labelKey: 'shell.nav.map' | 'shell.nav.settings' }[] = [
   { view: 'map', icon: <MapRegular />, labelKey: 'shell.nav.map' },
   { view: 'settings', icon: <SettingsRegular />, labelKey: 'shell.nav.settings' }
 ]

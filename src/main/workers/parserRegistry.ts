@@ -47,3 +47,11 @@ export const parserRegistry: { [K in ParserKey]: (input: ParserInputMap[K]) => P
   buildings:        ({ content }) => BuildingsTxt.parse(content),
   definitions:      ({ content, continents }) => DefinitionsCsv.parse(content, continents),
 }
+
+// A union-indexed lookup like `parserRegistry[task.key]` yields a union of
+// function types, and TS can't safely call that with a union argument. Going
+// through a generic type parameter keeps the key and input tied together so
+// the call type-checks.
+export function runParser<K extends ParserKey>(key: K, input: ParserInputMap[K]): ParserOutputMap[K][] {
+  return parserRegistry[key](input)
+}

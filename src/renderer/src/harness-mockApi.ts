@@ -73,9 +73,7 @@ export function createMockApi(): ApiContract {
     },
     files: {
       load: async (path) => ({ path, hash: '', content: '' }),
-      read: async (path) => ({ path, hash: '', content: '' }),
       unload: async () => {},
-      getHash: async () => null,
       onChanged: () => () => {}
     },
     projects: {

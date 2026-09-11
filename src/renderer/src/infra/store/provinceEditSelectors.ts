@@ -446,6 +446,6 @@ function applyDraftFieldPatch<K extends keyof ProvinceDraftFields>(
   originalValue: ProvinceDraftFields[K]
 ): ProvinceDraftFields[K] {
   return Object.prototype.hasOwnProperty.call(patch, field)
-    ? patch[field]
+    ? (patch[field] as ProvinceDraftFields[K])
     : originalValue
 }

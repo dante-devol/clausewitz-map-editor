@@ -67,7 +67,7 @@ export interface BuildingDefinition {
   amount: number
 }
 
-export interface StateBuildingDefinition extends BuildingDefinition {}
+export type StateBuildingDefinition = BuildingDefinition
 
 export interface ProvinceBuildingDefinition extends BuildingDefinition {
   province: number

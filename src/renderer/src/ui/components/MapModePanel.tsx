@@ -39,7 +39,7 @@ import { useI18n } from '../i18n/I18nProvider'
 import type { OverlayFilterRule, OverlayId } from '../../core/contracts/MapOverlay'
 import { type HsvColor, normalizeHexCandidate, hexToHsv, hsvToHex } from '../lib/colorUtils'
 import { useOverlayPanelState } from '../hooks/useOverlayPanelState'
-import { usePanelOverlays } from '../hooks/useOverlayAssets'
+import { usePanelOverlays, type OverlayPanelItem } from '../hooks/useOverlayAssets'
 import { useCoreStore } from '../../infra/store/coreStore'
 
 const useStyles = makeStyles({
@@ -404,6 +404,10 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: tokens.spacingVerticalS,
     padding: tokens.spacingVerticalXS
+  },
+  pickerArea: {
+    width: '100%',
+    height: '160px'
   }
 })
 
@@ -840,7 +844,8 @@ function getDefaultRuleOverrideColor(
 
 function getRuleColors(rule: OverlayFilterRule, overlay: Extract<OverlayPanelItem, { kind: 'bitmap' }>): string[] {
   if (rule.target.kind === 'custom') return rule.target.colors
-  return overlay.configuration.groups.find((group) => group.id === rule.target.groupId)?.colors ?? []
+  const target = rule.target
+  return overlay.configuration.groups.find((group) => group.id === target.groupId)?.colors ?? []
 }
 
 function OverlayRuleColorOverrideControl({
@@ -852,7 +857,7 @@ function OverlayRuleColorOverrideControl({
   color: string | null
   initialColor: string
   onChangeColor: (color: string) => void
-  onClear: () => void
+  onClear?: () => void
 }): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
@@ -862,14 +867,14 @@ function OverlayRuleColorOverrideControl({
     <div
       className={mergeClasses(
         styles.overlayRuleOverrideControl,
-        color && styles.overlayRuleTokenActive
+        Boolean(color) && styles.overlayRuleTokenActive
       )}
     >
       <Popover open={popoverOpen} onOpenChange={(_, data) => setPopoverOpen(data.open)} positioning="below-start">
         <PopoverTrigger disableButtonEnhancement>
           <button
             type="button"
-            className={mergeClasses(styles.overlayRuleOverrideButton, color && styles.overlayRuleOverrideButtonHover)}
+            className={mergeClasses(styles.overlayRuleOverrideButton, Boolean(color) && styles.overlayRuleOverrideButtonHover)}
             aria-label={t('overlay.ruleColorOverride')}
           >
             <ColorRegular />
