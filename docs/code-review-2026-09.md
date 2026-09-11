@@ -279,6 +279,13 @@ The file travels as base64 over IPC ([ProjectLoader.ts:73](../src/main/services/
 
 ## 5. Tooling and hygiene (P3)
 
+> **Status (2026-09-11): addressed.**
+> - 5.1: `baseUrl` and `skipLibCheck` added to both tsconfigs. Fixed all ~61 real errors this uncovered (wrong-depth/missing imports, the `projectId`/`string | null` narrowing not surviving into nested closures across `useMapLoader.ts` and `useOverlayAssets.ts`, a recurring `t()`/`MessageKey` mismatch across 5 files, Fluent slot/shorthand issues, a stray `ProvinceType` union gap, and the classic "calling a union of functions" case in the file parser registry). `tsc -b` is clean; `"typecheck": "tsc -b"` is a real script and gates `build`. Also removed a batch of stray `.js`/`.d.ts` files a prior `tsc -b` run had emitted next to renderer sources (missing `outDir`) and gitignored `*.tsbuildinfo`.
+> - 5.2: added ESLint (flat config, `typescript-eslint` + `eslint-plugin-react-hooks`) with a `lint` script; fixed its 3 real errors. Left its 34 warnings (mostly unused vars and `exhaustive-deps`) as follow-up rather than mass-editing behavior under a hygiene pass. Vitest was already in place from earlier sections; also added a `vitest.config.ts` excluding nested git worktrees, which had been silently tripling the reported test count and contributing unrelated Playwright failures to plain `npm test`.
+> - 5.3: removed the ~1,150 lines of confirmed-dead code — `ProvinceList.tsx` (superseded by `CanonicalProvinceList`), `useMapData.ts`, `useTrackedFile.ts` and the `fileStore` it alone used, `animateValue.ts`, `MapRenderer.readPixel`, and the `files:read`/`files:getHash` IPC path end to end. Left the `ProjectLoader` sync loaders alone — they're still called from `ProjectSession`, so they weren't actually unused as the review assumed.
+> - 5.4: `tsconfig.web.tsbuildinfo` removed from git and `.gitignore`d; the shared parser from section 1 already eliminated the six-parsers-one-`extractBlock` duplication; the last two hardcoded English strings (`MapView`'s collapsed-drawer tooltip, `MapCanvas`'s paint-panel province label) moved into i18n keys with English and French translations.
+> - Tests: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`.
+
 ### 5.1 The renderer has never been typechecked
 
 `tsconfig.web.json` uses `paths` without `baseUrl`, so `tsc` fails before checking anything. With `baseUrl` added there are **53 errors**, including:
