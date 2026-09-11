@@ -205,5 +205,5 @@ export function quoteString(value: string): string {
 
 // Writes identifiers bare, anything else quoted.
 export function formatScalarString(value: string): string {
-  return /^[A-Za-z0-9_.:@\-]+$/.test(value) ? value : quoteString(value)
+  return /^[A-Za-z0-9_.:@-]+$/.test(value) ? value : quoteString(value)
 }
