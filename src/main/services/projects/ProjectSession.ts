@@ -353,6 +353,20 @@ export class ProjectSession {
       })
     }
 
+    for (const filePath of project.resolvedPaths.stateCategories) {
+      this.watch(filePath, () => {
+        if (this.project !== project) return
+        this.emit(project, 'stateCategories', this.loader.loadStateCategories(project))
+      })
+    }
+
+    for (const filePath of project.resolvedPaths.buildings) {
+      this.watch(filePath, () => {
+        if (this.project !== project) return
+        this.emit(project, 'buildings', this.loader.loadBuildings(project))
+      })
+    }
+
     this.watch(project.resolvedPaths.provinces, () => {
       if (this.project !== project) return
       this.emit(project, 'image', this.loader.loadImageBase64(project))
