@@ -27,6 +27,10 @@ const ZOOM_STEP = 1.25
 const ZOOM_MIN = 0.02
 const ZOOM_MAX = 32
 const BBOX_MERGE_PADDING_PX = 1
+// Above this many groups, merging (an O(n²) pairwise scan) is skipped and the
+// raw per-province boxes are drawn instead — cheaper than the scan, and at
+// this count individual boxes are already indistinguishable on screen.
+const BBOX_MERGE_GROUP_CAP = 300
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
@@ -684,25 +688,41 @@ function computeGroupsCentroid(groups: readonly ProvinceBboxGroup[]): { x: numbe
   return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
 }
 
-function mergeCollidingBboxGroups(groups: readonly ProvinceBboxGroup[], scale: number): ProvinceBboxGroup[] {
-  const merged = [...groups]
-  let changed = true
-  while (changed) {
-    changed = false
-    for (let i = 0; i < merged.length; i++) {
-      for (let j = i + 1; j < merged.length; j++) {
-        const left  = expandedScreenRectForGroup(merged[i], scale, BBOX_MERGE_PADDING_PX)
-        const right = expandedScreenRectForGroup(merged[j], scale, BBOX_MERGE_PADDING_PX)
-        if (!screenRectsOverlap(left, right)) continue
-        merged[i] = unionGroups(merged[i], merged[j])
-        merged.splice(j, 1)
-        changed = true
-        break
-      }
-      if (changed) break
+// Merges groups whose (padded) screen rects overlap, transitively, using
+// union-find over a single O(n²) pairwise scan. The previous version
+// restarted its scan from scratch after every merge, making it roughly O(n³)
+// and able to stall zooming when many provinces were highlighted at once.
+export function mergeCollidingBboxGroups(groups: readonly ProvinceBboxGroup[], scale: number): ProvinceBboxGroup[] {
+  if (groups.length <= 1 || groups.length > BBOX_MERGE_GROUP_CAP) return [...groups]
+
+  const rects = groups.map((group) => expandedScreenRectForGroup(group, scale, BBOX_MERGE_PADDING_PX))
+  const parent = groups.map((_, i) => i)
+  const find = (i: number): number => {
+    while (parent[i] !== i) {
+      parent[i] = parent[parent[i]]
+      i = parent[i]
+    }
+    return i
+  }
+  const union = (a: number, b: number): void => {
+    const rootA = find(a)
+    const rootB = find(b)
+    if (rootA !== rootB) parent[rootA] = rootB
+  }
+
+  for (let i = 0; i < rects.length; i++) {
+    for (let j = i + 1; j < rects.length; j++) {
+      if (screenRectsOverlap(rects[i], rects[j])) union(i, j)
     }
   }
-  return merged
+
+  const byRoot = new Map<number, ProvinceBboxGroup>()
+  for (let i = 0; i < groups.length; i++) {
+    const root = find(i)
+    const existing = byRoot.get(root)
+    byRoot.set(root, existing ? unionGroups(existing, groups[i]) : groups[i])
+  }
+  return [...byRoot.values()]
 }
 
 function expandedScreenRectForGroup(group: ProvinceBboxGroup, scale: number, paddingPx: number): ScreenRect {
