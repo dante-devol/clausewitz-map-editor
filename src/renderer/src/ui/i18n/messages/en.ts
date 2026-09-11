@@ -418,7 +418,21 @@ export const enMessages = {
   'stratRegionPanel.add.province': 'Add Province',
   'stratRegionPanel.add.provinceId': 'Province ID',
   'stratRegionPanel.add.confirm': 'Add',
-  'debug.column.weatherPeriods': 'Weather Periods'
+  'debug.column.weatherPeriods': 'Weather Periods',
+
+  'province.missing-id': 'Province has no ID.',
+  'province.invalid-id': 'Province ID must be a positive integer.',
+  'province.duplicate-id': 'Province ID {id} is used more than once.',
+  'province.id-gap': 'Province ID {id} does not exist. HOI4 requires contiguous province IDs.',
+  'province.missing-type': 'Province type is missing.',
+  'province.invalid-type': 'Province type "{type}" is invalid.',
+  'province.missing-color': 'Province color is missing.',
+  'province.invalid-color': 'Province color must be a packed RGB value.',
+  'province.duplicate-color': 'Province color {color} is used more than once.',
+  'province.missing-terrain': 'Province terrain is missing.',
+  'province.invalid-terrain': 'Province terrain "{terrain}" does not exist.',
+  'province.color-missing-on-map': 'Province color is not present on provinces.bmp.',
+  'province.bmp-color-without-definition': 'Map color exists on provinces.bmp but has no definition entry.'
 } as const
 
 export type MessageKey = keyof typeof enMessages
