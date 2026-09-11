@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { Province } from '../../../../../shared/mapDataTypes'
-import { selectNextAvailableProvinceId, selectProvinceDraftTargetMaps } from '../provinceEditSelectors'
+import {
+  selectEffectiveProvinceCatalog,
+  selectNextAvailableProvinceId,
+  selectProvinceDraftTargetMaps
+} from '../provinceEditSelectors'
 
 function province(id: number): Province {
   return { id, color: 0, type: 'land', isCoastal: false, terrain: undefined, continent: undefined }
@@ -48,5 +52,23 @@ describe('selectProvinceDraftTargetMaps', () => {
     const second = selectProvinceDraftTargetMaps(new Map(originals), new Map(), new Map(), new Map(), new Map(), [])
     expect(second).not.toBe(first)
     expect(second.byProvinceId.get(1)).toBeDefined()
+  })
+})
+
+describe('selectEffectiveProvinceCatalog', () => {
+  const emptyArgs = [new Map(), new Map(), new Map(), new Map(), new Map(), [], []] as const
+
+  it('returns the same array when called again with the same references', () => {
+    const first = selectEffectiveProvinceCatalog(...emptyArgs)
+    const second = selectEffectiveProvinceCatalog(...emptyArgs)
+    expect(second).toBe(first)
+  })
+
+  it('recomputes when an input reference changes', () => {
+    const originals = new Map([[1, province(1)]])
+    const first = selectEffectiveProvinceCatalog(originals, new Map(), new Map(), new Map(), new Map(), [], [])
+    const second = selectEffectiveProvinceCatalog(new Map(originals), new Map(), new Map(), new Map(), new Map(), [], [])
+    expect(second).not.toBe(first)
+    expect(second.some((entry) => entry.id === 1)).toBe(true)
   })
 })

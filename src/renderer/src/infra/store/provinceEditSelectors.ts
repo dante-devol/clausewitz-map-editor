@@ -247,6 +247,13 @@ export function selectIncompleteProvinceDraftTargets(
     .sort((a, b) => (a.provinceId ?? 0) - (b.provinceId ?? 0))
 }
 
+// Same reasoning as selectProvinceDraftTargetMaps's cache: useProvinceEditTargets
+// and useProvinceValidation each call this independently with the same store
+// references on every render, so without this it rebuilds the whole catalog
+// (including the id-gap scan) twice per edit.
+let lastEffectiveCatalogArgs: readonly unknown[] | null = null
+let lastEffectiveCatalogResult: ProvinceCatalogEntry[] | null = null
+
 export function selectEffectiveProvinceCatalog(
   originalDefinitions: Map<number, Province>,
   pendingEdits: Map<number, Partial<ProvinceDraftFields>>,
@@ -256,6 +263,23 @@ export function selectEffectiveProvinceCatalog(
   bmpOnlyEntries: BmpOnlyEntry[],
   provinceCatalog: readonly ProvinceCatalogEntry[]
 ): ProvinceCatalogEntry[] {
+  const args = [
+    originalDefinitions,
+    pendingEdits,
+    pendingBmpOnlyEdits,
+    bmpReplacements,
+    pendingNewProvinces,
+    bmpOnlyEntries,
+    provinceCatalog
+  ]
+  if (
+    lastEffectiveCatalogResult
+    && lastEffectiveCatalogArgs
+    && args.every((arg, i) => arg === lastEffectiveCatalogArgs![i])
+  ) {
+    return lastEffectiveCatalogResult
+  }
+
   const { byProvinceId, byBmpGuid } = selectProvinceDraftTargetMaps(
     originalDefinitions,
     pendingEdits,
@@ -347,7 +371,10 @@ export function selectEffectiveProvinceCatalog(
     })
   }
 
-  return catalog.sort(compareCatalogEntries)
+  const result = catalog.sort(compareCatalogEntries)
+  lastEffectiveCatalogArgs = args
+  lastEffectiveCatalogResult = result
+  return result
 }
 
 function materializeProvinceDraftTarget(
