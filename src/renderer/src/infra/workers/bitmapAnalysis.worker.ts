@@ -1,9 +1,9 @@
 import { analyzeProvinceBitmapFacts } from '../lib/provinceBitmapFacts'
-import { decodeBmp24FromBase64 } from '../lib/decodeBmp24'
+import { decodeBmp24 } from '../lib/decodeBmp24'
 import type { ProvinceBitmapFacts } from '../../../../shared/provinceCatalog'
 
 export interface BitmapAnalysisInput {
-  b64: string
+  data: Uint8Array
 }
 
 export interface BitmapAnalysisOutput {
@@ -11,7 +11,7 @@ export interface BitmapAnalysisOutput {
 }
 
 self.onmessage = (event: MessageEvent<BitmapAnalysisInput>) => {
-  const { width, height, pixels } = decodeBmp24FromBase64(event.data.b64)
+  const { width, height, pixels } = decodeBmp24(event.data.data)
   const facts = analyzeProvinceBitmapFacts({ data: pixels, width, height })
   self.postMessage({ facts } satisfies BitmapAnalysisOutput)
 }

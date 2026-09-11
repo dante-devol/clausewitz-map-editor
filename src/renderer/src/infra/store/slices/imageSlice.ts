@@ -1,15 +1,15 @@
 import { type StateCreator } from 'zustand'
 
 export interface ImageSlice {
-  provincesImageB64: string | null
+  provincesImage: Uint8Array | null
   provincesImageHash: string | null
   provinceBitmapStatus: 'idle' | 'loading' | 'ready' | 'error'
-  loadProvincesImage: (b64: string, hash: string) => void
+  loadProvincesImage: (data: Uint8Array, hash: string) => void
   setProvinceBitmapStatus: (status: 'idle' | 'loading' | 'ready' | 'error') => void
 }
 
 export const IMAGE_EMPTY = {
-  provincesImageB64: null as string | null,
+  provincesImage: null as Uint8Array | null,
   provincesImageHash: null as string | null,
   provinceBitmapStatus: 'idle' as const,
 }
@@ -17,7 +17,7 @@ export const IMAGE_EMPTY = {
 export const createImageSlice: StateCreator<ImageSlice, [], [], ImageSlice> = (set) => ({
   ...IMAGE_EMPTY,
 
-  loadProvincesImage: (b64, hash) => set({ provincesImageB64: b64, provincesImageHash: hash }),
+  loadProvincesImage: (data, hash) => set({ provincesImage: data, provincesImageHash: hash }),
 
   setProvinceBitmapStatus: (provinceBitmapStatus) => set({ provinceBitmapStatus }),
 })

@@ -107,7 +107,7 @@ export function useMapViewportState() {
   // — Hover state —
   const [hoveredProvince, setHoveredProvince] = useState<HoveredProvince | null>(null)
 
-  const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
+  const provincesImage = useMapDataStore((s) => s.provincesImage)
 
   // Unified active tool for canvas: paint mode uses paintActiveTool, otherwise nonPaintTool
   const activeTool = editorMode === 'paint' ? paintActiveTool : nonPaintTool
@@ -280,7 +280,7 @@ export function useMapViewportState() {
     : highlightColors
 
   return {
-    src: provincesImageB64 ? `data:image/bmp;base64,${provincesImageB64}` : null,
+    provincesImage,
     colorMap,
     highlightColors: highlightColorsForCanvas,
     validationWarningColors: validationHighlightColors.warningColors,

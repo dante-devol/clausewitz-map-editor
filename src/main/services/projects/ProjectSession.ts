@@ -344,7 +344,7 @@ export class ProjectSession {
 
     this.watch(project.resolvedPaths.provinces, () => {
       if (this.project !== project) return
-      this.emit(project, 'image', this.loader.loadImageBase64(project))
+      this.emit(project, 'image', this.loader.loadImageBuffer(project))
     })
   }
 

@@ -78,7 +78,6 @@ export class ProjectLoader {
 
     const provinceCatalog = buildProvinceCatalog(provinces)
     const provincesImageHash = computeHash(provincesBuffer)
-    const provincesImageB64 = provincesBuffer.toString('base64')
 
     return {
       continents,
@@ -87,7 +86,7 @@ export class ProjectLoader {
       buildings,
       provinces,
       provinceCatalog,
-      provincesImageB64,
+      provincesImage: provincesBuffer,
       provincesImageHash,
       definitionsHash: computeHash(definitionsBuffer),
     }
@@ -160,9 +159,9 @@ export class ProjectLoader {
     return WeatherTxt.load(project.resolvedPaths.weather)
   }
 
-  loadImageBase64(project: LoadedProject): { b64: string; hash: string } {
+  loadImageBuffer(project: LoadedProject): { data: Buffer; hash: string } {
     const buffer = readFileSync(project.resolvedPaths.provinces)
-    return { b64: buffer.toString('base64'), hash: computeHash(buffer) }
+    return { data: buffer, hash: computeHash(buffer) }
   }
 }
 

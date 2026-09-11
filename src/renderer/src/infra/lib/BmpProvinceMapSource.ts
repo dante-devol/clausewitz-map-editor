@@ -1,18 +1,20 @@
-import { decodeBmp24FromBase64, type DecodedBmp } from './decodeBmp24'
+import { decodeBmp24, type DecodedBmp } from './decodeBmp24'
 import type { ProvinceMapSource } from './ProvinceMapSource'
 
-// Decodes a `data:image/bmp;base64,...` URL straight from its bytes via
-// decodeBmp24, instead of fetch → blob → createImageBitmap → canvas
-// drawImage/getImageData. That GPU/canvas round-trip was the actual cost of
-// decoding (and could silently apply color management to province colors);
-// decodeBmp24FromBase64 is a pure, synchronous typed-array scan.
+// Decodes raw provinces.bmp bytes straight via decodeBmp24, instead of
+// blob → createImageBitmap → canvas drawImage/getImageData. That GPU/canvas
+// round-trip was the actual cost of decoding (and could silently apply color
+// management to province colors); decodeBmp24 is a pure, synchronous
+// typed-array scan.
 //
-// The parsed bytes are cached by source string so loading the same image
-// twice (useMapCanvas and useOverlayAssets both call this independently)
+// The parsed result is cached by the source array (a WeakMap, so it never
+// outlives the bytes themselves — no cache to invalidate when a new image
+// replaces the old one) so loading the same image twice (useMapCanvas and
+// useOverlayAssets both call this independently, from the same store value)
 // only parses once. Each caller still gets its own copy of the pixel array:
 // MapRenderer mutates its copy in place while painting, and callers must not
 // see each other's edits through a shared buffer.
-const decodeCache = new Map<string, DecodedBmp>()
+const decodeCache = new WeakMap<Uint8Array, DecodedBmp>()
 
 export class BmpProvinceMapSource implements ProvinceMapSource {
   readonly width: number
@@ -25,11 +27,11 @@ export class BmpProvinceMapSource implements ProvinceMapSource {
     this.pixelData = pixelData
   }
 
-  static async load(src: string): Promise<BmpProvinceMapSource> {
-    let decoded = decodeCache.get(src)
+  static async load(bytes: Uint8Array): Promise<BmpProvinceMapSource> {
+    let decoded = decodeCache.get(bytes)
     if (!decoded) {
-      decoded = decodeBmp24FromBase64(src)
-      decodeCache.set(src, decoded)
+      decoded = decodeBmp24(bytes)
+      decodeCache.set(bytes, decoded)
     }
     return new BmpProvinceMapSource(decoded.width, decoded.height, decoded.pixels.slice())
   }

@@ -63,7 +63,7 @@ export interface BrushPaintConfig {
 }
 
 export interface UseMapCanvasProps {
-  src: string | null
+  provincesImage: Uint8Array | null
   overlays: CanvasOverlay[]
   highlightColors: number[]
   validationWarningColors: number[]
@@ -95,7 +95,7 @@ export interface UseMapCanvasResult {
 }
 
 export function useMapCanvas({
-  src,
+  provincesImage,
   overlays,
   highlightColors,
   validationWarningColors,
@@ -226,7 +226,7 @@ export function useMapCanvas({
 
   // Load base image
   useEffect(() => {
-    if (!src) {
+    if (!provincesImage) {
       rendererRef.current?.clearImage()
       setImageLoaded(false)
       setBaseImageLoading(false)
@@ -235,7 +235,7 @@ export function useMapCanvas({
     setImageLoaded(false)
     setBaseImageLoading(true)
     let cancelled = false
-    BmpProvinceMapSource.load(src).then(async (source) => {
+    BmpProvinceMapSource.load(provincesImage).then(async (source) => {
       if (cancelled) { source.dispose(); return }
       await rendererRef.current?.loadImage(source)
       provinceIndexRef.current = rendererRef.current?.index ?? null
@@ -256,7 +256,7 @@ export function useMapCanvas({
       setBaseImageLoading(false)
       provinceIndexRef.current = null
     }
-  }, [src, fit])
+  }, [provincesImage, fit])
 
   // Sync brush config and stroke callback refs
   brushPaintConfigRef.current = brushPaintConfig

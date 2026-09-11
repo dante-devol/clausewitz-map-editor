@@ -50,7 +50,9 @@ export interface MapDataSnapshot {
   terrains: TerrainCategory[]
   stateCategories: StateCategory[]
   buildings: Building[]
-  provincesImageB64: string
+  // Raw provinces.bmp bytes. Electron's IPC structured-clones typed arrays
+  // directly (no base64 encoding), and arrives in the renderer as a Uint8Array.
+  provincesImage: Uint8Array
   provincesImageHash: string
   // Hash of definition.csv as parsed into `provinces`. Sent back on save so the
   // main process can refuse to overwrite a file that changed on disk since.
@@ -126,7 +128,7 @@ export interface DefinitionsSaveResult {
 }
 
 export interface ImageChangedData {
-  b64: string
+  data: Uint8Array
   hash: string
 }
 

@@ -43,8 +43,19 @@ const server = createServer((req, res) => {
         return
       }
       if (url.pathname === '/api/map/load') {
-        const snapshot = await loader.loadSnapshot(project, pool as any)
+        // provincesImage is a Buffer — JSON can't carry raw bytes as a real
+        // Uint8Array, so it's served separately as octet-stream by
+        // /api/map/provincesImage and the mock window.api stitches the two
+        // back together, matching how Electron IPC actually hands the
+        // renderer a Uint8Array (no JSON involved there at all).
+        const { provincesImage: _provincesImage, ...snapshot } = await loader.loadSnapshot(project, pool as any)
         respond(res, { ...snapshot, projectId: project.projectId, resolvedPaths: project.resolvedPaths })
+        return
+      }
+      if (url.pathname === '/api/map/provincesImage') {
+        const { data } = loader.loadImageBuffer(project)
+        res.setHeader('Content-Type', 'application/octet-stream')
+        res.end(data)
         return
       }
       if (url.pathname === '/api/map/states') {

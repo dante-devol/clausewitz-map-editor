@@ -49,9 +49,11 @@ interface OutlineOverlayAssetEntry {
 }
 
 interface ProvinceIndexCacheEntry {
-  // The provincesImageB64 string this index was built from.
-  // Using the raw base64 (not the hash) so that hash arrival never triggers a rebuild.
-  sourceb64: string
+  // The provincesImage array this index was built from (compared by
+  // reference — the store replaces this array wholesale on a new image and
+  // never mutates it in place), so that a hash recomputation arriving
+  // separately never triggers a rebuild.
+  source: Uint8Array
   revision: number
   index: ProvinceIndex
   width: number
@@ -126,7 +128,7 @@ export function useOverlayAssets(): {
   const overlays = useCoreStore((s) => s.overlays)
   const resolvedPaths = useProjectStore((s) => s.resolvedPaths)
 
-  const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
+  const provincesImage = useMapDataStore((s) => s.provincesImage)
   const provincesByColor = useMapDataStore((s) => s.provincesByColor)
   const statesStatus = useMapDataStore((s) => s.statesStatus)
   const strategicRegionsStatus = useMapDataStore((s) => s.strategicRegionsStatus)
@@ -215,7 +217,7 @@ export function useOverlayAssets(): {
         const previousAsset = outlineCacheRef.current.get(overlay.id)
         const outlineAsset = await ensureOutlineOverlayLoaded(
           overlay,
-          provincesImageB64,
+          provincesImage,
           provinceIndexRef,
           provinceIndexRevisionRef,
           outlineCacheRef,
@@ -239,7 +241,7 @@ export function useOverlayAssets(): {
     }
   }, [
     overlays,
-    provincesImageB64,
+    provincesImage,
     provincesByColor,
     resolvedPaths,
     statesRevision,
@@ -318,7 +320,7 @@ function buildPanelOverlayItem(
 
 async function ensureOutlineOverlayLoaded(
   overlay: OutlineMapOverlayState,
-  provincesImageB64: string | null,
+  provincesImage: Uint8Array | null,
   provinceIndexRef: MutableRefObject<ProvinceIndexCacheEntry | null>,
   provinceIndexRevisionRef: MutableRefObject<number>,
   outlineCacheRef: MutableRefObject<Map<OverlayId, OutlineOverlayAssetEntry>>,
@@ -330,19 +332,20 @@ async function ensureOutlineOverlayLoaded(
   statesRevision: number,
   strategicRegionsRevision: number
 ): Promise<OutlineOverlayAssetEntry | null> {
-  if (!provincesImageB64) return null
+  if (!provincesImage) return null
   if (overlay.id === 'states' && statesStatus !== 'ready') return null
   if (overlay.id === 'strategicRegions' && strategicRegionsStatus !== 'ready') return null
 
-  // Rebuild the province index only when the actual image content changes (provincesImageB64),
-  // NOT when just the file hash arrives.  Using the hash as the key caused a full reload +
-  // index rebuild every time the async hash resolved, even though the data was identical.
-  if (provinceIndexRef.current?.sourceb64 !== provincesImageB64) {
-    const source = await BmpProvinceMapSource.load(`data:image/bmp;base64,${provincesImageB64}`)
+  // Rebuild the province index only when the actual image content changes
+  // (provincesImage, compared by reference), NOT when just the file hash
+  // arrives. Using the hash as the key caused a full reload + index rebuild
+  // every time the async hash resolved, even though the data was identical.
+  if (provinceIndexRef.current?.source !== provincesImage) {
+    const source = await BmpProvinceMapSource.load(provincesImage)
     try {
       provinceIndexRevisionRef.current++
       provinceIndexRef.current = {
-        sourceb64: provincesImageB64,
+        source: provincesImage,
         revision: provinceIndexRevisionRef.current,
         index: buildProvinceIndex({
           data: source.pixelData,

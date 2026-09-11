@@ -6,6 +6,7 @@
 import type {
   ApiContract,
   MapChangedEvent,
+  MapDataSnapshot,
   StateDatasetUpdate,
   StrategicRegionDatasetUpdate
 } from '../../shared/contract/api'
@@ -18,6 +19,24 @@ async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`)
   if (!res.ok) throw new Error(`harness server ${path} -> ${res.status}`)
   return res.json() as Promise<T>
+}
+
+async function getBytes(path: string): Promise<Uint8Array> {
+  const res = await fetch(`${BASE}${path}`)
+  if (!res.ok) throw new Error(`harness server ${path} -> ${res.status}`)
+  return new Uint8Array(await res.arrayBuffer())
+}
+
+// provincesImage travels as raw bytes over real Electron IPC (no JSON
+// involved), so the harness mirrors that instead of JSON-encoding it: the
+// snapshot JSON omits it (see harness-server.ts) and it's fetched separately
+// as octet-stream, then stitched back onto the snapshot here.
+async function loadMapSnapshot(projectId: string): Promise<MapDataSnapshot> {
+  const [snapshot, provincesImage] = await Promise.all([
+    getJson<Omit<MapDataSnapshot, 'provincesImage'>>(`/api/map/load?projectId=${projectId}`),
+    getBytes('/api/map/provincesImage')
+  ])
+  return { ...snapshot, provincesImage }
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -75,7 +94,7 @@ export function createMockApi(): ApiContract {
       verifyPath: async () => ({ valid: true, missingPaths: [] })
     },
     map: {
-      load: async (projectId) => getJson(`/api/map/load?projectId=${projectId}`),
+      load: async (projectId) => loadMapSnapshot(projectId),
       save: async () => ({ hash: '' }),
       saveStates: async () => {},
       saveStrategicRegions: async () => {},

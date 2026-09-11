@@ -22,7 +22,7 @@ const provinceBitmapFactsCache = new Map<string, ProvinceBitmapFacts>()
 const MAP_LOAD_TOTAL_STEPS = 4
 const BITMAP_RECONCILE_TOTAL_STEPS = 4
 
-function runBitmapAnalysis(b64: string, signal: AbortSignal): Promise<ProvinceBitmapFacts> {
+function runBitmapAnalysis(data: Uint8Array, signal: AbortSignal): Promise<ProvinceBitmapFacts> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(
       new URL('../../infra/workers/bitmapAnalysis.worker.ts', import.meta.url),
@@ -32,7 +32,10 @@ function runBitmapAnalysis(b64: string, signal: AbortSignal): Promise<ProvinceBi
     worker.onmessage = (e: MessageEvent<BitmapAnalysisOutput>) => { cleanup(); resolve(e.data.facts) }
     worker.onerror = (e) => { cleanup(); reject(new Error(e.message)) }
     signal.addEventListener('abort', () => { cleanup(); reject(new DOMException('Cancelled', 'AbortError')) }, { once: true })
-    worker.postMessage({ b64 })
+    // Not transferred: `data` is a reference into the store, still read by
+    // other consumers (MapRenderer, the overlay-outline index) — structured
+    // clone here copies it instead of detaching the original buffer.
+    worker.postMessage({ data })
   })
 }
 
@@ -67,7 +70,7 @@ export function useMapLoader(): void {
   const setStrategicRegionsStatus = useMapDataStore((s) => s.setStrategicRegionsStatus)
   const setProvinceBitmapStatus = useMapDataStore((s) => s.setProvinceBitmapStatus)
   const baseProvinceCatalog = useMapDataStore((s) => s.baseProvinceCatalog)
-  const provincesImageB64 = useMapDataStore((s) => s.provincesImageB64)
+  const provincesImage = useMapDataStore((s) => s.provincesImage)
   const provincesImageHash = useMapDataStore((s) => s.provincesImageHash)
   const clear = useMapDataStore((s) => s.clear)
 
@@ -186,7 +189,7 @@ export function useMapLoader(): void {
         loadTerrains(snapshot.terrains)
         loadStateCategories(snapshot.stateCategories)
         loadBuildings(snapshot.buildings)
-        loadProvincesImage(snapshot.provincesImageB64, snapshot.provincesImageHash)
+        loadProvincesImage(snapshot.provincesImage, snapshot.provincesImageHash)
         loadProvinces(snapshot.provinces)
         notificationService.advanceProgress({
           scope: loadScope,
@@ -298,7 +301,7 @@ export function useMapLoader(): void {
       }
       else if (event.type === 'image') {
         const imageData = event.data as ImageChangedData
-        loadProvincesImage(imageData.b64, imageData.hash)
+        loadProvincesImage(imageData.data, imageData.hash)
         setProvinceBitmapStatus('idle')
       }
     })
@@ -341,7 +344,7 @@ export function useMapLoader(): void {
   ])
 
   useEffect(() => {
-    if (!projectId || !provincesImageB64 || !provincesImageHash) return
+    if (!projectId || !provincesImage || !provincesImageHash) return
 
     let cancelled = false
     let settled = false
@@ -382,7 +385,7 @@ export function useMapLoader(): void {
         message: tRef.current('notification.bitmapLoad.step.analyze'),
         progress: { current: 2, total: BITMAP_RECONCILE_TOTAL_STEPS }
       })
-      const bitmapFacts = await runBitmapAnalysis(provincesImageB64, abortController.signal)
+      const bitmapFacts = await runBitmapAnalysis(provincesImage, abortController.signal)
       if (cancelled) return
       provinceBitmapFactsCache.set(provincesImageHash, bitmapFacts)
 
@@ -433,7 +436,7 @@ export function useMapLoader(): void {
       abortController.abort()
       if (!settled) notificationService.dismiss(bitmapScope)
     }
-  }, [baseProvinceCatalog, projectId, provincesImageB64, provincesImageHash, setProvinceBitmapStatus, setProvinceCatalog, syncBmpOnlyEntries])
+  }, [baseProvinceCatalog, projectId, provincesImage, provincesImageHash, setProvinceBitmapStatus, setProvinceCatalog, syncBmpOnlyEntries])
 }
 
 function resolveFileProgress(
