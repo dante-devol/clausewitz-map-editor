@@ -18,13 +18,19 @@ export interface DisplayModeValueDescriptor {
   isOverride: boolean
 }
 
-export type DisplayModeEditable = Extract<DisplayMode, 'type' | 'terrain' | 'coastal' | 'continent'>
+export type DisplayModeEditable = Extract<
+  DisplayMode,
+  'type' | 'terrain' | 'coastal' | 'continent' | 'state' | 'strategicRegion'
+>
 
 export type DisplayModeSample =
   | { mode: 'type'; value: ProvinceType | undefined }
   | { mode: 'terrain'; value: string | undefined }
   | { mode: 'coastal'; value: boolean | undefined }
   | { mode: 'continent'; value: string | undefined }
+  // undefined means "no state"/"no strategic region" — a valid, paintable value.
+  | { mode: 'state'; value: number | undefined }
+  | { mode: 'strategicRegion'; value: number | undefined }
 
 export interface DisplayModeContext {
   terrains: ReadonlyMap<string, TerrainCategory>
@@ -98,7 +104,7 @@ export function isConfigurableDisplayMode(mode: DisplayMode): mode is Configurab
 }
 
 export function isEditableDisplayMode(mode: DisplayMode): mode is DisplayModeEditable {
-  return isConfigurableDisplayMode(mode)
+  return isConfigurableDisplayMode(mode) || mode === 'state' || mode === 'strategicRegion'
 }
 
 function hashedGroupColor(id: number, variant: 'state' | 'strategicRegion'): number {
@@ -137,18 +143,30 @@ export function getModeValueLabel(mode: DisplayMode, valueKey: string): string {
 
 export function sampleDisplayModeValue(
   mode: DisplayMode,
-  province: ProvinceDraftTarget
+  province: ProvinceDraftTarget,
+  context?: Pick<DisplayModeContext, 'stateProvinceToStateId' | 'strategicRegionProvinceToRegionId'>
 ): DisplayModeSample | null {
   if (mode === 'type') return { mode, value: province.type }
   if (mode === 'terrain') return { mode, value: province.terrain }
   if (mode === 'coastal') return { mode, value: province.isCoastal }
   if (mode === 'continent') return { mode, value: province.continent }
+  if (mode === 'state') {
+    const stateId = province.provinceId !== null ? context?.stateProvinceToStateId.get(province.provinceId) : undefined
+    return { mode, value: stateId }
+  }
+  if (mode === 'strategicRegion') {
+    const regionId = province.provinceId !== null ? context?.strategicRegionProvinceToRegionId.get(province.provinceId) : undefined
+    return { mode, value: regionId }
+  }
   return null
 }
 
 export function getDisplayModeSampleValueKey(sample: DisplayModeSample): string {
   if (sample.mode === 'coastal') {
     return sample.value === undefined ? 'none' : sample.value ? 'coastal' : 'inland'
+  }
+  if (sample.mode === 'state' || sample.mode === 'strategicRegion') {
+    return sample.value === undefined ? 'none' : sample.value.toString()
   }
   return sample.value ?? 'none'
 }
