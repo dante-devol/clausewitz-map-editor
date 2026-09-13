@@ -16,8 +16,10 @@ export interface StrategicRegionEditSlice {
   editStrategicRegion: (id: number, patch: StrategicRegionEditPatch) => void
   // Adds provinceIds to targetRegionId and removes them from whichever other
   // region effectively holds them — a province can only belong to one
-  // strategic region at a time. Unknown province IDs are ignored.
-  moveProvincesToRegion: (provinceIds: number[], targetRegionId: number) => void
+  // strategic region at a time. targetRegionId of null unassigns the
+  // provinces without assigning them anywhere else. Unknown province IDs are
+  // ignored.
+  moveProvincesToRegion: (provinceIds: number[], targetRegionId: number | null) => void
   revertStrategicRegionEdit: (id: number) => void
   clearStrategicRegionSavedChanges: () => void
   clearStrategicRegionPendingChanges: () => void
@@ -80,13 +82,15 @@ export const createStrategicRegionEditSlice: StateCreator<StrategicRegionEditSto
         patchRegion(state, pendingStrategicRegionEdits, strategicRegionEditBaselines, other.id, { provinceIds: filtered })
       }
 
-      const targetCurrent = effectiveProvinceIds(targetRegionId)
-      const targetSet = new Set(targetCurrent)
-      const additions = validIds.filter((id) => !targetSet.has(id))
-      if (additions.length > 0) {
-        patchRegion(state, pendingStrategicRegionEdits, strategicRegionEditBaselines, targetRegionId, {
-          provinceIds: [...targetCurrent, ...additions]
-        })
+      if (targetRegionId !== null) {
+        const targetCurrent = effectiveProvinceIds(targetRegionId)
+        const targetSet = new Set(targetCurrent)
+        const additions = validIds.filter((id) => !targetSet.has(id))
+        if (additions.length > 0) {
+          patchRegion(state, pendingStrategicRegionEdits, strategicRegionEditBaselines, targetRegionId, {
+            provinceIds: [...targetCurrent, ...additions]
+          })
+        }
       }
 
       return { pendingStrategicRegionEdits, strategicRegionEditBaselines }

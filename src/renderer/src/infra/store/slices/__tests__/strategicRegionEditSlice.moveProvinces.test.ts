@@ -52,4 +52,12 @@ describe('moveProvincesToRegion', () => {
 
     expect(store.getState().pendingStrategicRegionEdits.has(1)).toBe(false)
   })
+
+  it('unassigns a province from its region without assigning it elsewhere when target is null', () => {
+    const store = setup()
+    store.getState().moveProvincesToRegion([11], null)
+
+    expect(store.getState().pendingStrategicRegionEdits.get(1)?.provinceIds).toEqual([10])
+    expect(store.getState().pendingStrategicRegionEdits.has(2)).toBe(false)
+  })
 })

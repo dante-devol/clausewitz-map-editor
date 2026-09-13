@@ -43,8 +43,9 @@ export interface StateEditSlice {
   // Adds provinceIds to targetStateId and removes them from whichever other
   // state effectively holds them (its loaded provinceIds, or a pending edit's
   // if it has one) — a province can only belong to one state at a time.
-  // Unknown province IDs are ignored.
-  moveProvincesToState: (provinceIds: number[], targetStateId: number) => void
+  // targetStateId of null unassigns the provinces without assigning them
+  // anywhere else. Unknown province IDs are ignored.
+  moveProvincesToState: (provinceIds: number[], targetStateId: number | null) => void
   revertStateEdit: (id: number) => void
   clearStateSavedChanges: () => void
   clearStatePendingChanges: () => void
@@ -109,13 +110,15 @@ export const createStateEditSlice: StateCreator<StateEditStore, [], [], StateEdi
         patchState(state, pendingStateEdits, stateEditBaselines, other.id, { provinceIds: filtered })
       }
 
-      const targetCurrent = effectiveProvinceIds(targetStateId)
-      const targetSet = new Set(targetCurrent)
-      const additions = validIds.filter((id) => !targetSet.has(id))
-      if (additions.length > 0) {
-        patchState(state, pendingStateEdits, stateEditBaselines, targetStateId, {
-          provinceIds: [...targetCurrent, ...additions]
-        })
+      if (targetStateId !== null) {
+        const targetCurrent = effectiveProvinceIds(targetStateId)
+        const targetSet = new Set(targetCurrent)
+        const additions = validIds.filter((id) => !targetSet.has(id))
+        if (additions.length > 0) {
+          patchState(state, pendingStateEdits, stateEditBaselines, targetStateId, {
+            provinceIds: [...targetCurrent, ...additions]
+          })
+        }
       }
 
       return { pendingStateEdits, stateEditBaselines }

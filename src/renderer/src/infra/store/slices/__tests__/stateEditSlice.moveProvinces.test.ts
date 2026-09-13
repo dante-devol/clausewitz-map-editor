@@ -104,4 +104,12 @@ describe('moveProvincesToState', () => {
     expect(store.getState().stateEditBaselines.get(1)).toEqual(state(1, [10, 11]))
     expect(store.getState().stateEditBaselines.get(2)).toEqual(state(2, [12]))
   })
+
+  it('unassigns a province from its state without assigning it elsewhere when target is null', () => {
+    const store = setup()
+    store.getState().moveProvincesToState([11], null)
+
+    expect(store.getState().pendingStateEdits.get(1)?.provinceIds).toEqual([10])
+    expect(store.getState().pendingStateEdits.has(2)).toBe(false)
+  })
 })
