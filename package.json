@@ -20,6 +20,9 @@
       "output": "dist"
     },
     "icon": "resources/icon.png",
+    "win": {
+      "signAndEditExecutable": false
+    },
     "files": [
       "out/**/*"
     ],
