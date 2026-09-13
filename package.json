@@ -1,7 +1,7 @@
 {
-  "name": "hoi4-map-editor",
+  "name": "clausewitz-map-editor",
   "version": "0.1.0",
-  "description": "HOI4 Map Editor",
+  "description": "Clausewitz Map Editor",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -14,8 +14,8 @@
     "test": "vitest run"
   },
   "build": {
-    "appId": "com.hoi4-map-editor.app",
-    "productName": "HOI4 Map Editor",
+    "appId": "com.clausewitz-map-editor.app",
+    "productName": "Clausewitz Map Editor",
     "directories": {
       "output": "dist"
     },

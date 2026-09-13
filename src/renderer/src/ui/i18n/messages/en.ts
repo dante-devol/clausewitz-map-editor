@@ -1,5 +1,5 @@
 export const enMessages = {
-  'app.title': 'HOI4 Map Editor',
+  'app.title': 'Clausewitz Map Editor',
   'app.unsavedChanges.title': 'Unsaved changes',
   'app.unsavedChanges.message': 'You have unsaved changes. Leave without saving?',
   'app.unsavedChanges.confirm': 'Leave without saving',
