@@ -1,8 +1,16 @@
 import { app, BrowserWindow, session } from 'electron'
+import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { createWindow } from './window'
 import { registerIpcHandlers } from './ipc/registerHandlers'
 import { initLogger, log } from './logger'
+
+// Chromium stores cookies, disk/GPU caches, local/session storage, etc. under
+// sessionData, which defaults to the same directory as userData — that's what
+// litters userData with a dozen internal folders (Cache, GPUCache, Local
+// Storage, ...) alongside our own config.json/logs/localisation-cache. Must
+// be set before 'ready' fires.
+app.setPath('sessionData', join(app.getPath('userData'), 'browser-data'))
 
 initLogger()
 registerIpcHandlers()
