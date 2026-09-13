@@ -36,6 +36,50 @@ export interface ScriptSaveResult {
   conflicts: string[]
 }
 
+export interface ScriptRemovalResult {
+  content: string
+  // Number of state blocks left in the file after removal — 0 means the
+  // caller should delete the file entirely rather than write empty content.
+  remainingCount: number
+}
+
+// Removes the state blocks matching `ids` from the file, verbatim otherwise.
+export function removeStates(source: string, ids: readonly number[]): ScriptRemovalResult {
+  const doc = parseScript(source)
+  const editor = new ScriptEditor(source)
+  const idSet = new Set(ids)
+  let remainingCount = 0
+
+  for (const entry of stateAssignments(doc.root)) {
+    const block = entry.value as ScriptBlock
+    const id = readStateId(block)
+    if (id !== null && idSet.has(id)) editor.remove(entry)
+    else remainingCount++
+  }
+
+  return { content: editor.hasEdits ? editor.apply() : source, remainingCount }
+}
+
+// Generates a brand-new `state = { ... }` block for a state that doesn't
+// exist in any file yet.
+export function newStateLines(state: StateDefinition): string[] {
+  const lines = ['state = {', `\tid = ${formatNumber(state.id)}`, `\tname = ${quoteString(state.name)}`]
+  if (state.stateCategory) lines.push(`\tstate_category = ${formatScalarString(state.stateCategory)}`)
+  lines.push(`\tmanpower = ${formatNumber(state.manpower)}`)
+  if (state.isImpassable) lines.push('\timpassable = yes')
+  if (state.localSupplies !== undefined) lines.push(`\tlocal_supplies = ${formatNumber(state.localSupplies)}`)
+  if (state.buildingsMaxLevelFactor !== undefined) {
+    lines.push(`\tbuildings_max_level_factor = ${formatNumber(state.buildingsMaxLevelFactor)}`)
+  }
+  if (state.resources && state.resources.length > 0) {
+    lines.push('\tresources = {', ...state.resources.map((r) => `\t\t${r.type} = ${formatNumber(r.amount)}`), '\t}')
+  }
+  lines.push(`\tprovinces = { ${state.provinceIds.map(formatNumber).join(' ')} }`)
+  if (!isEmptyHistory(state.history)) lines.push(...stateHistoryLines(state.history).map((line) => `\t${line}`))
+  lines.push('}')
+  return lines
+}
+
 // Applies state edits to the text of one states file, in place.
 //
 // For each request only the fields that differ between `original` and

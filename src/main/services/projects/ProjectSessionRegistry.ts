@@ -5,8 +5,8 @@ import type {
   DefinitionsSaveResult,
   ProjectOpenRequest,
   ProjectOpenResult,
-  StateSaveRequest,
-  StrategicRegionSaveRequest
+  StateSaveOperation,
+  StrategicRegionSaveOperation
 } from '../../../shared/contract/api'
 import type { Continent, Province } from '../../../shared/mapDataTypes'
 
@@ -92,20 +92,20 @@ export class ProjectSessionRegistry {
     return session.saveDefinitions(provinces, continents, expectedHash)
   }
 
-  saveStatesForWindow(window: BrowserWindow, projectId: string, requests: StateSaveRequest[]) {
+  saveStatesForWindow(window: BrowserWindow, projectId: string, operations: StateSaveOperation[]) {
     const session = this.forWindow(window)
     if (session.projectId !== projectId) {
       throw new Error('Project session mismatch')
     }
-    return session.saveStates(requests)
+    return session.saveStates(operations)
   }
 
-  saveStrategicRegionsForWindow(window: BrowserWindow, projectId: string, requests: StrategicRegionSaveRequest[]) {
+  saveStrategicRegionsForWindow(window: BrowserWindow, projectId: string, operations: StrategicRegionSaveOperation[]) {
     const session = this.forWindow(window)
     if (session.projectId !== projectId) {
       throw new Error('Project session mismatch')
     }
-    return session.saveStrategicRegions(requests)
+    return session.saveStrategicRegions(operations)
   }
 
   loadWeatherEntriesForWindow(window: BrowserWindow, projectId: string): string[] {

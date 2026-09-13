@@ -2,10 +2,10 @@ import type { StrategicRegionDefinition, WeatherPeriod } from '../../shared/mapD
 import type { StrategicRegionSaveRequest } from '../../shared/contract/api'
 import { deepEqual } from '../../shared/deepEqual'
 import { blockOf, firstAssignment, parseScript, type ScriptBlock } from './script/ScriptParser'
-import { ScriptEditor, formatFloat, formatScalarString, quoteString } from './script/ScriptEditor'
+import { ScriptEditor, formatFloat, formatNumber, formatScalarString, quoteString } from './script/ScriptEditor'
 import { numericAssignments, setAssignment, setNumberList, syncKeyedNumbers } from './script/ScriptEditing'
 import { isWeatherWeightKey, periodAssignments, readRegion, readRegionId, regionAssignments } from './StrategicRegionsTxt'
-import type { ScriptSaveResult } from './StatesTxtWriter'
+import type { ScriptRemovalResult, ScriptSaveResult } from './StatesTxtWriter'
 
 // Applies strategic-region edits to the text of one file, in place. Same
 // contract as applyStateSaves: only fields changed by the user are written,
@@ -58,6 +58,39 @@ export function applyStrategicRegionSaves(
 
   if (conflicts.length > 0) return { content: source, conflicts }
   return { content: editor.hasEdits ? editor.apply() : source, conflicts }
+}
+
+// Removes the region blocks matching `ids` from the file, verbatim otherwise.
+export function removeRegions(source: string, ids: readonly number[]): ScriptRemovalResult {
+  const doc = parseScript(source)
+  const editor = new ScriptEditor(source)
+  const idSet = new Set(ids)
+  let remainingCount = 0
+
+  for (const entry of regionAssignments(doc.root)) {
+    const block = entry.value as ScriptBlock
+    const id = readRegionId(block)
+    if (id !== null && idSet.has(id)) editor.remove(entry)
+    else remainingCount++
+  }
+
+  return { content: editor.hasEdits ? editor.apply() : source, remainingCount }
+}
+
+// Generates a brand-new `strategic_region = { ... }` block for a region that
+// doesn't exist in any file yet.
+export function newRegionLines(region: StrategicRegionDefinition): string[] {
+  const lines = [
+    'strategic_region = {',
+    `\tid = ${formatNumber(region.id)}`,
+    `\tname = ${quoteString(region.name)}`,
+    `\tprovinces = { ${region.provinceIds.map(formatNumber).join(' ')} }`
+  ]
+  if (region.weatherPeriods.length > 0) {
+    lines.push('\tweather = {', ...region.weatherPeriods.flatMap(periodLines).map((line) => `\t${line}`), '\t}')
+  }
+  lines.push('}')
+  return lines
 }
 
 function editRegion(

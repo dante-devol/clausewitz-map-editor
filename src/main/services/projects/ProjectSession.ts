@@ -1,10 +1,12 @@
 import { readFileSync, watch, type FSWatcher } from 'fs'
-import { basename } from 'path'
+import { basename, join } from 'path'
 import type { BrowserWindow } from 'electron'
 import { channels } from '../../../shared/contract/events'
 import type {
   DefinitionsSaveResult,
+  StateSaveOperation,
   StateSaveRequest,
+  StrategicRegionSaveOperation,
   StrategicRegionSaveRequest
 } from '../../../shared/contract/api'
 import type { ResolvedPaths } from '../../../shared/pathTypes'
@@ -14,14 +16,21 @@ import { WorkerParsePool } from '../../workers/WorkerParsePool'
 import { encodeBmp } from '../../parsers/BmpWriter'
 import { DefinitionsCsv } from '../../parsers/DefinitionsCsv'
 import { StatesTxt } from '../../parsers/StatesTxt'
-import { applyStateSaves } from '../../parsers/StatesTxtWriter'
+import { applyStateSaves, newStateLines, removeStates } from '../../parsers/StatesTxtWriter'
 import { StrategicRegionsTxt } from '../../parsers/StrategicRegionsTxt'
-import { applyStrategicRegionSaves } from '../../parsers/StrategicRegionsTxtWriter'
+import { applyStrategicRegionSaves, newRegionLines, removeRegions } from '../../parsers/StrategicRegionsTxtWriter'
 import { computeHash } from '../../fileManager'
 import { resolveWriteTarget, writeFileAtomic } from './writeTargets'
 import { resolveLocalisationKeys } from '../localisation/LocalisationResolver'
+import { getConfig } from '../../config'
 import { log } from '../../logger'
 import { timeSync } from '../../perf'
+
+// Filesystem-illegal characters on Windows (the strictest common platform),
+// plus trailing dots/spaces which Windows also rejects.
+function sanitizeFilenamePart(value: string): string {
+  return value.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/[. ]+$/, '') || 'untitled'
+}
 
 interface WatchEntry {
   watcher: FSWatcher
@@ -247,55 +256,99 @@ export class ProjectSession {
     this.refreshWatchers()
   }
 
-  saveStates(requests: StateSaveRequest[]): void {
+  saveStates(operations: StateSaveOperation[]): void {
     const project = this.requireProject()
-    const groups = groupBySourceFile(
-      requests,
-      (request) => request.original.sourcePath,
-      (request) => `State ${request.original.id}`,
+    const edits = operations.filter((op): op is { kind: 'edit' } & StateSaveRequest => op.kind === 'edit')
+    const deletions = operations.filter((op): op is { kind: 'delete'; original: StateDefinition } => op.kind === 'delete')
+    const creates = operations.filter((op): op is { kind: 'create'; state: StateDefinition } => op.kind === 'create')
+
+    const editGroups = groupBySourceFile(
+      edits,
+      (op) => op.original.sourcePath,
+      (op) => `State ${op.original.id}`,
+      project.resolvedPaths.states
+    )
+    const deletionGroups = groupBySourceFile(
+      deletions,
+      (op) => op.original.sourcePath,
+      (op) => `State ${op.original.id}`,
       project.resolvedPaths.states
     )
 
-    const writes: PlannedWrite[] = []
+    const writes = new Map<string, PlannedWrite>()
     const conflicts: string[] = []
-    for (const [source, group] of groups) {
+    for (const [source, group] of editGroups) {
       const content = readFileSync(source, 'utf-8')
       const result = applyStateSaves(content, group)
       conflicts.push(...result.conflicts.map((message) => `${basename(source)}: ${message}`))
-      if (result.content !== content) writes.push({ source, target: resolveWriteTarget(project, source), content: result.content })
+      if (result.content !== content) writes.set(source, { source, target: resolveWriteTarget(project, source), content: result.content })
     }
     if (conflicts.length > 0) throw new Error(`Nothing was saved.\n${conflicts.join('\n')}`)
 
-    for (const write of writes) {
+    for (const [source, group] of deletionGroups) {
+      const content = writes.get(source)?.content ?? readFileSync(source, 'utf-8')
+      const result = removeStates(content, group.map((op) => op.original.id))
+      if (result.content !== content) writes.set(source, { source, target: resolveWriteTarget(project, source), content: result.content })
+    }
+
+    for (const write of writes.values()) {
       this.writeProjectFile(write.target, write.content)
       this.relocate(write.source, write.target)
       const items: StateDefinition[] = StatesTxt.parse(write.content).map((state) => ({ ...state, sourcePath: write.target }))
       this.noteLocKeys(items, project)
       this.emit(project, 'states', { op: 'patch', sourcePath: write.source, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
     }
+
+    for (const { state } of creates) {
+      const filename = `${state.id}-${sanitizeFilenamePart(state.name)}.txt`
+      const target = join(project.modPath, getConfig().paths.states, filename)
+      const content = newStateLines(state).join('\n')
+      this.writeProjectFile(target, content)
+      project.resolvedPaths.states.push(target)
+      const item: StateDefinition = { ...state, sourcePath: target }
+      this.noteLocKeys([item], project)
+      this.emit(project, 'states', { op: 'append', items: [item], loadedFiles: 1, totalFiles: 1, origin: 'save' })
+    }
+
     this.refreshWatchers()
   }
 
-  saveStrategicRegions(requests: StrategicRegionSaveRequest[]): void {
+  saveStrategicRegions(operations: StrategicRegionSaveOperation[]): void {
     const project = this.requireProject()
-    const groups = groupBySourceFile(
-      requests,
-      (request) => request.original.sourcePath,
-      (request) => `Strategic region ${request.original.id}`,
+    const edits = operations.filter((op): op is { kind: 'edit' } & StrategicRegionSaveRequest => op.kind === 'edit')
+    const deletions = operations.filter((op): op is { kind: 'delete'; original: StrategicRegionDefinition } => op.kind === 'delete')
+    const creates = operations.filter((op): op is { kind: 'create'; region: StrategicRegionDefinition } => op.kind === 'create')
+
+    const editGroups = groupBySourceFile(
+      edits,
+      (op) => op.original.sourcePath,
+      (op) => `Strategic region ${op.original.id}`,
+      project.resolvedPaths.strategicRegions
+    )
+    const deletionGroups = groupBySourceFile(
+      deletions,
+      (op) => op.original.sourcePath,
+      (op) => `Strategic region ${op.original.id}`,
       project.resolvedPaths.strategicRegions
     )
 
-    const writes: PlannedWrite[] = []
+    const writes = new Map<string, PlannedWrite>()
     const conflicts: string[] = []
-    for (const [source, group] of groups) {
+    for (const [source, group] of editGroups) {
       const content = readFileSync(source, 'utf-8')
       const result = applyStrategicRegionSaves(content, group)
       conflicts.push(...result.conflicts.map((message) => `${basename(source)}: ${message}`))
-      if (result.content !== content) writes.push({ source, target: resolveWriteTarget(project, source), content: result.content })
+      if (result.content !== content) writes.set(source, { source, target: resolveWriteTarget(project, source), content: result.content })
     }
     if (conflicts.length > 0) throw new Error(`Nothing was saved.\n${conflicts.join('\n')}`)
 
-    for (const write of writes) {
+    for (const [source, group] of deletionGroups) {
+      const content = writes.get(source)?.content ?? readFileSync(source, 'utf-8')
+      const result = removeRegions(content, group.map((op) => op.original.id))
+      if (result.content !== content) writes.set(source, { source, target: resolveWriteTarget(project, source), content: result.content })
+    }
+
+    for (const write of writes.values()) {
       this.writeProjectFile(write.target, write.content)
       this.relocate(write.source, write.target)
       const items: StrategicRegionDefinition[] = StrategicRegionsTxt.parse(write.content)
@@ -303,6 +356,18 @@ export class ProjectSession {
       this.noteLocKeys(items, project)
       this.emit(project, 'strategicRegions', { op: 'patch', sourcePath: write.source, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
     }
+
+    for (const { region } of creates) {
+      const filename = `${region.id}-${sanitizeFilenamePart(region.name)}.txt`
+      const target = join(project.modPath, getConfig().paths.strategicRegions, filename)
+      const content = newRegionLines(region).join('\n')
+      this.writeProjectFile(target, content)
+      project.resolvedPaths.strategicRegions.push(target)
+      const item: StrategicRegionDefinition = { ...region, sourcePath: target }
+      this.noteLocKeys([item], project)
+      this.emit(project, 'strategicRegions', { op: 'append', items: [item], loadedFiles: 1, totalFiles: 1, origin: 'save' })
+    }
+
     this.refreshWatchers()
   }
 
