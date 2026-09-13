@@ -1,41 +1,11 @@
 import { useState } from 'react'
-import {
-  Button,
-  makeStyles,
-  tokens,
-  Text
-} from '@fluentui/react-components'
-import { SaveRegular } from '@fluentui/react-icons'
 import { useCoreStore } from '../../../infra/store/coreStore'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import { applyStrategicRegionPatch } from '../../../infra/store/slices/strategicRegionEditSlice'
 import { useI18n } from '../../i18n/I18nProvider'
-
-const useStyles = makeStyles({
-  root: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: tokens.spacingHorizontalS,
-    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalS}`,
-    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
-    flexShrink: 0
-  },
-  summaryText: {
-    color: tokens.colorNeutralForeground3
-  },
-  actions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: tokens.spacingHorizontalS
-  },
-  errorText: {
-    color: tokens.colorPaletteRedForeground1
-  }
-})
+import { EntitySaveBar } from '../entityPanel/EntitySaveBar'
 
 export function StrategicRegionSaveBar(): JSX.Element {
-  const styles = useStyles()
   const { t } = useI18n()
   const projectId = useCoreStore((s) => s.projectId)
 
@@ -71,24 +41,14 @@ export function StrategicRegionSaveBar(): JSX.Element {
   }
 
   return (
-    <div className={styles.root}>
-      <Text size={100} className={styles.summaryText}>
-        {t('stratRegionPanel.save.summary', { count: changeCount })}
-      </Text>
-      <div className={styles.actions}>
-        {saveError && (
-          <Text size={100} className={styles.errorText}>{saveError}</Text>
-        )}
-        <Button
-          size="small"
-          appearance="primary"
-          icon={<SaveRegular />}
-          disabled={!projectId || !hasPendingChanges || isSaving}
-          onClick={handleSave}
-        >
-          {isSaving ? t('stratRegionPanel.save.saving') : t('stratRegionPanel.save.action')}
-        </Button>
-      </div>
-    </div>
+    <EntitySaveBar
+      summary={t('stratRegionPanel.save.summary', { count: changeCount })}
+      actionLabel={t('stratRegionPanel.save.action')}
+      savingLabel={t('stratRegionPanel.save.saving')}
+      disabled={!projectId || !hasPendingChanges || isSaving}
+      saving={isSaving}
+      error={saveError}
+      onSave={() => void handleSave()}
+    />
   )
 }

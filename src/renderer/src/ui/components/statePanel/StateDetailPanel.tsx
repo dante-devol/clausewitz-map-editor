@@ -20,6 +20,7 @@ import { useI18n, type MessageParams } from '../../i18n/I18nProvider'
 import type { MessageKey } from '../../i18n/messages/en'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import { applyStatePatch, type StateEditPatch } from '../../../infra/store/slices/stateEditSlice'
+import { CollapsibleSection } from '../entityPanel/CollapsibleSection'
 import type {
   DateHistory,
   GenericEffect,
@@ -96,10 +97,7 @@ const useStyles = makeStyles({
     flex: 1,
     minWidth: 0
   },
-  // Collapsible section
-  sectionContainer: {
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`
-  },
+  // Collapsible section (SubSection only — top-level sections use the shared CollapsibleSection)
   sectionHeader: {
     display: 'flex',
     alignItems: 'center',
@@ -119,13 +117,6 @@ const useStyles = makeStyles({
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
     fontSize: tokens.fontSizeBase100
-  },
-  sectionBody: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: tokens.spacingVerticalXXS,
-    padding: `0 ${tokens.spacingHorizontalS}`,
-    paddingBottom: tokens.spacingVerticalXS
   },
   // Sub-section (nested history block)
   subSection: {
@@ -299,44 +290,6 @@ function sortedChips(def: HistoryDef): Array<{ kind: 'owner'; tag: string } | { 
   for (const tag of [...def.coreOf].sort()) chips.push({ kind: 'core', tag })
   for (const e of [...def.effects].sort((a, b) => a.key.localeCompare(b.key))) chips.push({ kind: 'effect', key: e.key, value: e.value })
   return chips
-}
-
-// ---------------------------------------------------------------------------
-// CollapsibleSection
-// ---------------------------------------------------------------------------
-
-interface CollapsibleSectionProps {
-  id: string
-  title: string
-  expanded: boolean
-  onToggle: () => void
-  action?: React.ReactNode
-  onRemove?: () => void
-  children: React.ReactNode
-  styles: ReturnType<typeof useStyles>
-}
-
-function CollapsibleSection({ id: _id, title, expanded, onToggle, action, onRemove, children, styles }: CollapsibleSectionProps): JSX.Element {
-  return (
-    <div className={styles.sectionContainer}>
-      <div className={styles.sectionHeader} onClick={onToggle} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onToggle() }}>
-        {expanded
-          ? <ChevronDownRegular fontSize={12} className={styles.sectionChevron} />
-          : <ChevronRightRegular fontSize={12} className={styles.sectionChevron} />
-        }
-        <Text size={100} className={styles.sectionTitle}>{title}</Text>
-        {action && <span onClick={(e) => e.stopPropagation()}>{action}</span>}
-        {onRemove && (
-          <span onClick={(e) => { e.stopPropagation(); onRemove() }}>
-            <Button size="small" appearance="subtle" icon={<DismissRegular />} />
-          </span>
-        )}
-      </div>
-      {expanded && (
-        <div className={styles.sectionBody}>{children}</div>
-      )}
-    </div>
-  )
 }
 
 // ---------------------------------------------------------------------------
@@ -767,7 +720,6 @@ export function StateDetailPanel({ onCollapse }: Props): JSX.Element {
 
       {/* Resources */}
       <CollapsibleSection
-        id="resources"
         title={t('statePanel.section.resources')}
         expanded={expanded.has('resources')}
         onToggle={() => toggle('resources')}
@@ -775,7 +727,6 @@ export function StateDetailPanel({ onCollapse }: Props): JSX.Element {
           <Button size="small" appearance="subtle" icon={<AddRegular />}
             onClick={() => setAddForm(addForm?.kind === 'resource' ? null : { kind: 'resource', type: '', amount: '0' })} />
         }
-        styles={styles}
       >
         {resources.map((res) => (
           <div key={res.type} className={styles.fieldRow}>
@@ -837,7 +788,6 @@ export function StateDetailPanel({ onCollapse }: Props): JSX.Element {
 
       {/* History */}
       <CollapsibleSection
-        id="history"
         title={t('statePanel.section.history')}
         expanded={expanded.has('history')}
         onToggle={() => toggle('history')}
@@ -846,7 +796,6 @@ export function StateDetailPanel({ onCollapse }: Props): JSX.Element {
             title={t('statePanel.add.dateEntry')}
             onClick={() => setAddForm(addForm?.kind === 'dateEntry' ? null : { kind: 'dateEntry', year: '', month: '1', day: '1' })} />
         }
-        styles={styles}
       >
         {/* Date entry add form */}
         {addForm?.kind === 'dateEntry' && (
@@ -880,11 +829,9 @@ export function StateDetailPanel({ onCollapse }: Props): JSX.Element {
 
         {/* Base history sub-section */}
         <CollapsibleSection
-          id="hist-base"
           title={t('statePanel.section.base')}
           expanded={expanded.has('hist-base')}
           onToggle={() => toggle('hist-base')}
-          styles={styles}
         >
           <HistoryBlock
             def={effective.history}
@@ -913,12 +860,10 @@ export function StateDetailPanel({ onCollapse }: Props): JSX.Element {
           return (
             <CollapsibleSection
               key={dateKey}
-              id={dateKey}
               title={`${year}.${month}.${day}`}
               expanded={expanded.has(dateKey)}
               onToggle={() => toggle(dateKey)}
               onRemove={() => removeDateEntry(idx)}
-              styles={styles}
             >
               <HistoryBlock
                 def={dh}
@@ -937,7 +882,6 @@ export function StateDetailPanel({ onCollapse }: Props): JSX.Element {
 
       {/* Provinces */}
       <CollapsibleSection
-        id="provinces"
         title={t('statePanel.section.provinces')}
         expanded={expanded.has('provinces')}
         onToggle={() => toggle('provinces')}
@@ -945,7 +889,6 @@ export function StateDetailPanel({ onCollapse }: Props): JSX.Element {
           <Button size="small" appearance="subtle" icon={<AddRegular />}
             onClick={() => setAddForm(addForm?.kind === 'province' ? null : { kind: 'province', value: '' })} />
         }
-        styles={styles}
       >
         <div className={styles.chipRowWrap}>
           {effective.provinceIds.map((pid) => (

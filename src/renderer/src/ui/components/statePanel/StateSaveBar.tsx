@@ -1,41 +1,11 @@
 import { useState } from 'react'
-import {
-  Button,
-  makeStyles,
-  tokens,
-  Text
-} from '@fluentui/react-components'
-import { SaveRegular } from '@fluentui/react-icons'
 import { useCoreStore } from '../../../infra/store/coreStore'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import { applyStatePatch } from '../../../infra/store/slices/stateEditSlice'
 import { useI18n } from '../../i18n/I18nProvider'
-
-const useStyles = makeStyles({
-  root: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: tokens.spacingHorizontalS,
-    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalS}`,
-    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
-    flexShrink: 0
-  },
-  summaryText: {
-    color: tokens.colorNeutralForeground3
-  },
-  actions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: tokens.spacingHorizontalS
-  },
-  errorText: {
-    color: tokens.colorPaletteRedForeground1
-  }
-})
+import { EntitySaveBar } from '../entityPanel/EntitySaveBar'
 
 export function StateSaveBar(): JSX.Element {
-  const styles = useStyles()
   const { t } = useI18n()
   const projectId = useCoreStore((s) => s.projectId)
 
@@ -73,24 +43,14 @@ export function StateSaveBar(): JSX.Element {
   }
 
   return (
-    <div className={styles.root}>
-      <Text size={100} className={styles.summaryText}>
-        {t('statePanel.save.summary', { count: changeCount })}
-      </Text>
-      <div className={styles.actions}>
-        {saveError && (
-          <Text size={100} className={styles.errorText}>{saveError}</Text>
-        )}
-        <Button
-          size="small"
-          appearance="primary"
-          icon={<SaveRegular />}
-          disabled={!projectId || !hasPendingChanges || isSaving}
-          onClick={handleSave}
-        >
-          {isSaving ? t('statePanel.save.saving') : t('statePanel.save.action')}
-        </Button>
-      </div>
-    </div>
+    <EntitySaveBar
+      summary={t('statePanel.save.summary', { count: changeCount })}
+      actionLabel={t('statePanel.save.action')}
+      savingLabel={t('statePanel.save.saving')}
+      disabled={!projectId || !hasPendingChanges || isSaving}
+      saving={isSaving}
+      error={saveError}
+      onSave={() => void handleSave()}
+    />
   )
 }

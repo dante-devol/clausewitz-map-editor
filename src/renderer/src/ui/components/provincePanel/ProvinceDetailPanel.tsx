@@ -11,12 +11,12 @@ import {
   shorthands
 } from '@fluentui/react-components'
 import { ChevronDownRegular } from '@fluentui/react-icons'
-import { unpackColor } from '../../../../shared/mapDataTypes'
-import type { Province } from '../../../../shared/mapDataTypes'
-import type { ProvinceDraftFields, ProvinceDraftTarget } from '../../../../shared/provinceEditing'
-import { useMapDataStore } from '../../infra/store/mapDataStore'
-import { selectProvinceDraftTargetMaps } from '../../infra/store/provinceEditSelectors'
-import { useI18n } from '../i18n/I18nProvider'
+import { unpackColor } from '../../../../../shared/mapDataTypes'
+import type { Province } from '../../../../../shared/mapDataTypes'
+import type { ProvinceDraftFields, ProvinceDraftTarget } from '../../../../../shared/provinceEditing'
+import { useMapDataStore } from '../../../infra/store/mapDataStore'
+import { selectProvinceDraftTargetMaps } from '../../../infra/store/provinceEditSelectors'
+import { useI18n } from '../../i18n/I18nProvider'
 
 const UNSET = '__unset__'
 const COASTAL_TRUE = '__true__'

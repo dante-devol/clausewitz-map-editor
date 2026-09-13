@@ -8,10 +8,8 @@ import {
   DialogSurface,
   DialogTitle,
   makeStyles,
-  tokens,
   Text
 } from '@fluentui/react-components'
-import { SaveRegular } from '@fluentui/react-icons'
 import { useCoreStore } from '../../../infra/store/coreStore'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import {
@@ -22,29 +20,10 @@ import { buildProvinceCatalog } from '../../../../../shared/provinceCatalog'
 import { CanonicalProvinceList } from './CanonicalProvinceList'
 import { BmpOnlyList } from './BmpOnlyList'
 import { ChangesList } from './ChangesList'
+import { EntitySaveBar } from '../entityPanel/EntitySaveBar'
 import { useI18n } from '../../i18n/I18nProvider'
 
 const useStyles = makeStyles({
-  saveBar: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: tokens.spacingHorizontalS,
-    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalS}`,
-    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
-    flexShrink: 0
-  },
-  saveBarText: {
-    color: tokens.colorNeutralForeground3
-  },
-  saveBarActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: tokens.spacingHorizontalS
-  },
-  errorText: {
-    color: tokens.colorPaletteRedForeground1
-  },
   panel: {
     display: 'flex',
     flexDirection: 'column',
@@ -165,27 +144,15 @@ export function ProvincePanel(): JSX.Element {
         collapsed={changesCollapsed}
         onToggleCollapse={() => setChangesCollapsed((c) => !c)}
       />
-      <div className={styles.saveBar}>
-        <Text size={100} className={styles.saveBarText}>
-          {t('provincePanel.save.summary', { count: changeCount })}
-        </Text>
-        <div className={styles.saveBarActions}>
-          {saveError && (
-            <Text size={100} className={styles.errorText}>
-              {saveError}
-            </Text>
-          )}
-          <Button
-            size="small"
-            appearance="primary"
-            icon={<SaveRegular />}
-            disabled={!projectId || !hasPendingChanges || isSaving}
-            onClick={handleSave}
-          >
-            {isSaving ? t('provincePanel.save.saving') : t('provincePanel.save.action')}
-          </Button>
-        </div>
-      </div>
+      <EntitySaveBar
+        summary={t('provincePanel.save.summary', { count: changeCount })}
+        actionLabel={t('provincePanel.save.action')}
+        savingLabel={t('provincePanel.save.saving')}
+        disabled={!projectId || !hasPendingChanges || isSaving}
+        saving={isSaving}
+        error={saveError}
+        onSave={() => void handleSave()}
+      />
       <Dialog open={showSaveBlocker}>
         <DialogSurface>
           <DialogBody>

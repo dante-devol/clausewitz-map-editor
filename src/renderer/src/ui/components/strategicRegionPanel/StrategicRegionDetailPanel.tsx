@@ -19,6 +19,7 @@ import {
 import { useI18n } from '../../i18n/I18nProvider'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import { useCoreStore } from '../../../infra/store/coreStore'
+import { CollapsibleSection } from '../entityPanel/CollapsibleSection'
 import type { WeatherPeriod } from '../../../../../shared/mapDataTypes'
 
 const useStyles = makeStyles({
@@ -68,32 +69,9 @@ const useStyles = makeStyles({
   nameInput: {
     flex: 1
   },
-  sectionHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: tokens.spacingHorizontalXS,
-    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-    cursor: 'pointer',
-    userSelect: 'none',
-    flexShrink: 0,
-    '&:hover': {
-      backgroundColor: tokens.colorNeutralBackground2
-    }
-  },
-  sectionTitle: {
-    flex: 1
-  },
   chevron: {
     fontSize: '12px',
     color: tokens.colorNeutralForeground3
-  },
-  sectionBody: {
-    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: tokens.spacingVerticalXS
   },
   chipRow: {
     display: 'flex',
@@ -391,17 +369,11 @@ export function StrategicRegionDetailPanel({ onCollapse }: Props): JSX.Element {
         </div>
 
         {/* Provinces section */}
-        <div className={styles.sectionHeader} onClick={() => setProvincesOpen((o) => !o)}>
-          <Text size={100} weight="semibold" className={styles.sectionTitle}>
-            {t('stratRegionPanel.section.provinces')} ({effectiveProvinceIds.length})
-          </Text>
-          {provincesOpen
-            ? <ChevronUpRegular className={styles.chevron} />
-            : <ChevronDownRegular className={styles.chevron} />}
-        </div>
-
-        {provincesOpen && (
-          <div className={styles.sectionBody}>
+        <CollapsibleSection
+          title={`${t('stratRegionPanel.section.provinces')} (${effectiveProvinceIds.length})`}
+          expanded={provincesOpen}
+          onToggle={() => setProvincesOpen((o) => !o)}
+        >
             {effectiveProvinceIds.length === 0 ? (
               <Text size={100} className={styles.emptyText}>{t('stratRegionPanel.section.noProvinces')}</Text>
             ) : (
@@ -434,21 +406,14 @@ export function StrategicRegionDetailPanel({ onCollapse }: Props): JSX.Element {
               />
               <Button size="small" onClick={handleAddProvince}>{t('stratRegionPanel.add.confirm')}</Button>
             </div>
-          </div>
-        )}
+        </CollapsibleSection>
 
         {/* Weather section */}
-        <div className={styles.sectionHeader} onClick={handleWeatherToggle}>
-          <Text size={100} weight="semibold" className={styles.sectionTitle}>
-            {t('stratRegionPanel.section.weather')} ({effectiveWeatherPeriods.length})
-          </Text>
-          {weatherOpen
-            ? <ChevronUpRegular className={styles.chevron} />
-            : <ChevronDownRegular className={styles.chevron} />}
-        </div>
-
-        {weatherOpen && (
-          <div className={styles.sectionBody}>
+        <CollapsibleSection
+          title={`${t('stratRegionPanel.section.weather')} (${effectiveWeatherPeriods.length})`}
+          expanded={weatherOpen}
+          onToggle={handleWeatherToggle}
+        >
             {weatherEntriesLoading && (
               <div className={styles.loadingRow}>
                 <Spinner size="extra-tiny" />
@@ -624,8 +589,7 @@ export function StrategicRegionDetailPanel({ onCollapse }: Props): JSX.Element {
                 {t('stratRegionPanel.weather.addPeriod')}
               </Button>
             </div>
-          </div>
-        )}
+        </CollapsibleSection>
       </div>
     </div>
   )
