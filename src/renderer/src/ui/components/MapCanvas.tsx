@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { makeStyles, makeStaticStyles, mergeClasses, tokens, Button, Slider, Spinner, Text, Tooltip, Skeleton, SkeletonItem, ProgressBar, shorthands } from '@fluentui/react-components'
 import {
   ZoomInRegular, ZoomOutRegular, FullScreenMaximizeRegular,
@@ -195,6 +195,12 @@ const useStyles = makeStyles({
     pointerEvents: 'none',
     zIndex: 1,
   },
+  mapFeaturesCanvas: {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+    zIndex: 1,
+  },
   brushSizeRow: {
     display: 'flex',
     alignItems: 'center',
@@ -374,6 +380,9 @@ export function MapCanvas(): JSX.Element {
   const bmpSaveRequestId = useMapDataStore((s) => s.bmpSaveRequestId)
   const bmpSaveSucceeded = useMapDataStore((s) => s.bmpSaveSucceeded)
   const bmpSaveFailed = useMapDataStore((s) => s.bmpSaveFailed)
+  const adjacencies = useMapDataStore((s) => s.adjacencies)
+  const railways = useMapDataStore((s) => s.railways)
+  const supplyNodes = useMapDataStore((s) => s.supplyNodes)
 
   const {
     provincesImage, colorMap, highlightColors, validationWarningColors, validationErrorColors,
@@ -447,13 +456,23 @@ export function MapCanvas(): JSX.Element {
     })
   }, [addBmpStroke, paintProvinceColor])
 
+  const mapFeatures = useMemo(
+    () => ({ adjacencies, railways, supplyNodes }),
+    [adjacencies, railways, supplyNodes]
+  )
+  const getProvinceColor = useCallback(
+    (provinceId: number) => query.getDraftProvinceById(provinceId)?.color,
+    [query]
+  )
+
   const {
-    containerRef, canvasRef, brushCursorCanvasRef, dragging, displayScale, imageLoaded, isCanvasLoading,
+    containerRef, canvasRef, brushCursorCanvasRef, mapFeaturesCanvasRef, dragging, displayScale, imageLoaded, isCanvasLoading,
     cursorPosition, onMouseDown, onMouseMove, stopDrag, zoomBy, fit, getPixelSnapshot,
     revertBrushStroke,
   } = useMapCanvas({
     provincesImage, overlays: canvasOverlays, highlightColors, validationWarningColors, validationErrorColors,
     colorMap, activeTool, brushPaintConfig, onMapClick, onHoverColorChange, onBrushStrokeComplete,
+    mapFeatures, getProvinceColor,
   })
 
   getPixelSnapshotRef.current = getPixelSnapshot
@@ -537,6 +556,7 @@ export function MapCanvas(): JSX.Element {
       }}
     >
       <canvas ref={canvasRef} className={mergeClasses(styles.canvas, !imageLoaded && styles.canvasHidden)} />
+      <canvas ref={mapFeaturesCanvasRef} className={styles.mapFeaturesCanvas} />
       {!imageLoaded && (
         <div className={styles.skeleton}>
           <Skeleton style={{ width: '100%', height: '100%' }}>

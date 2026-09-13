@@ -49,6 +49,11 @@ import {
   LOCALISATION_EMPTY,
   type LocalisationSlice
 } from './slices/localisationSlice'
+import {
+  createMapFeaturesSlice,
+  MAP_FEATURES_EMPTY,
+  type MapFeaturesSlice
+} from './slices/mapFeaturesSlice'
 
 export type MapDataState =
   ProvinceDataSlice &
@@ -60,7 +65,8 @@ export type MapDataState =
   StateEditSlice &
   StrategicRegionEditSlice &
   BmpEditSlice &
-  LocalisationSlice & {
+  LocalisationSlice &
+  MapFeaturesSlice & {
     clear: () => void
   }
 
@@ -89,6 +95,7 @@ export const useMapDataStore = create<MapDataState>()((...a) => {
     ...createStrategicRegionEditSlice(...a),
     ...createBmpEditSlice(...a),
     ...createLocalisationSlice(...a),
+    ...createMapFeaturesSlice(...a),
     clear: () => set({
       ...PROVINCE_DATA_EMPTY,
       ...PROVINCE_EDIT_EMPTY,
@@ -100,6 +107,7 @@ export const useMapDataStore = create<MapDataState>()((...a) => {
       ...STRATEGIC_REGION_EDIT_EMPTY,
       ...BMP_EDIT_EMPTY,
       ...LOCALISATION_EMPTY,
+      ...MAP_FEATURES_EMPTY,
     }),
   }
 })

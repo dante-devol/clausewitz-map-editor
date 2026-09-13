@@ -83,6 +83,9 @@ for (const [rel, dst] of [
   ['map/definition.csv', 'map/definition.csv'],
   ['map/continent.txt', 'map/continent.txt'],
   ['map/default.map', 'map/default.map'],
+  ['map/adjacencies.csv', 'map/adjacencies.csv'],
+  ['map/supply_nodes.txt', 'map/supply_nodes.txt'],
+  ['map/railways.txt', 'map/railways.txt'],
   ['common/weather.txt', 'common/weather.txt']
 ]) {
   writeFileSync(join(fixtureGame, dst), readFileSync(join(gamePath, rel)))
