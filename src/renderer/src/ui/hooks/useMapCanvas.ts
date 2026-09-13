@@ -10,6 +10,7 @@ import type { ProvinceIndex } from '../../infra/lib/provinceAnalysis'
 import type { BmpPixelStrokeDelta } from '../../../../shared/provinceEditing'
 import { log } from '../../infra/lib/logger'
 import { profilerTime, profilerStart, profilerEnd } from '../../infra/lib/profiler'
+import { packColor } from '../../../../shared/mapDataTypes'
 
 // The canvas is absolutely positioned with inset:0, but as a replaced
 // element its CSS box falls back to its width/height *attribute* when no
@@ -90,6 +91,7 @@ export interface UseMapCanvasResult {
   onMouseDown: (e: React.MouseEvent) => void
   onMouseMove: (e: React.MouseEvent) => void
   stopDrag: () => void
+  clearHoverGlow: () => void
   zoomBy: (factor: number) => void
   fit: () => void
   revertBrushStroke: (pixels: BmpPixelStrokeDelta[]) => void
@@ -132,6 +134,10 @@ export function useMapCanvas({
   const onBrushStrokeCompleteRef = useRef(onBrushStrokeComplete)
   const cursorCanvasPositionRef = useRef<{ x: number; y: number } | null>(null)
   const drawBrushCursorRef = useRef<((x: number, y: number) => void) | null>(null)
+  // Packed color of the province currently under the hover-glow outline, or
+  // null when nothing is glowing. Tracked to skip redundant render() calls
+  // when the mouse moves within the same province.
+  const hoveredGlowColorRef = useRef<number | null>(null)
 
   const [dragging, setDragging] = useState(false)
   const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number } | null>(null)
@@ -230,6 +236,7 @@ export function useMapCanvas({
   useEffect(() => {
     if (!provincesImage) {
       rendererRef.current?.clearImage()
+      hoveredGlowColorRef.current = null
       setImageLoaded(false)
       setBaseImageLoading(false)
       return
@@ -245,6 +252,7 @@ export function useMapCanvas({
       if (cancelled) return
       const cm = colorMapRef.current
       if (cm && cm.size > 0) rendererRef.current?.recolorTexture(cm)
+      hoveredGlowColorRef.current = null
       rendererRef.current?.setHighlightColors(highlightColorsRef.current)
       rendererRef.current?.setValidationHighlightColors({ warningColors: validationWarningColorsRef.current, errorColors: validationErrorColorsRef.current })
       syncSelectionStructure(rendererRef.current, provinceIndexRef.current, highlightColorsRef.current, transformRef.current.scale)
@@ -555,6 +563,19 @@ export function useMapCanvas({
     setDragging(true)
   }, [activeTool, doBrushPaint, onMapClick])
 
+  // Cheap, imperative hover glow: skips the render() call entirely when the
+  // hovered province hasn't changed, same cost profile as the brush cursor's
+  // per-mousemove canvas draws.
+  const updateHoverGlow = useCallback((packed: number | null) => {
+    if (hoveredGlowColorRef.current === packed) return
+    hoveredGlowColorRef.current = packed
+    const renderer = rendererRef.current
+    if (!renderer) return
+    renderer.setHoverHighlightColor(packed)
+    const { x: tx, y: ty, scale } = transformRef.current
+    renderer.render(tx, ty, scale)
+  }, [])
+
   const onMouseMove = useCallback((e: React.MouseEvent) => {
     const canvas = canvasRef.current
     if (canvas) {
@@ -572,6 +593,7 @@ export function useMapCanvas({
       if (!dragRef.current) {
         if (activeTool === 'brush') {
           drawBrushCursor(cx, cy)
+          updateHoverGlow(null)
           if (isPaintingRef.current) { doBrushPaint(cx, cy); return }
           return
         }
@@ -579,9 +601,11 @@ export function useMapCanvas({
         const { x: tx, y: ty, scale } = transformRef.current
         const color = rendererRef.current?.readOriginalPixel(cx, cy, tx, ty, scale)
         onHoverColorChange?.(color ? { ...color, x: cssX, y: cssY } : null)
+        updateHoverGlow(color ? packColor(color.r, color.g, color.b) : null)
       } else {
         clearBrushCursor()
         onHoverColorChange?.(null)
+        updateHoverGlow(null)
       }
     }
     if (!dragRef.current) return
@@ -591,7 +615,7 @@ export function useMapCanvas({
       x: dragRef.current.startTX + (e.clientX - dragRef.current.startX) * dpr,
       y: dragRef.current.startTY + (e.clientY - dragRef.current.startY) * dpr
     })
-  }, [activeTool, applyTransform, clearBrushCursor, doBrushPaint, drawBrushCursor, onHoverColorChange])
+  }, [activeTool, applyTransform, clearBrushCursor, doBrushPaint, drawBrushCursor, onHoverColorChange, updateHoverGlow])
 
   const stopDrag = useCallback(() => {
     dragRef.current = null
@@ -600,6 +624,10 @@ export function useMapCanvas({
     clearBrushCursor()
     finishBrushStroke()
   }, [clearBrushCursor, finishBrushStroke])
+
+  const clearHoverGlow = useCallback(() => {
+    updateHoverGlow(null)
+  }, [updateHoverGlow])
 
   const zoomBy = useCallback((factor: number) => {
     const canvas = canvasRef.current
@@ -627,7 +655,7 @@ export function useMapCanvas({
 
   return {
     containerRef, canvasRef, brushCursorCanvasRef, dragging, displayScale, imageLoaded, isCanvasLoading,
-    cursorPosition, onMouseDown, onMouseMove, stopDrag, zoomBy, fit,
+    cursorPosition, onMouseDown, onMouseMove, stopDrag, clearHoverGlow, zoomBy, fit,
     revertBrushStroke, getPixelSnapshot,
   }
 }

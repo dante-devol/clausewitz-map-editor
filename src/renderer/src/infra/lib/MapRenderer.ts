@@ -225,6 +225,12 @@ export class MapRenderer {
   private validationErrorTexture: WebGLTexture | null = null
   private validationErrorData: Uint8Array | null = null
   private validationErrorCount = 0
+  // Hover glow: same mask-texture mechanism as selection/validation, but a
+  // single province at most and drawn with a soft translucent color instead
+  // of the hard color-invert selection uses.
+  private hoverTexture: WebGLTexture | null = null
+  private hoverData: Uint8Array | null = null
+  private hoverCount = 0
 
   // Bounding-box outline: 4 thin screen-space quads per contiguous selection group.
   private bboxProgram!: WebGLProgram
@@ -507,6 +513,12 @@ export class MapRenderer {
     initializeMaskTexture(gl, this.validationErrorTexture, this.validationErrorData, paletteHeight)
     this.validationErrorCount = 0
 
+    if (this.hoverTexture) gl.deleteTexture(this.hoverTexture)
+    this.hoverData = new Uint8Array(256 * paletteHeight * 4)
+    this.hoverTexture = gl.createTexture()!
+    initializeMaskTexture(gl, this.hoverTexture, this.hoverData, paletteHeight)
+    this.hoverCount = 0
+
     this.selectionBboxGroups = []
     this.validationWarningBboxGroups = []
     this.validationErrorBboxGroups = []
@@ -562,6 +574,10 @@ export class MapRenderer {
     if (this.validationErrorData) {
       this.validationErrorTexture = gl.createTexture()!
       initializeMaskTexture(gl, this.validationErrorTexture, this.validationErrorData, this.paletteHeight)
+    }
+    if (this.hoverData) {
+      this.hoverTexture = gl.createTexture()!
+      initializeMaskTexture(gl, this.hoverTexture, this.hoverData, this.paletteHeight)
     }
   }
 
@@ -650,6 +666,15 @@ export class MapRenderer {
   }): void {
     this.validationWarningBboxGroups = input.warningBboxGroups
     this.validationErrorBboxGroups = input.errorBboxGroups
+  }
+
+  // Hover glow: at most one province at a time. Pass null to clear.
+  setHoverHighlightColor(packedColor: number | null): void {
+    this.hoverCount = this.updateHighlightTexture(
+      this.hoverTexture,
+      this.hoverData,
+      packedColor === null ? [] : [packedColor]
+    )
   }
 
   render(tx: number, ty: number, scale: number): void {
@@ -741,6 +766,17 @@ export class MapRenderer {
       gl.disable(gl.BLEND)
     }
 
+    // --- Hover glow: same technique as validation outlines (soft translucent
+    // color via normal alpha blending), a gentler counterpart to the hard
+    // color-invert used for the selection outline below.
+    if (this.hoverCount > 0 && this.hoverTexture) {
+      const { width: iw, height: ih } = this._imageSize
+      gl.enable(gl.BLEND)
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+      this.renderValidationOutline(this.hoverTexture, matrix, iw, ih, scale, [1, 1, 1, 0.45])
+      gl.disable(gl.BLEND)
+    }
+
     // --- Province outline + bounding boxes ---
     if (this.selectionBboxGroups.length > 0 && this.selectionTexture) {
       const { width: iw, height: ih } = this._imageSize
@@ -780,6 +816,7 @@ export class MapRenderer {
     if (this.selectionTexture){ gl.deleteTexture(this.selectionTexture); this.selectionTexture = null }
     if (this.validationWarningTexture) { gl.deleteTexture(this.validationWarningTexture); this.validationWarningTexture = null }
     if (this.validationErrorTexture) { gl.deleteTexture(this.validationErrorTexture); this.validationErrorTexture = null }
+    if (this.hoverTexture)    { gl.deleteTexture(this.hoverTexture);    this.hoverTexture = null }
     this._imageSize         = { width: 0, height: 0 }
     this.pixelData          = null
     this.pixelDataWidth     = 0
@@ -791,6 +828,8 @@ export class MapRenderer {
     this.validationWarningCount = 0
     this.validationErrorData = null
     this.validationErrorCount = 0
+    this.hoverData           = null
+    this.hoverCount          = 0
     this.selectionBboxGroups = []
     this.validationWarningBboxGroups = []
     this.validationErrorBboxGroups = []
@@ -888,6 +927,7 @@ export class MapRenderer {
       this.selectionData         = expand(this.selectionData!)
       this.validationWarningData = expand(this.validationWarningData!)
       this.validationErrorData   = expand(this.validationErrorData!)
+      this.hoverData              = expand(this.hoverData!)
       this.paletteHeight = neededHeight
 
       const reupload = (existing: WebGLTexture | null, data: Uint8Array): WebGLTexture => {
@@ -905,6 +945,7 @@ export class MapRenderer {
       this.selectionTexture         = reupload(this.selectionTexture, this.selectionData)
       this.validationWarningTexture = reupload(this.validationWarningTexture, this.validationWarningData)
       this.validationErrorTexture   = reupload(this.validationErrorTexture, this.validationErrorData)
+      this.hoverTexture              = reupload(this.hoverTexture, this.hoverData)
     } else {
       // Palette is already large enough — patch just the one texel.
       const base = id * 4
@@ -1079,6 +1120,7 @@ export class MapRenderer {
     if (this.selectionTexture) gl.deleteTexture(this.selectionTexture)
     if (this.validationWarningTexture) gl.deleteTexture(this.validationWarningTexture)
     if (this.validationErrorTexture) gl.deleteTexture(this.validationErrorTexture)
+    if (this.hoverTexture)    gl.deleteTexture(this.hoverTexture)
     for (const entry of this.overlayEntries) gl.deleteTexture(entry.texture)
     for (const entry of this.outlineOverlayEntries) gl.deleteTexture(entry.texture)
     gl.deleteBuffer(this.quadBuffer)

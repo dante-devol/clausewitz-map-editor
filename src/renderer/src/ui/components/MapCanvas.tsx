@@ -449,7 +449,7 @@ export function MapCanvas(): JSX.Element {
 
   const {
     containerRef, canvasRef, brushCursorCanvasRef, dragging, displayScale, imageLoaded, isCanvasLoading,
-    cursorPosition, onMouseDown, onMouseMove, stopDrag, zoomBy, fit, getPixelSnapshot,
+    cursorPosition, onMouseDown, onMouseMove, stopDrag, clearHoverGlow, zoomBy, fit, getPixelSnapshot,
     revertBrushStroke,
   } = useMapCanvas({
     provincesImage, overlays: canvasOverlays, highlightColors, validationWarningColors, validationErrorColors,
@@ -534,6 +534,7 @@ export function MapCanvas(): JSX.Element {
       onMouseLeave={() => {
         stopDrag()
         onHoverColorChange?.(null)
+        clearHoverGlow()
       }}
     >
       <canvas ref={canvasRef} className={mergeClasses(styles.canvas, !imageLoaded && styles.canvasHidden)} />
