@@ -22,9 +22,9 @@ export const MAP_FEATURES_EMPTY = {
   adjacencies: [] as MapAdjacency[],
   railways: [] as Railway[],
   supplyNodes: [] as SupplyNode[],
-  showAdjacencies: true,
-  showRailways: true,
-  showSupplyNodes: true,
+  showAdjacencies: false,
+  showRailways: false,
+  showSupplyNodes: false,
 }
 
 export const createMapFeaturesSlice: StateCreator<MapFeaturesSlice, [], [], MapFeaturesSlice> = (set) => ({
