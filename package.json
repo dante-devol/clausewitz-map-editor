@@ -24,6 +24,9 @@
       "signAndEditExecutable": false,
       "target": ["nsis", "portable"]
     },
+    "portable": {
+      "artifactName": "portable.exe"
+    },
     "files": [
       "out/**/*"
     ],
