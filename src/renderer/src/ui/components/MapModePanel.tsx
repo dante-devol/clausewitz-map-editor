@@ -36,11 +36,13 @@ import {
   SettingsRegular
 } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
+import type { MessageKey } from '../i18n/messages/en'
 import type { OverlayFilterRule, OverlayId } from '../../core/contracts/MapOverlay'
 import { type HsvColor, normalizeHexCandidate, hexToHsv, hsvToHex } from '../lib/colorUtils'
 import { useOverlayPanelState } from '../hooks/useOverlayPanelState'
 import { usePanelOverlays, type OverlayPanelItem } from '../hooks/useOverlayAssets'
 import { useCoreStore } from '../../infra/store/coreStore'
+import { useMapDataStore } from '../../infra/store/mapDataStore'
 
 const useStyles = makeStyles({
   root: {
@@ -415,6 +417,17 @@ export function MapModePanel(): JSX.Element {
   const styles = useStyles()
   const { t } = useI18n()
   const overlays = usePanelOverlays()
+  const showAdjacencies = useMapDataStore((s) => s.showAdjacencies)
+  const setShowAdjacencies = useMapDataStore((s) => s.setShowAdjacencies)
+  const showRailways = useMapDataStore((s) => s.showRailways)
+  const setShowRailways = useMapDataStore((s) => s.setShowRailways)
+  const showSupplyNodes = useMapDataStore((s) => s.showSupplyNodes)
+  const setShowSupplyNodes = useMapDataStore((s) => s.setShowSupplyNodes)
+  const mapFeatureToggles: { key: string; labelKey: MessageKey; visible: boolean; onToggle: (visible: boolean) => void }[] = [
+    { key: 'adjacencies', labelKey: 'mapFeatures.adjacencies', visible: showAdjacencies, onToggle: setShowAdjacencies },
+    { key: 'railways', labelKey: 'mapFeatures.railways', visible: showRailways, onToggle: setShowRailways },
+    { key: 'supplyNodes', labelKey: 'mapFeatures.supplyNodes', visible: showSupplyNodes, onToggle: setShowSupplyNodes },
+  ]
   const onOverlayMove = useCoreStore((s) => s.moveOverlay)
   const onOverlayVisibilityChange = useCoreStore((s) => s.setOverlayVisibility)
   const onOverlayOpacityChange = useCoreStore((s) => s.setOverlayOpacity)
@@ -504,6 +517,30 @@ export function MapModePanel(): JSX.Element {
                 </div>
               )
             })}
+          </div>
+        </div>
+
+        <div className={styles.section}>
+          <Text size={300} weight="semibold" className={styles.title}>{t('mapFeatures.title')}</Text>
+          <div className={styles.overlayList}>
+            {mapFeatureToggles.map((feature) => (
+              <div key={feature.key} className={styles.overlayCard}>
+                <div className={styles.overlayTitleRow}>
+                  <Text size={300} weight="semibold" className={styles.overlayName}>{t(feature.labelKey)}</Text>
+                </div>
+                <div className={styles.overlayControls}>
+                  <Tooltip content={feature.visible ? t('overlay.hide') : t('overlay.show')} relationship="label">
+                    <Button
+                      appearance={feature.visible ? 'primary' : 'subtle'}
+                      size="small"
+                      icon={feature.visible ? <EyeRegular /> : <EyeOffRegular />}
+                      aria-label={feature.visible ? t('overlay.hide') : t('overlay.show')}
+                      onClick={() => feature.onToggle(!feature.visible)}
+                    />
+                  </Tooltip>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

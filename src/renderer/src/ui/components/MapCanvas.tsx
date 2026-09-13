@@ -383,6 +383,9 @@ export function MapCanvas(): JSX.Element {
   const adjacencies = useMapDataStore((s) => s.adjacencies)
   const railways = useMapDataStore((s) => s.railways)
   const supplyNodes = useMapDataStore((s) => s.supplyNodes)
+  const showAdjacencies = useMapDataStore((s) => s.showAdjacencies)
+  const showRailways = useMapDataStore((s) => s.showRailways)
+  const showSupplyNodes = useMapDataStore((s) => s.showSupplyNodes)
 
   const {
     provincesImage, colorMap, highlightColors, validationWarningColors, validationErrorColors,
@@ -457,8 +460,12 @@ export function MapCanvas(): JSX.Element {
   }, [addBmpStroke, paintProvinceColor])
 
   const mapFeatures = useMemo(
-    () => ({ adjacencies, railways, supplyNodes }),
-    [adjacencies, railways, supplyNodes]
+    () => ({
+      adjacencies: showAdjacencies ? adjacencies : [],
+      railways: showRailways ? railways : [],
+      supplyNodes: showSupplyNodes ? supplyNodes : [],
+    }),
+    [adjacencies, railways, supplyNodes, showAdjacencies, showRailways, showSupplyNodes]
   )
   const getProvinceColor = useCallback(
     (provinceId: number) => query.getDraftProvinceById(provinceId)?.color,
