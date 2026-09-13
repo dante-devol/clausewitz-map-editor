@@ -1,7 +1,7 @@
 import { type StateCreator } from 'zustand'
 
 export type Theme = 'dark' | 'light'
-export type View = 'map' | 'provinces' | 'settings'
+export type View = 'map' | 'provinces' | 'data' | 'settings'
 
 export interface AppSlice {
   theme: Theme

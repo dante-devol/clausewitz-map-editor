@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { FluentProvider, webDarkTheme, webLightTheme } from '@fluentui/react-components'
 import { Shell } from '../components/layout/Shell'
 import { MapView } from '../views/MapView'
+import { DataView } from '../views/DataView'
 import { SettingsView } from '../views/SettingsView'
 import { ProjectSelectionView } from '../views/ProjectSelectionView'
 import { DebugPanel } from '../components/DebugPanel'
@@ -17,6 +18,7 @@ import { useI18n } from '../i18n/I18nProvider'
 const VIEWS = {
   map: <MapView />,
   provinces: <MapView />,
+  data: <DataView />,
   settings: <SettingsView />
 }
 

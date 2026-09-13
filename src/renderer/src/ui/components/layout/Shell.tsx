@@ -9,6 +9,7 @@ import {
   ArrowLeftRegular,
   MapRegular,
   SettingsRegular,
+  TableRegular,
   WeatherMoonRegular,
   WeatherSunnyRegular
 } from '@fluentui/react-icons'
@@ -70,8 +71,9 @@ interface ShellProps {
   children: React.ReactNode
 }
 
-const NAV_ITEMS: { view: View; icon: JSX.Element; labelKey: 'shell.nav.map' | 'shell.nav.settings' }[] = [
+const NAV_ITEMS: { view: View; icon: JSX.Element; labelKey: 'shell.nav.map' | 'shell.nav.data' | 'shell.nav.settings' }[] = [
   { view: 'map', icon: <MapRegular />, labelKey: 'shell.nav.map' },
+  { view: 'data', icon: <TableRegular />, labelKey: 'shell.nav.data' },
   { view: 'settings', icon: <SettingsRegular />, labelKey: 'shell.nav.settings' }
 ]
 
