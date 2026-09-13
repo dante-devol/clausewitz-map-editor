@@ -10,7 +10,16 @@ import type {
   StrategicRegionSaveRequest
 } from '../../../shared/contract/api'
 import type { ResolvedPaths } from '../../../shared/pathTypes'
-import type { Continent, Province, Resource, StateDefinition, StrategicRegionDefinition } from '../../../shared/mapDataTypes'
+import type {
+  Continent,
+  MapAdjacency,
+  Province,
+  Railway,
+  Resource,
+  StateDefinition,
+  StrategicRegionDefinition,
+  SupplyNode
+} from '../../../shared/mapDataTypes'
 import type { LoadedProject, ProjectLoader } from './ProjectLoader'
 import { WorkerParsePool } from '../../workers/WorkerParsePool'
 import { encodeBmp } from '../../parsers/BmpWriter'
@@ -167,6 +176,18 @@ export class ProjectSession {
   loadWeatherEntries(): string[] {
     const project = this.requireProject()
     return this.loader.loadWeatherEntries(project)
+  }
+
+  loadAdjacencies(): MapAdjacency[] {
+    return this.loader.loadAdjacencies(this.requireProject())
+  }
+
+  loadSupplyNodes(): SupplyNode[] {
+    return this.loader.loadSupplyNodes(this.requireProject())
+  }
+
+  loadRailways(): Railway[] {
+    return this.loader.loadRailways(this.requireProject())
   }
 
   loadResources(): Promise<Resource[]> {

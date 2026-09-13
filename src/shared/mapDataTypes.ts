@@ -134,3 +134,33 @@ export interface Continent {
   codeName: string
   position: number
 }
+
+// One row of map/adjacencies.csv — a manually-declared adjacency (e.g. a
+// strait or canal) between two provinces that aren't touching on the map.
+export interface MapAdjacency {
+  from: number
+  to: number
+  // Usually 'sea' (a water crossing) or 'impassable' (explicitly removes an
+  // adjacency); empty string is valid and means a plain land adjacency.
+  type: string
+  // The province visually representing the crossing, if any (-1 in the file).
+  through: number | null
+  startX: number | null
+  startY: number | null
+  stopX: number | null
+  stopY: number | null
+  adjacencyRuleName?: string
+  comment?: string
+}
+
+// One line of map/supply_nodes.txt.
+export interface SupplyNode {
+  level: number
+  provinceId: number
+}
+
+// One line of map/railways.txt — a railway connecting provinceIds in order.
+export interface Railway {
+  level: number
+  provinceIds: number[]
+}

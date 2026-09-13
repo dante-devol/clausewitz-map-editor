@@ -48,6 +48,21 @@ export function registerMapHandlers(context: IpcContext): void {
     return context.sessions.loadWeatherEntriesForWindow(window, projectId)
   })
 
+  ipcMain.handle(channels.map.loadAdjacencies, (event, projectId: string) => {
+    const window = getEventWindow(event)
+    return context.sessions.loadAdjacenciesForWindow(window, projectId)
+  })
+
+  ipcMain.handle(channels.map.loadSupplyNodes, (event, projectId: string) => {
+    const window = getEventWindow(event)
+    return context.sessions.loadSupplyNodesForWindow(window, projectId)
+  })
+
+  ipcMain.handle(channels.map.loadRailways, (event, projectId: string) => {
+    const window = getEventWindow(event)
+    return context.sessions.loadRailwaysForWindow(window, projectId)
+  })
+
   ipcMain.handle(channels.map.saveBmp, (event, projectId: string, rgbaData: Uint8Array, width: number, height: number) => {
     const window = getEventWindow(event)
     context.sessions.saveBmpForWindow(window, projectId, rgbaData, width, height)

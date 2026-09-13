@@ -34,6 +34,9 @@ export const channels = {
     saveStrategicRegions: 'map:saveStrategicRegions',
     loadWeatherEntries: 'map:loadWeatherEntries',
     loadResources: 'map:loadResources',
+    loadAdjacencies: 'map:loadAdjacencies',
+    loadSupplyNodes: 'map:loadSupplyNodes',
+    loadRailways: 'map:loadRailways',
     changed: 'map:changed',
     saveBmp: 'map:saveBmp'
   },

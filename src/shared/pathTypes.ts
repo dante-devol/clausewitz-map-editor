@@ -13,6 +13,9 @@ export type PathKey =
   | 'buildings'
   | 'weather'
   | 'localisation'
+  | 'adjacencies'
+  | 'supplyNodes'
+  | 'railways'
 
 // File paths resolve to a single absolute path (mod wins if present, else game).
 // Folder paths resolve to a merged file list — mod files overwrite same-named game
@@ -32,6 +35,9 @@ export interface ResolvedPaths {
   buildings: string[]
   weather: string
   localisation: string[]
+  adjacencies: string
+  supplyNodes: string
+  railways: string
 }
 
 export interface GameVerificationResult {

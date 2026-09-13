@@ -123,4 +123,22 @@ export class ProjectSessionRegistry {
     }
     return session.loadResources()
   }
+
+  loadAdjacenciesForWindow(window: BrowserWindow, projectId: string) {
+    const session = this.forWindow(window)
+    if (session.projectId !== projectId) throw new Error('Project session mismatch')
+    return session.loadAdjacencies()
+  }
+
+  loadSupplyNodesForWindow(window: BrowserWindow, projectId: string) {
+    const session = this.forWindow(window)
+    if (session.projectId !== projectId) throw new Error('Project session mismatch')
+    return session.loadSupplyNodes()
+  }
+
+  loadRailwaysForWindow(window: BrowserWindow, projectId: string) {
+    const session = this.forWindow(window)
+    if (session.projectId !== projectId) throw new Error('Project session mismatch')
+    return session.loadRailways()
+  }
 }

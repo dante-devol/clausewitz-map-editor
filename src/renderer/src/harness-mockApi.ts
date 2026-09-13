@@ -55,7 +55,10 @@ const DEFAULT_CONFIG: AppConfig = {
     resources: '/common/resources',
     buildings: '/common/buildings',
     weather: '/common/weather.txt',
-    localisation: '/localisation/english'
+    localisation: '/localisation/english',
+    adjacencies: '/map/adjacencies.csv',
+    supplyNodes: '/map/supply_nodes.txt',
+    railways: '/map/railways.txt'
   },
   displayModeOverrides: {}
 }
@@ -116,6 +119,9 @@ export function createMockApi(): ApiContract {
       },
       loadWeatherEntries: async () => getJson('/api/map/weather'),
       loadResources: async () => getJson('/api/map/resources'),
+      loadAdjacencies: async () => getJson('/api/map/adjacencies'),
+      loadSupplyNodes: async () => getJson('/api/map/supplyNodes'),
+      loadRailways: async () => getJson('/api/map/railways'),
       onChanged: (callback) => {
         changedListeners.add(callback)
         return () => changedListeners.delete(callback)

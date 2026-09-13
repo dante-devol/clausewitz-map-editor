@@ -25,7 +25,10 @@ export const DEFAULT_CONFIG: Config = {
     resources: '/common/resources',
     buildings: '/common/buildings',
     weather: '/common/weather.txt',
-    localisation: '/localisation/english'
+    localisation: '/localisation/english',
+    adjacencies: '/map/adjacencies.csv',
+    supplyNodes: '/map/supply_nodes.txt',
+    railways: '/map/railways.txt'
   },
   displayModeOverrides: {}
 }

@@ -1,11 +1,14 @@
 import type {
   Building,
   Continent,
+  MapAdjacency,
   Province,
+  Railway,
   Resource,
   StateCategory,
   StateDefinition,
   StrategicRegionDefinition,
+  SupplyNode,
   TerrainCategory
 } from '../mapDataTypes'
 import type { ProvinceCatalogEntry } from '../provinceCatalog'
@@ -29,6 +32,9 @@ export interface AppConfig {
     buildings: string
     weather: string
     localisation: string
+    adjacencies: string
+    supplyNodes: string
+    railways: string
   }
   displayModeOverrides: Partial<Record<string, Partial<Record<string, string>>>>
 }
@@ -205,6 +211,9 @@ export interface ApiContract {
     loadStrategicRegions: (projectId: string) => Promise<void>
     loadWeatherEntries: (projectId: string) => Promise<string[]>
     loadResources: (projectId: string) => Promise<Resource[]>
+    loadAdjacencies: (projectId: string) => Promise<MapAdjacency[]>
+    loadSupplyNodes: (projectId: string) => Promise<SupplyNode[]>
+    loadRailways: (projectId: string) => Promise<Railway[]>
     onChanged: (callback: (event: MapChangedEvent) => void) => () => void
     saveBmp: (projectId: string, rgbaData: Uint8Array, width: number, height: number) => Promise<void>
   }
