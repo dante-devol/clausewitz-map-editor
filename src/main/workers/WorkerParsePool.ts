@@ -1,11 +1,14 @@
 import os from 'os'
 import { Worker } from 'worker_threads'
+import { log } from '../logger'
 import type { ParserKey, ParserInputMap, ParserOutputMap } from './parserRegistry'
 import type { WorkerTask, WorkerResponse } from './fileParseWorker'
 
 interface PendingTask {
   resolve: (result: ParserOutputMap[ParserKey][]) => void
   reject: (error: Error) => void
+  key: ParserKey
+  start: number
 }
 
 interface PoolWorker {
@@ -37,7 +40,15 @@ export class WorkerParsePool {
       this.pending.set(taskId, {
         resolve: resolve as (result: ParserOutputMap[ParserKey][]) => void,
         reject,
+        key,
+        start: performance.now()
       })
+
+      // A growing backlog means the pool can't keep up with dispatch volume
+      // (e.g. a mod with thousands of state files) — otherwise invisible.
+      if (this.pending.size > 0 && this.pending.size % 200 === 0) {
+        log.warn('[perf] WorkerParsePool backlog growing', { pending: this.pending.size })
+      }
 
       // Round-robin across workers. Each worker manages its own internal
       // queue, so we never need to hold tasks back at the pool level.
@@ -67,9 +78,12 @@ export class WorkerParsePool {
       this.pending.delete(response.taskId)
       worker.taskIds.delete(response.taskId)
 
+      const ms = Math.round(performance.now() - pending.start)
       if ('error' in response) {
+        log.error('[perf] parse task failed', { key: pending.key, ms, error: response.error })
         pending.reject(new Error(response.error))
       } else {
+        log.debug('[perf] parse task', { key: pending.key, ms })
         pending.resolve(response.result)
       }
     })
@@ -80,6 +94,15 @@ export class WorkerParsePool {
     // call finds an already-cleared taskIds set and an already-replaced
     // workers[idx] (indexOf no longer finds this worker), so it's a no-op.
     const handleWorkerFailure = (error: Error): void => {
+      // Previously silent: a crashed worker would quietly reject and respawn
+      // with no trace, so a systemic parser bug would look like sporadic,
+      // unexplained failures to whoever hit it.
+      log.error('[perf] parser worker failed', {
+        message: error.message,
+        rejectedTasks: worker.taskIds.size,
+        disposing: this.disposing
+      })
+
       for (const taskId of worker.taskIds) {
         this.pending.get(taskId)?.reject(error)
         this.pending.delete(taskId)

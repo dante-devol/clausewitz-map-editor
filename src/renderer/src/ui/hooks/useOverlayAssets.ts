@@ -11,6 +11,8 @@ import { useMapDataStore } from '../../infra/store/mapDataStore'
 import { BmpProvinceMapSource } from '../../infra/lib/BmpProvinceMapSource'
 import { buildProvinceIndex, type ProvinceIndex } from '../../infra/lib/provinceAnalysis'
 import { buildGroupedOutlineGroups, buildProvinceOutlineGroups, type OutlineGroupSource } from '../../infra/lib/overlayOutlineMasks'
+import { log } from '../../infra/lib/logger'
+import { profilerTime } from '../../infra/lib/profiler'
 
 export type OverlayPanelItem =
   | {
@@ -177,7 +179,9 @@ export function useOverlayAssets(): {
       // and holding multiple simultaneously causes significant memory pressure.
       for (const overlay of overlays) {
         if (!overlay.visible && overlay.kind === 'outline') {
-          outlineCacheRef.current.delete(overlay.id)
+          if (outlineCacheRef.current.delete(overlay.id)) {
+            log.debug('Evicted outline overlay cache entry (overlay hidden)', { id: overlay.id })
+          }
         }
       }
 
@@ -345,14 +349,17 @@ async function ensureOutlineOverlayLoaded(
     const source = await BmpProvinceMapSource.load(provincesImage)
     try {
       provinceIndexRevisionRef.current++
+      // A second, independent province-index build from MapRenderer's own
+      // (see MapRenderer.loadImage) — both run buildProvinceIndex on the same
+      // image, so it's worth seeing whether this one is actually redundant.
       provinceIndexRef.current = {
         source: provincesImage,
         revision: provinceIndexRevisionRef.current,
-        index: buildProvinceIndex({
+        index: profilerTime('buildProvinceIndex', () => buildProvinceIndex({
           data: source.pixelData,
           width: source.width,
           height: source.height
-        }),
+        })),
         width: source.width,
         height: source.height
       }
@@ -374,7 +381,7 @@ async function ensureOutlineOverlayLoaded(
   const cached = outlineCacheRef.current.get(overlay.id)
   if (cached && cached.cacheKey === cacheKey) return cached
 
-  const source = overlay.id === 'provinces'
+  const source = profilerTime(`outlineGroups:${overlay.id}`, () => overlay.id === 'provinces'
     ? buildProvinceOutlineGroups(provinceIndexEntry.index, provinceIndexEntry.width, provinceIndexEntry.height)
     : overlay.id === 'states'
       ? buildGroupedOutlineGroups(
@@ -388,7 +395,7 @@ async function ensureOutlineOverlayLoaded(
         provinceIndexEntry.width,
         provinceIndexEntry.height,
         remapGroupsToBitmapProvinceIds(provinceIndexEntry.index, provincesByColor, strategicRegionProvinceToRegionId)
-      )
+      ))
 
   const next = { cacheKey, source }
   outlineCacheRef.current.set(overlay.id, next)

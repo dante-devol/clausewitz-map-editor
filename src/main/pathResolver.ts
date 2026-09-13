@@ -3,6 +3,7 @@ import { join } from 'path'
 import { getConfig } from './config'
 import type { ResolvedPaths } from '../shared/pathTypes'
 import { normalizeRelativePath } from './parsers/DescriptorMod'
+import { timeSync } from './perf'
 
 // Returns the mod path if it exists, otherwise the game path.
 function resolveFile(gamePath: string, modPath: string, rel: string, replacePaths: readonly string[]): string {
@@ -42,6 +43,10 @@ function isPathReplaced(rel: string, replacePaths: readonly string[]): boolean {
 }
 
 export function resolvePaths(gamePath: string, modPath: string, replacePaths: readonly string[] = []): ResolvedPaths {
+  return timeSync('resolvePaths', () => resolvePathsInner(gamePath, modPath, replacePaths))
+}
+
+function resolvePathsInner(gamePath: string, modPath: string, replacePaths: readonly string[]): ResolvedPaths {
   const p = getConfig().paths
   return {
     descriptor:      join(modPath, p.descriptor),

@@ -20,6 +20,8 @@ import { applyStrategicRegionSaves } from '../../parsers/StrategicRegionsTxtWrit
 import { computeHash } from '../../fileManager'
 import { resolveWriteTarget, writeFileAtomic } from './writeTargets'
 import { resolveLocalisationKeys } from '../localisation/LocalisationResolver'
+import { log } from '../../logger'
+import { timeSync } from '../../perf'
 
 interface WatchEntry {
   watcher: FSWatcher
@@ -220,13 +222,14 @@ export class ProjectSession {
     if (computeHash(buffer) !== expectedHash) {
       // Push the current file to the renderer now rather than waiting for the
       // watcher, so the edits can be reviewed against it.
+      log.warn('Save rejected: definitions.csv changed on disk since it was loaded', { source })
       const definitions = this.loader.loadDefinitions(project, this.continents)
       this.knownHashes.set(source, definitions.hash)
       this.emit(project, 'definitions', definitions)
       throw new Error(`${basename(source)} changed on disk after it was loaded. Its new contents are being reloaded; review your changes and save again.`)
     }
 
-    const content = DefinitionsCsv.merge(buffer.toString('utf-8'), provinces, continents)
+    const content = timeSync('DefinitionsCsv.merge', () => DefinitionsCsv.merge(buffer.toString('utf-8'), provinces, continents))
     const target = resolveWriteTarget(project, source)
     const hash = this.writeProjectFile(target, content)
     this.relocate(source, target)
@@ -238,7 +241,8 @@ export class ProjectSession {
     const project = this.requireProject()
     const source = project.resolvedPaths.provinces
     const target = resolveWriteTarget(project, source)
-    this.writeProjectFile(target, encodeBmp(rgbaData, width, height))
+    log.debug('saveBmp', { width, height, bytes: rgbaData.byteLength })
+    this.writeProjectFile(target, timeSync('encodeBmp', () => encodeBmp(rgbaData, width, height)))
     this.relocate(source, target)
     this.refreshWatchers()
   }
@@ -398,9 +402,10 @@ export class ProjectSession {
       this.watch(filePath, () => {
         if (this.project !== project || !this.pool) return
         if (!this.statesLoaded) return
-        this.reloadStateFile(project, filePath).catch(() => {
+        this.reloadStateFile(project, filePath).catch((error) => {
           // The file may have been removed, or the worker pool disposed by a
           // project switch mid-read; the next change (or reopen) will retry.
+          log.warn('Failed to reload a states file after an external change', { filePath, error: String(error) })
         })
       })
     }
@@ -423,8 +428,9 @@ export class ProjectSession {
       this.watch(filePath, () => {
         if (this.project !== project || !this.pool) return
         if (!this.strategicRegionsLoaded) return
-        this.reloadStrategicRegionFile(project, filePath).catch(() => {
+        this.reloadStrategicRegionFile(project, filePath).catch((error) => {
           // Same as reloadStateFile: a transient failure, safe to drop.
+          log.warn('Failed to reload a strategic regions file after an external change', { filePath, error: String(error) })
         })
       })
     }
@@ -511,15 +517,20 @@ export class ProjectSession {
         let hash: string
         try {
           hash = computeHash(readFileSync(path))
-        } catch {
-          return // transient read failure during file replacement
+        } catch (error) {
+          log.warn('Watcher: transient read failure during file replacement', { path, error: String(error) })
+          return
         }
-        if (this.knownHashes.get(path) === hash) return
+        if (this.knownHashes.get(path) === hash) {
+          log.debug('Watcher: change suppressed (matches known hash, likely our own write)', { path })
+          return
+        }
         this.knownHashes.set(path, hash)
         try {
           entry.onChanged()
-        } catch {
+        } catch (error) {
           // A half-written or invalid file; the next change event will retry.
+          log.error('Watcher: onChanged handler threw, will retry on next change', { path, error: String(error) })
         }
       }, 100)
     })

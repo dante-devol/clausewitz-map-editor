@@ -6,6 +6,7 @@ import { DataView } from '../views/DataView'
 import { SettingsView } from '../views/SettingsView'
 import { ProjectSelectionView } from '../views/ProjectSelectionView'
 import { DebugPanel } from '../components/DebugPanel'
+import { ProfilerOverlay } from '../components/ProfilerOverlay'
 import { useAppState } from '../hooks/useAppState'
 import { useCoreStore } from '../../infra/store/coreStore'
 import { useMapDataStore, selectHasUnsavedChanges } from '../../infra/store/mapDataStore'
@@ -14,6 +15,9 @@ import { useProjectSelection } from '../hooks/useProjectSelection'
 import { useMapLoader } from '../hooks/useMapLoader'
 import { useProvinceValidation } from '../hooks/useProvinceValidation'
 import { useI18n } from '../i18n/I18nProvider'
+import { installRendererErrorLogging } from '../../infra/lib/logger'
+
+installRendererErrorLogging()
 
 const VIEWS = {
   map: <MapView />,
@@ -80,12 +84,17 @@ function App(): JSX.Element {
   useProvinceValidation()
 
   const [debugOpen, setDebugOpen] = useState(false)
+  const [profilerOpen, setProfilerOpen] = useState(false)
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.ctrlKey && e.shiftKey && e.key === 'D') {
         e.preventDefault()
         setDebugOpen((v) => !v)
+      }
+      if (e.ctrlKey && e.shiftKey && e.key === 'P') {
+        e.preventDefault()
+        setProfilerOpen((v) => !v)
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -134,6 +143,7 @@ function App(): JSX.Element {
         {VIEWS[activeView]}
       </Shell>
       <DebugPanel open={debugOpen} onClose={() => setDebugOpen(false)} />
+      <ProfilerOverlay open={profilerOpen} />
     </FluentProvider>
   )
 }

@@ -1,5 +1,6 @@
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'path'
+import { log } from '../../logger'
 
 export interface ProjectRoots {
   gamePath: string
@@ -41,7 +42,10 @@ export function writeFileAtomic(path: string, data: string | Buffer): void {
   writeFileSync(temp, data)
   try {
     renameSync(temp, path)
-  } catch {
+  } catch (error) {
+    // The atomicity guarantee is lost here (e.g. target locked by another
+    // process on Windows) — previously silent, worth knowing it happened.
+    log.warn('Atomic rename failed, falling back to a direct write', { path, error: String(error) })
     rmSync(temp, { force: true })
     writeFileSync(path, data)
   }

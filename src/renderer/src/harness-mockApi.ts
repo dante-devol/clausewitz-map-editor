@@ -66,7 +66,8 @@ const changedListeners = new Set<(event: MapChangedEvent) => void>()
 export function createMockApi(): ApiContract {
   return {
     app: {
-      getSystemLocale: async () => 'en'
+      getSystemLocale: async () => 'en',
+      openUserDataFolder: async () => { console.log('[harness] openUserDataFolder called (no-op)') }
     },
     dialogs: {
       openFolder: async () => null,

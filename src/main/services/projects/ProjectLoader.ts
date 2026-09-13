@@ -18,6 +18,7 @@ import { buildProvinceCatalog } from '../../../shared/provinceCatalog'
 import type { WorkerParsePool } from '../../workers/WorkerParsePool'
 import type { ParserOutputMap } from '../../workers/parserRegistry'
 import { isSameOrInside } from './writeTargets'
+import { timeAsync, timeSync } from '../../perf'
 
 export interface LoadedProject {
   projectId: string
@@ -46,26 +47,30 @@ export class ProjectLoader {
   }
 
   async loadSnapshot(project: LoadedProject, pool: WorkerParsePool): Promise<MapDataSnapshot> {
+    return timeAsync('ProjectLoader.loadSnapshot', () => this.loadSnapshotInner(project, pool))
+  }
+
+  private async loadSnapshotInner(project: LoadedProject, pool: WorkerParsePool): Promise<MapDataSnapshot> {
     // Start BMP read and terrain/category/building dispatches immediately — no dependencies.
-    const provincesBufferPromise = readFile(project.resolvedPaths.provinces)
-    const terrainPromise = Promise.all(
+    const provincesBufferPromise = timeAsync('loadSnapshot.provincesBmp', () => readFile(project.resolvedPaths.provinces))
+    const terrainPromise = timeAsync('loadSnapshot.terrain', () => Promise.all(
       project.resolvedPaths.provinceTerrain.map((p) => pool.dispatch(p, 'terrain'))
-    ).then((results) => results.flat())
-    const stateCategoriesPromise = Promise.all(
+    ).then((results) => results.flat()))
+    const stateCategoriesPromise = timeAsync('loadSnapshot.stateCategories', () => Promise.all(
       project.resolvedPaths.stateCategories.map((p) => pool.dispatch(p, 'stateCategory'))
-    ).then((results) => results.flat())
-    const buildingsPromise = Promise.all(
+    ).then((results) => results.flat()))
+    const buildingsPromise = timeAsync('loadSnapshot.buildings', () => Promise.all(
       project.resolvedPaths.buildings.map((p) => pool.dispatch(p, 'buildings'))
-    ).then((results) => results.flat())
+    ).then((results) => results.flat()))
 
     // Continent must be parsed before definitions can be dispatched.
     const continentContent = await readFile(project.resolvedPaths.continent, 'utf-8')
     const continents = ContinentTxt.parse(continentContent)
-    const definitionsPromise = pool.dispatch(
+    const definitionsPromise = timeAsync('loadSnapshot.definitions', () => pool.dispatch(
       project.resolvedPaths.definitions,
       'definitions',
       { continents }
-    )
+    ))
 
     const [provincesBuffer, terrains, stateCategories, buildings, provinces, definitionsBuffer] = await Promise.all([
       provincesBufferPromise,
@@ -76,7 +81,7 @@ export class ProjectLoader {
       readFile(project.resolvedPaths.definitions),
     ])
 
-    const provinceCatalog = buildProvinceCatalog(provinces)
+    const provinceCatalog = timeSync('loadSnapshot.buildProvinceCatalog', () => buildProvinceCatalog(provinces))
     const provincesImageHash = computeHash(provincesBuffer)
 
     return {
@@ -97,11 +102,13 @@ export class ProjectLoader {
   }
 
   loadDefinitions(project: LoadedProject, continents: Continent[]): DefinitionsChangedData {
-    const buffer = readFileSync(project.resolvedPaths.definitions)
-    return {
-      provinces: DefinitionsCsv.parse(buffer.toString('utf-8'), continents),
-      hash: computeHash(buffer)
-    }
+    return timeSync('loadDefinitions', () => {
+      const buffer = readFileSync(project.resolvedPaths.definitions)
+      return {
+        provinces: DefinitionsCsv.parse(buffer.toString('utf-8'), continents),
+        hash: computeHash(buffer)
+      }
+    })
   }
 
   loadTerrain(project: LoadedProject) {
@@ -160,8 +167,10 @@ export class ProjectLoader {
   }
 
   loadImageBuffer(project: LoadedProject): { data: Buffer; hash: string } {
-    const buffer = readFileSync(project.resolvedPaths.provinces)
-    return { data: buffer, hash: computeHash(buffer) }
+    return timeSync('loadImageBuffer', () => {
+      const buffer = readFileSync(project.resolvedPaths.provinces)
+      return { data: buffer, hash: computeHash(buffer) }
+    })
   }
 }
 

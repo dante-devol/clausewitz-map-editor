@@ -2,6 +2,8 @@ import { buildProvinceIndex, updateProvinceBboxesForRegion } from './provinceAna
 import type { ProvinceMapSource } from './ProvinceMapSource'
 import type { ProvinceIndex } from './provinceAnalysis'
 import type { BmpPixelStrokeDelta } from '../../../../shared/provinceEditing'
+import { profilerTime } from './profiler'
+import { log } from './logger'
 
 // Vertex shader: maps [0,1]×[0,1] unit quad to clip space via a mat3.
 // UV passes straight through — texImage2D row 0 (top) is at V=0, matching quad Y.
@@ -277,13 +279,24 @@ export class MapRenderer {
     // with no error surfaced anywhere (this was the actual prior behavior).
     canvas.addEventListener('webglcontextlost', (e) => {
       e.preventDefault()
+      log.warn('WebGL context lost')
       this.contextLost = true
       this.onContextLost?.()
     })
     canvas.addEventListener('webglcontextrestored', () => {
       this.contextLost = false
-      this.initGLResources()
-      this.reuploadCoreTexturesAfterContextRestore()
+      const start = performance.now()
+      try {
+        this.initGLResources()
+        this.reuploadCoreTexturesAfterContextRestore()
+        log.info('WebGL context restored', { ms: Math.round(performance.now() - start) })
+      } catch (error) {
+        // Previously uncaught: a relink/reupload failure here would throw out
+        // of the event listener with no structured trace, and onContextRestored
+        // would never fire — the canvas would just stay blank.
+        log.error('WebGL context restore failed', { error: String(error) })
+        return
+      }
       this.onContextRestored?.()
     })
   }
@@ -408,6 +421,10 @@ export class MapRenderer {
   }
 
   async loadImage(source: ProvinceMapSource): Promise<void> {
+    profilerTime('loadImage', () => this.loadImageSync(source))
+  }
+
+  private loadImageSync(source: ProvinceMapSource): void {
     const { gl } = this
     const { width, height, pixelData } = source
 
@@ -417,7 +434,7 @@ export class MapRenderer {
     this.provinceCentroid = null
 
     // Build province index (one O(W×H) pass; never repeated for this image).
-    const index = buildProvinceIndex({ data: pixelData, width, height })
+    const index = profilerTime('buildProvinceIndex', () => buildProvinceIndex({ data: pixelData, width, height }))
     this.provinceIndex = index
 
     // Province ID texture — RGBA8, R=low byte of ID, G=high byte of ID.
@@ -552,6 +569,13 @@ export class MapRenderer {
     bitmapEntries: { id: string; source: ImageBitmap | OffscreenCanvas; opacity: number }[]
     outlineEntries: { id: string; source: ImageBitmap | OffscreenCanvas; opacity: number; color: [number, number, number, number] }[]
   }): void {
+    profilerTime('setOverlayTextures', () => this.setOverlayTexturesSync(input))
+  }
+
+  private setOverlayTexturesSync(input: {
+    bitmapEntries: { id: string; source: ImageBitmap | OffscreenCanvas; opacity: number }[]
+    outlineEntries: { id: string; source: ImageBitmap | OffscreenCanvas; opacity: number; color: [number, number, number, number] }[]
+  }): void {
     const { gl } = this
     // Delete all existing overlay textures before uploading new set.
     for (const entry of this.overlayEntries) gl.deleteTexture(entry.texture)
@@ -629,6 +653,10 @@ export class MapRenderer {
   }
 
   render(tx: number, ty: number, scale: number): void {
+    profilerTime('frame', () => this.renderFrame(tx, ty, scale))
+  }
+
+  private renderFrame(tx: number, ty: number, scale: number): void {
     const { gl } = this
     if (this.contextLost || !this.idTexture || !this.paletteTexture || this._imageSize.width === 0) return
 
@@ -794,6 +822,10 @@ export class MapRenderer {
   // Remaps province display colors. Only updates the palette texture —
   // no map image re-upload. colorMap: packed province RGB → packed display RGB.
   recolorTexture(colorMap: Map<number, number>): void {
+    profilerTime('recolorTexture', () => this.recolorTextureSync(colorMap))
+  }
+
+  private recolorTextureSync(colorMap: Map<number, number>): void {
     const { gl } = this
     const index = this.provinceIndex
     const palette = this.paletteData
@@ -815,6 +847,10 @@ export class MapRenderer {
 
   // Reverts all palette entries to their original province colors.
   restoreOriginalTexture(): void {
+    profilerTime('restoreOriginalTexture', () => this.restoreOriginalTextureSync())
+  }
+
+  private restoreOriginalTextureSync(): void {
     const { gl } = this
     const index = this.provinceIndex
     const palette = this.paletteData
@@ -839,6 +875,10 @@ export class MapRenderer {
     const neededHeight = Math.ceil((id + 1) / 256)
 
     if (neededHeight > this.paletteHeight) {
+      // Rare: only triggers when a new province id needs more than the
+      // current palette rows can address. Worth a trace since a bug here
+      // would silently corrupt paint state (wrong/missing province colors).
+      log.info('MapRenderer palette growing', { fromHeight: this.paletteHeight, toHeight: neededHeight })
       const expand = (old: Uint8Array): Uint8Array => {
         const next = new Uint8Array(256 * neededHeight * 4)
         next.set(old)
@@ -878,6 +918,15 @@ export class MapRenderer {
   }
 
   paintBrush(
+    imgCenterX: number, imgCenterY: number,
+    radius: number,
+    targetR: number, targetG: number, targetB: number,
+    selectionColors?: Set<number> | null
+  ): { pixels: BmpPixelStrokeDelta[]; affectedIds: Set<number> } | null {
+    return profilerTime('paintBrush', () => this.paintBrushSync(imgCenterX, imgCenterY, radius, targetR, targetG, targetB, selectionColors))
+  }
+
+  private paintBrushSync(
     imgCenterX: number, imgCenterY: number,
     radius: number,
     targetR: number, targetG: number, targetB: number,
