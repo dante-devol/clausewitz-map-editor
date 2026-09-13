@@ -8,6 +8,8 @@ import type { CanvasOverlay, BitmapCanvasOverlay } from '../contracts/CanvasOver
 import type { OverlayFilterRule } from '../../core/contracts/MapOverlay'
 import type { ProvinceIndex } from '../../infra/lib/provinceAnalysis'
 import type { BmpPixelStrokeDelta } from '../../../../shared/provinceEditing'
+import { log } from '../../infra/lib/logger'
+import { profilerTime, profilerStart, profilerEnd } from '../../infra/lib/profiler'
 
 // The canvas is absolutely positioned with inset:0, but as a replaced
 // element its CSS box falls back to its width/height *attribute* when no
@@ -250,7 +252,13 @@ export function useMapCanvas({
       fit()
       setImageLoaded(true)
       setBaseImageLoading(false)
-    }).catch(() => { if (cancelled) return; setBaseImageLoading(false) })
+    }).catch((error) => {
+      // Previously silent: the map would just never appear, with nothing to
+      // check.
+      log.error('Failed to load base province image', { error: String(error) })
+      if (cancelled) return
+      setBaseImageLoading(false)
+    })
     return () => {
       cancelled = true
       setBaseImageLoading(false)
@@ -298,10 +306,20 @@ export function useMapCanvas({
         pendingOverlays.map(async (overlay) => {
           const existing = overlayBitmapsRef.current.get(overlay.id)
           if (existing && existing.src === overlay.src) return null
-          const blob = await fetch(overlay.src).then((r) => r.blob())
-          const bitmap = await createImageBitmap(blob)
-          const image = await readBitmapPixels(bitmap)
-          return { overlay, image }
+          const profilerKey = `overlayLoad:${overlay.id}:${overlay.src}`
+          profilerStart(profilerKey)
+          try {
+            const blob = await fetch(overlay.src).then((r) => r.blob())
+            const bitmap = await createImageBitmap(blob)
+            const image = await readBitmapPixels(bitmap)
+            profilerEnd('overlayLoad', profilerKey)
+            return { overlay, image }
+          } catch (error) {
+            // Previously silent (once caught by the outer .catch below): an
+            // overlay just never appeared, with no indication why.
+            log.error('Failed to load overlay', { id: overlay.id, src: overlay.src, error: String(error) })
+            throw error
+          }
         })
       )
 
@@ -454,6 +472,10 @@ export function useMapCanvas({
   drawBrushCursorRef.current = drawBrushCursor
 
   const doBrushPaint = useCallback((canvasX: number, canvasY: number) => {
+    profilerTime('doBrushPaint', () => doBrushPaintSync(canvasX, canvasY))
+  }, [])
+
+  function doBrushPaintSync(canvasX: number, canvasY: number): void {
     const cfg = brushPaintConfigRef.current
     const renderer = rendererRef.current
     if (!cfg || !renderer) return
@@ -488,7 +510,7 @@ export function useMapCanvas({
       anyChange = true
     }
     if (anyChange) renderer.render(tx, ty, scale)
-  }, [])
+  }
 
   const finishBrushStroke = useCallback(() => {
     if (!isPaintingRef.current) return
@@ -624,7 +646,7 @@ function getOverlayRenderSource(entry: OverlayBitmapEntry, overlay: BitmapCanvas
   const ctx = canvas.getContext('2d')
   if (!ctx) return entry.bitmap
   const imageData = new ImageData(new Uint8ClampedArray(entry.pixelData), entry.width, entry.height)
-  applyOverlayFilterRules(imageData.data, overlay.filterRules, overlay.configuration.groups)
+  profilerTime('overlayFilterRules', () => applyOverlayFilterRules(imageData.data, overlay.filterRules, overlay.configuration.groups))
   ctx.putImageData(imageData, 0, 0)
   entry.filteredCanvas = canvas
   entry.filteredSignature = signature
@@ -751,8 +773,19 @@ function computeGroupsCentroid(groups: readonly ProvinceBboxGroup[]): { x: numbe
 // restarted its scan from scratch after every merge, making it roughly O(n³)
 // and able to stall zooming when many provinces were highlighted at once.
 export function mergeCollidingBboxGroups(groups: readonly ProvinceBboxGroup[], scale: number): ProvinceBboxGroup[] {
-  if (groups.length <= 1 || groups.length > BBOX_MERGE_GROUP_CAP) return [...groups]
+  if (groups.length <= 1) return [...groups]
+  if (groups.length > BBOX_MERGE_GROUP_CAP) {
+    // The O(n²) scan below is skipped past this size, so highlighting a very
+    // large selection silently falls back to unmerged (visually noisier)
+    // boxes — worth knowing when that's actually happening.
+    log.debug('mergeCollidingBboxGroups: over cap, skipping merge', { count: groups.length, cap: BBOX_MERGE_GROUP_CAP })
+    return [...groups]
+  }
 
+  return profilerTime('bboxMerge', () => mergeCollidingBboxGroupsSync(groups, scale))
+}
+
+function mergeCollidingBboxGroupsSync(groups: readonly ProvinceBboxGroup[], scale: number): ProvinceBboxGroup[] {
   const rects = groups.map((group) => expandedScreenRectForGroup(group, scale, BBOX_MERGE_PADDING_PX))
   const parent = groups.map((_, i) => i)
   const find = (i: number): number => {

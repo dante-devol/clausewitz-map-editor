@@ -15,12 +15,7 @@ export default defineConfig({
     }
   },
   preload: {
-    // electron-log's preload entry must be bundled in, not left as a
-    // runtime require() — the sandboxed preload context (sandbox: true in
-    // window.ts) only allows requiring Electron/Node builtins, not
-    // arbitrary node_modules, so an externalized 'electron-log/preload'
-    // fails at launch with "module not found".
-    plugins: [externalizeDepsPlugin({ exclude: ['electron-log'] })]
+    plugins: [externalizeDepsPlugin()]
   },
   renderer: {
     resolve: {

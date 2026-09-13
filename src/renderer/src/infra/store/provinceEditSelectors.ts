@@ -13,6 +13,8 @@ import type {
   ProvinceDraftFields,
   ProvinceDraftTarget
 } from '../../../../shared/provinceEditing'
+import { log } from '../lib/logger'
+import { profilerTime } from '../lib/profiler'
 
 export interface ProvinceDraftTargetMaps {
   byProvinceId: Map<number, ProvinceDraftTarget>
@@ -130,6 +132,19 @@ export function selectProvinceDraftTargetMaps(
     return lastDraftTargetMapsResult
   }
 
+  return profilerTime('selectProvinceDraftTargetMaps', () => computeDraftTargetMaps(args, originalDefinitions, pendingEdits, pendingBmpOnlyEdits, bmpReplacements, pendingNewProvinces, bmpOnlyEntries))
+}
+
+function computeDraftTargetMaps(
+  args: readonly unknown[],
+  originalDefinitions: Map<number, Province>,
+  pendingEdits: Map<number, Partial<ProvinceDraftFields>>,
+  pendingBmpOnlyEdits: Map<string, ProvinceDraftFields>,
+  bmpReplacements: Map<number, string>,
+  pendingNewProvinces: Map<string, number>,
+  bmpOnlyEntries: BmpOnlyEntry[]
+): ProvinceDraftTargetMaps {
+  log.debug('selectProvinceDraftTargetMaps: cache miss, recomputing', { provinces: originalDefinitions.size })
   const byProvinceId = new Map<number, ProvinceDraftTarget>()
   const byBmpGuid = new Map<string, ProvinceDraftTarget>()
   const byColor = new Map<number, ProvinceDraftTarget>()
@@ -280,101 +295,104 @@ export function selectEffectiveProvinceCatalog(
     return lastEffectiveCatalogResult
   }
 
-  const { byProvinceId, byBmpGuid } = selectProvinceDraftTargetMaps(
-    originalDefinitions,
-    pendingEdits,
-    pendingBmpOnlyEdits,
-    bmpReplacements,
-    pendingNewProvinces,
-    bmpOnlyEntries
-  )
-  const bitmapFacts = selectBitmapFactsFromCatalog(provinceCatalog)
-  const remainingColors = bitmapFacts ? new Map(bitmapFacts.byColor) : new Map<number, NonNullable<ProvinceCatalogEntry['bitmapFact']>>()
-  const entriesById = new Map<number, ProvinceCatalogEntry>()
+  log.debug('selectEffectiveProvinceCatalog: cache miss, recomputing', { catalogSize: provinceCatalog.length })
+  return profilerTime('selectEffectiveProvinceCatalog', (): ProvinceCatalogEntry[] => {
+    const { byProvinceId, byBmpGuid } = selectProvinceDraftTargetMaps(
+      originalDefinitions,
+      pendingEdits,
+      pendingBmpOnlyEdits,
+      bmpReplacements,
+      pendingNewProvinces,
+      bmpOnlyEntries
+    )
+    const bitmapFacts = selectBitmapFactsFromCatalog(provinceCatalog)
+    const remainingColors = bitmapFacts ? new Map(bitmapFacts.byColor) : new Map<number, NonNullable<ProvinceCatalogEntry['bitmapFact']>>()
+    const entriesById = new Map<number, ProvinceCatalogEntry>()
 
-  for (const target of byProvinceId.values()) {
-    if (target.provinceId === null) continue
-    const bitmapFact = remainingColors.get(target.color)
-    if (bitmapFact) remainingColors.delete(target.color)
-    entriesById.set(target.provinceId, {
-      key: `definition:${target.provinceId}`,
-      id: target.provinceId,
-      color: target.color,
-      type: target.type ?? null,
-      isCoastal: target.isCoastal ?? null,
-      terrain: target.terrain ?? null,
-      continent: target.continent ?? null,
-      canonical: true,
-      sources: ['definitions'],
-      mapPresence: bitmapFact ? 'present' : 'missing',
-      bitmapFact
-    })
-  }
-
-  const sortedIds = [...entriesById.keys()].sort((a, b) => a - b)
-  const catalog: ProvinceCatalogEntry[] = []
-
-  for (let index = 0; index < sortedIds.length; index++) {
-    const id = sortedIds[index]
-    if (index > 0) {
-      for (let missingId = sortedIds[index - 1] + 1; missingId < id; missingId++) {
-        catalog.push({
-          key: `gap:${missingId}`,
-          id: missingId,
-          color: null,
-          type: null,
-          isCoastal: null,
-          terrain: null,
-          continent: null,
-          canonical: false,
-          sources: ['id-gap'],
-          mapPresence: 'unknown'
-        })
-      }
+    for (const target of byProvinceId.values()) {
+      if (target.provinceId === null) continue
+      const bitmapFact = remainingColors.get(target.color)
+      if (bitmapFact) remainingColors.delete(target.color)
+      entriesById.set(target.provinceId, {
+        key: `definition:${target.provinceId}`,
+        id: target.provinceId,
+        color: target.color,
+        type: target.type ?? null,
+        isCoastal: target.isCoastal ?? null,
+        terrain: target.terrain ?? null,
+        continent: target.continent ?? null,
+        canonical: true,
+        sources: ['definitions'],
+        mapPresence: bitmapFact ? 'present' : 'missing',
+        bitmapFact
+      })
     }
-    catalog.push(entriesById.get(id)!)
-  }
 
-  for (const entry of bmpOnlyEntries) {
-    const target = byBmpGuid.get(entry.guid)
-    const bitmapFact = remainingColors.get(entry.color)
-    if (bitmapFact) remainingColors.delete(entry.color)
-    if (!target || target.status !== 'unregistered') continue
-    catalog.push({
-      key: `bmp:${entry.color}`,
-      id: null,
-      color: entry.color,
-      type: target.type ?? null,
-      isCoastal: target.isCoastal ?? null,
-      terrain: target.terrain ?? null,
-      continent: target.continent ?? null,
-      canonical: false,
-      sources: ['bmp-color'],
-      mapPresence: 'present',
-      bitmapFact
-    })
-  }
+    const sortedIds = [...entriesById.keys()].sort((a, b) => a - b)
+    const catalog: ProvinceCatalogEntry[] = []
 
-  for (const bitmapFact of remainingColors.values()) {
-    catalog.push({
-      key: `bmp:${bitmapFact.color}`,
-      id: null,
-      color: bitmapFact.color,
-      type: null,
-      isCoastal: null,
-      terrain: null,
-      continent: null,
-      canonical: false,
-      sources: ['bmp-color'],
-      mapPresence: 'present',
-      bitmapFact
-    })
-  }
+    for (let index = 0; index < sortedIds.length; index++) {
+      const id = sortedIds[index]
+      if (index > 0) {
+        for (let missingId = sortedIds[index - 1] + 1; missingId < id; missingId++) {
+          catalog.push({
+            key: `gap:${missingId}`,
+            id: missingId,
+            color: null,
+            type: null,
+            isCoastal: null,
+            terrain: null,
+            continent: null,
+            canonical: false,
+            sources: ['id-gap'],
+            mapPresence: 'unknown'
+          })
+        }
+      }
+      catalog.push(entriesById.get(id)!)
+    }
 
-  const result = catalog.sort(compareCatalogEntries)
-  lastEffectiveCatalogArgs = args
-  lastEffectiveCatalogResult = result
-  return result
+    for (const entry of bmpOnlyEntries) {
+      const target = byBmpGuid.get(entry.guid)
+      const bitmapFact = remainingColors.get(entry.color)
+      if (bitmapFact) remainingColors.delete(entry.color)
+      if (!target || target.status !== 'unregistered') continue
+      catalog.push({
+        key: `bmp:${entry.color}`,
+        id: null,
+        color: entry.color,
+        type: target.type ?? null,
+        isCoastal: target.isCoastal ?? null,
+        terrain: target.terrain ?? null,
+        continent: target.continent ?? null,
+        canonical: false,
+        sources: ['bmp-color'],
+        mapPresence: 'present',
+        bitmapFact
+      })
+    }
+
+    for (const bitmapFact of remainingColors.values()) {
+      catalog.push({
+        key: `bmp:${bitmapFact.color}`,
+        id: null,
+        color: bitmapFact.color,
+        type: null,
+        isCoastal: null,
+        terrain: null,
+        continent: null,
+        canonical: false,
+        sources: ['bmp-color'],
+        mapPresence: 'present',
+        bitmapFact
+      })
+    }
+
+    const result = catalog.sort(compareCatalogEntries)
+    lastEffectiveCatalogArgs = args
+    lastEffectiveCatalogResult = result
+    return result
+  })
 }
 
 function materializeProvinceDraftTarget(
