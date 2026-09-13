@@ -16,7 +16,7 @@ const useStyles = makeStyles({
 
 export function StrategicRegionPanel(): JSX.Element {
   const styles = useStyles()
-  const [changesCollapsed, setChangesCollapsed] = useState(false)
+  const [changesCollapsed, setChangesCollapsed] = useState(true)
 
   return (
     <div className={styles.panel}>

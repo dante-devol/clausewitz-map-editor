@@ -54,8 +54,8 @@ export function ProvincePanel(): JSX.Element {
   const clearSavedChanges = useMapDataStore((s) => s.clearSavedChanges)
 
   const [canonicalCollapsed, setCanonicalCollapsed] = useState(false)
-  const [bmpCollapsed, setBmpCollapsed] = useState(false)
-  const [changesCollapsed, setChangesCollapsed] = useState(false)
+  const [bmpCollapsed, setBmpCollapsed] = useState(true)
+  const [changesCollapsed, setChangesCollapsed] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [showSaveBlocker, setShowSaveBlocker] = useState(false)
