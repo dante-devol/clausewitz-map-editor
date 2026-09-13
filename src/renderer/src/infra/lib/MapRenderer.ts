@@ -1,4 +1,5 @@
 import { buildProvinceIndex, updateProvinceBboxesForRegion } from './provinceAnalysis'
+import { colorProvinceSubgraph, pickDistinctPalette } from './provinceGraphColoring'
 import type { ProvinceMapSource } from './ProvinceMapSource'
 import type { ProvinceIndex } from './provinceAnalysis'
 import type { BmpPixelStrokeDelta } from '../../../../shared/provinceEditing'
@@ -132,20 +133,70 @@ void main() {
 `
 
 // Reveal pass (state/strategic-region editing): fills every pixel whose
-// province is in the mask with that province's *original* color (sampled
-// from a palette that map-mode recoloring never touches), at a fixed low
-// opacity — lets the true province subdivisions show faintly through a
-// map-mode block color.
+// province is in the mask with a per-province graph-coloring tint, at a low
+// opacity — lets province subdivisions show faintly through a map-mode
+// block color.
+//
+// A plain alpha mix (base*(1-a) + fill*a) gets drowned out whenever the
+// underlying block color is itself vivid/saturated: the strong channel
+// dominates the blend regardless of how different the fill hue is, so
+// distinct fill colors all read as "slightly different shades of the base
+// color" instead of clearly different hues. Colorizing first — replacing
+// the base's hue/saturation with the fill's, but keeping the base's own
+// lightness — anchors every tinted pixel to a consistent brightness so hue
+// is the only thing that varies between provinces, which is what actually
+// needs to read as different.
 const FRAG_REVEAL = `#version 300 es
 precision highp float;
 uniform sampler2D u_id_tex;
-uniform sampler2D u_palette_tex;
+uniform sampler2D u_base_tex;
+uniform sampler2D u_fill_tex;
 uniform int u_palette_height;
 uniform sampler2D u_mask_tex;
 uniform int u_mask_height;
 uniform float u_opacity;
 in vec2 v_uv;
 out vec4 fragColor;
+
+vec3 rgb2hsl(vec3 c) {
+  float maxc = max(max(c.r, c.g), c.b);
+  float minc = min(min(c.r, c.g), c.b);
+  float l = (maxc + minc) * 0.5;
+  float h = 0.0;
+  float s = 0.0;
+  float d = maxc - minc;
+  if (d > 0.0001) {
+    s = l > 0.5 ? d / (2.0 - maxc - minc) : d / (maxc + minc);
+    if (maxc == c.r) h = mod((c.g - c.b) / d, 6.0);
+    else if (maxc == c.g) h = (c.b - c.r) / d + 2.0;
+    else h = (c.r - c.g) / d + 4.0;
+    h /= 6.0;
+    if (h < 0.0) h += 1.0;
+  }
+  return vec3(h, s, l);
+}
+
+float hue2rgb(float p, float q, float t) {
+  if (t < 0.0) t += 1.0;
+  if (t > 1.0) t -= 1.0;
+  if (t < 1.0 / 6.0) return p + (q - p) * 6.0 * t;
+  if (t < 1.0 / 2.0) return q;
+  if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+  return p;
+}
+
+vec3 hsl2rgb(vec3 hsl) {
+  float h = hsl.x, s = hsl.y, l = hsl.z;
+  if (s <= 0.0001) return vec3(l);
+  float q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
+  float p = 2.0 * l - q;
+  return vec3(
+    hue2rgb(p, q, h + 1.0 / 3.0),
+    hue2rgb(p, q, h),
+    hue2rgb(p, q, h - 1.0 / 3.0)
+  );
+}
+
 void main() {
   vec4 packed = texture(u_id_tex, v_uv);
   float lo = packed.r;
@@ -153,9 +204,16 @@ void main() {
   float col = (lo * 255.0 + 0.5) / 256.0;
   float maskRow = (hi * 255.0 + 0.5) / float(u_mask_height);
   if (texture(u_mask_tex, vec2(col, maskRow)).r <= 0.5) discard;
+
   float paletteRow = (hi * 255.0 + 0.5) / float(u_palette_height);
-  vec3 color = texture(u_palette_tex, vec2(col, paletteRow)).rgb;
-  fragColor = vec4(color, u_opacity);
+  vec3 baseColor = texture(u_base_tex, vec2(col, paletteRow)).rgb;
+  vec3 fillColor = texture(u_fill_tex, vec2(col, paletteRow)).rgb;
+
+  vec3 baseHsl = rgb2hsl(baseColor);
+  vec3 fillHsl = rgb2hsl(fillColor);
+  vec3 colorized = hsl2rgb(vec3(fillHsl.x, fillHsl.y, baseHsl.z));
+
+  fragColor = vec4(colorized, u_opacity);
 }
 `
 
@@ -184,7 +242,7 @@ interface ProvinceBboxGroup {
 }
 
 // Opacity of the reveal pass — see FRAG_REVEAL.
-const REVEAL_OPACITY = 0.10
+const REVEAL_OPACITY = 0.2
 
 const QUAD = new Float32Array([
   0, 0,  1, 0,  0, 1,
@@ -248,7 +306,8 @@ export class MapRenderer {
   private revealPosLoc!: number
   private revealMatrixLoc!: WebGLUniformLocation
   private revealIdTexLoc!: WebGLUniformLocation
-  private revealPaletteTexLoc!: WebGLUniformLocation
+  private revealBaseTexLoc!: WebGLUniformLocation
+  private revealFillTexLoc!: WebGLUniformLocation
   private revealPaletteHeightLoc!: WebGLUniformLocation
   private revealMaskTexLoc!: WebGLUniformLocation
   private revealMaskHeightLoc!: WebGLUniformLocation
@@ -272,12 +331,14 @@ export class MapRenderer {
   private hoverData: Uint8Array | null = null
   private hoverCount = 0
 
-  // Original (never-recolored) palette — snapshot taken at load time, before
-  // any map-mode recolorTexture() call, and never mutated afterwards. Lets
-  // the reveal pass show true province colors even while a map mode has
-  // overwritten the main palette texture for display.
-  private originalPaletteTexture: WebGLTexture | null = null
-  private originalPaletteData: Uint8Array | null = null
+  // Reveal fill palette — starts zeroed, like the other mask textures.
+  // setRevealColors() patches in colors only for the provinces currently in
+  // the revealed group (a greedy graph coloring of just that small induced
+  // subgraph — see provinceGraphColoring.ts), leaving every other entry
+  // stale; that's fine since the reveal mask below discards anything not in
+  // the current group, so stale entries are never sampled.
+  private revealPaletteTexture: WebGLTexture | null = null
+  private revealPaletteData: Uint8Array | null = null
   // Reveal mask: same 256×paletteHeight layout as selection/validation/hover.
   private revealTexture: WebGLTexture | null = null
   private revealData: Uint8Array | null = null
@@ -474,7 +535,8 @@ export class MapRenderer {
     this.revealPosLoc = gl.getAttribLocation(revealProg, 'a_pos')
     this.revealMatrixLoc = gl.getUniformLocation(revealProg, 'u_matrix')!
     this.revealIdTexLoc = gl.getUniformLocation(revealProg, 'u_id_tex')!
-    this.revealPaletteTexLoc = gl.getUniformLocation(revealProg, 'u_palette_tex')!
+    this.revealBaseTexLoc = gl.getUniformLocation(revealProg, 'u_base_tex')!
+    this.revealFillTexLoc = gl.getUniformLocation(revealProg, 'u_fill_tex')!
     this.revealPaletteHeightLoc = gl.getUniformLocation(revealProg, 'u_palette_height')!
     this.revealMaskTexLoc = gl.getUniformLocation(revealProg, 'u_mask_tex')!
     this.revealMaskHeightLoc = gl.getUniformLocation(revealProg, 'u_mask_height')!
@@ -563,18 +625,13 @@ export class MapRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 
-    // Original-color palette — a snapshot of paletteData exactly as built
-    // above (true province colors), taken before any recolorTexture() call
-    // can overwrite paletteData for map-mode display. Never mutated again.
-    this.originalPaletteData = paletteData.slice()
-    if (this.originalPaletteTexture) gl.deleteTexture(this.originalPaletteTexture)
-    this.originalPaletteTexture = gl.createTexture()!
-    gl.bindTexture(gl.TEXTURE_2D, this.originalPaletteTexture)
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, paletteHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.originalPaletteData)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+    // Reveal fill palette — zero-initialized like the other mask textures;
+    // setRevealColors() patches individual entries on demand (see the field
+    // comment above).
+    if (this.revealPaletteTexture) gl.deleteTexture(this.revealPaletteTexture)
+    this.revealPaletteData = new Uint8Array(256 * paletteHeight * 4)
+    this.revealPaletteTexture = gl.createTexture()!
+    initializeMaskTexture(gl, this.revealPaletteTexture, this.revealPaletteData, paletteHeight)
 
     // Selection texture — same 256×paletteHeight layout as palette.
     // R channel = 1.0 (255) for selected province IDs, 0 otherwise.
@@ -669,14 +726,13 @@ export class MapRenderer {
       this.hoverTexture = gl.createTexture()!
       initializeMaskTexture(gl, this.hoverTexture, this.hoverData, this.paletteHeight)
     }
-    if (this.originalPaletteData) {
-      this.originalPaletteTexture = gl.createTexture()!
-      gl.bindTexture(gl.TEXTURE_2D, this.originalPaletteTexture)
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, this.paletteHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.originalPaletteData)
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+    if (this.revealPaletteData) {
+      // Reuploads whatever was last patched in by setRevealColors (including
+      // colors for the currently-revealed group, if any) — the CPU-side
+      // array is always kept in sync with the texture, so this is a faithful
+      // restore, not just a reset to zero.
+      this.revealPaletteTexture = gl.createTexture()!
+      initializeMaskTexture(gl, this.revealPaletteTexture, this.revealPaletteData, this.paletteHeight)
     }
     if (this.revealData) {
       this.revealTexture = gl.createTexture()!
@@ -781,9 +837,49 @@ export class MapRenderer {
   }
 
   // Reveal pass (state/strategic-region editing): the set of provinces to
-  // lightly tint with their true color. Pass [] to disable.
+  // lightly tint. Pass [] to disable. Colors aren't the provinces' own BMP
+  // colors (which can be visually similar and defeat the point of showing
+  // subdivisions) — instead this greedily graph-colors just this group's own
+  // induced subgraph (bounded by group size, not total province count) and
+  // maps class indices onto a palette picked for maximum distinctiveness at
+  // however many classes this selection needs, only ever touching the
+  // handful of texels the group actually needs.
   setRevealColors(packedColors: number[]): void {
     this.revealCount = this.updateHighlightTexture(this.revealTexture, this.revealData, packedColors)
+
+    const { gl } = this
+    const index = this.provinceIndex
+    if (!index || !this.revealPaletteTexture || !this.revealPaletteData) return
+
+    const memberIds: number[] = []
+    for (const packed of packedColors) {
+      const id = index.colorToId.get(packed)
+      if (id !== undefined) memberIds.push(id)
+    }
+    if (memberIds.length === 0) return
+
+    const colorClassById = colorProvinceSubgraph(memberIds, index.adjacency)
+    // Pick exactly as many colors as this selection actually needs, chosen
+    // for maximum pairwise distinctiveness at that count — most selections
+    // only need 2-4 classes, and those are picked to be as different from
+    // each other as the candidate set allows, not just a fixed prefix.
+    const classCount = new Set(colorClassById.values()).size
+    const palette = pickDistinctPalette(classCount)
+
+    gl.bindTexture(gl.TEXTURE_2D, this.revealPaletteTexture)
+    for (const id of memberIds) {
+      const cls = colorClassById.get(id) ?? 0
+      const color = palette[cls % palette.length]
+      const base = id * 4
+      const r = (color >> 16) & 0xff, g = (color >> 8) & 0xff, b = color & 0xff
+      this.revealPaletteData[base] = r
+      this.revealPaletteData[base + 1] = g
+      this.revealPaletteData[base + 2] = b
+      this.revealPaletteData[base + 3] = 255
+      const col = id % 256
+      const row = Math.floor(id / 256)
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, col, row, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([r, g, b, 255]))
+    }
   }
 
   render(tx: number, ty: number, scale: number): void {
@@ -817,7 +913,7 @@ export class MapRenderer {
     gl.drawArrays(gl.TRIANGLES, 0, 6)
 
     // --- Reveal (state/strategic-region editing) ---
-    if (this.revealCount > 0 && this.revealTexture && this.originalPaletteTexture) {
+    if (this.revealCount > 0 && this.revealTexture && this.revealPaletteTexture) {
       gl.enable(gl.BLEND)
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
       gl.useProgram(this.revealProgram)
@@ -829,8 +925,15 @@ export class MapRenderer {
       gl.bindTexture(gl.TEXTURE_2D, this.idTexture)
       gl.uniform1i(this.revealIdTexLoc, 0)
       gl.activeTexture(gl.TEXTURE1)
-      gl.bindTexture(gl.TEXTURE_2D, this.originalPaletteTexture)
-      gl.uniform1i(this.revealPaletteTexLoc, 1)
+      // The real on-screen display palette (base map / map-mode colors) —
+      // gives FRAG_REVEAL each pixel's actual current lightness to colorize
+      // against, so the tint reads as a hue shift rather than getting
+      // drowned out by a vivid/saturated block color. See FRAG_REVEAL.
+      gl.bindTexture(gl.TEXTURE_2D, this.paletteTexture)
+      gl.uniform1i(this.revealBaseTexLoc, 1)
+      gl.activeTexture(gl.TEXTURE3)
+      gl.bindTexture(gl.TEXTURE_2D, this.revealPaletteTexture)
+      gl.uniform1i(this.revealFillTexLoc, 3)
       gl.uniform1i(this.revealPaletteHeightLoc, this.paletteHeight)
       gl.activeTexture(gl.TEXTURE2)
       gl.bindTexture(gl.TEXTURE_2D, this.revealTexture)
@@ -951,7 +1054,7 @@ export class MapRenderer {
     if (this.validationWarningTexture) { gl.deleteTexture(this.validationWarningTexture); this.validationWarningTexture = null }
     if (this.validationErrorTexture) { gl.deleteTexture(this.validationErrorTexture); this.validationErrorTexture = null }
     if (this.hoverTexture)    { gl.deleteTexture(this.hoverTexture);    this.hoverTexture = null }
-    if (this.originalPaletteTexture) { gl.deleteTexture(this.originalPaletteTexture); this.originalPaletteTexture = null }
+    if (this.revealPaletteTexture) { gl.deleteTexture(this.revealPaletteTexture); this.revealPaletteTexture = null }
     if (this.revealTexture)  { gl.deleteTexture(this.revealTexture);  this.revealTexture = null }
     this._imageSize         = { width: 0, height: 0 }
     this.pixelData          = null
@@ -966,7 +1069,7 @@ export class MapRenderer {
     this.validationErrorCount = 0
     this.hoverData           = null
     this.hoverCount          = 0
-    this.originalPaletteData = null
+    this.revealPaletteData   = null
     this.revealData          = null
     this.revealCount         = 0
     this.selectionBboxGroups = []
@@ -1067,7 +1170,7 @@ export class MapRenderer {
       this.validationWarningData = expand(this.validationWarningData!)
       this.validationErrorData   = expand(this.validationErrorData!)
       this.hoverData              = expand(this.hoverData!)
-      this.originalPaletteData    = expand(this.originalPaletteData!)
+      this.revealPaletteData      = expand(this.revealPaletteData!)
       this.revealData              = expand(this.revealData!)
       this.paletteHeight = neededHeight
 
@@ -1077,35 +1180,26 @@ export class MapRenderer {
         initializeMaskTexture(gl, tex, data, neededHeight)
         return tex
       }
-      // Write color into palette before reuploading so it's included in the
-      // full upload. A freshly-painted province's "original" color is just
-      // the color it was created with, so the original-palette snapshot
-      // gets the same write.
+      // Write color into palette before reuploading so it's included in the full upload.
       const base = id * 4
       this.paletteData[base] = r; this.paletteData[base + 1] = g
       this.paletteData[base + 2] = b; this.paletteData[base + 3] = 255
-      this.originalPaletteData[base] = r; this.originalPaletteData[base + 1] = g
-      this.originalPaletteData[base + 2] = b; this.originalPaletteData[base + 3] = 255
 
       this.paletteTexture           = reupload(this.paletteTexture, this.paletteData)
       this.selectionTexture         = reupload(this.selectionTexture, this.selectionData)
       this.validationWarningTexture = reupload(this.validationWarningTexture, this.validationWarningData)
       this.validationErrorTexture   = reupload(this.validationErrorTexture, this.validationErrorData)
       this.hoverTexture              = reupload(this.hoverTexture, this.hoverData)
-      this.originalPaletteTexture    = reupload(this.originalPaletteTexture, this.originalPaletteData)
+      this.revealPaletteTexture      = reupload(this.revealPaletteTexture, this.revealPaletteData)
       this.revealTexture              = reupload(this.revealTexture, this.revealData)
     } else {
       // Palette is already large enough — patch just the one texel.
       const base = id * 4
       this.paletteData![base] = r; this.paletteData![base + 1] = g
       this.paletteData![base + 2] = b; this.paletteData![base + 3] = 255
-      this.originalPaletteData![base] = r; this.originalPaletteData![base + 1] = g
-      this.originalPaletteData![base + 2] = b; this.originalPaletteData![base + 3] = 255
       const col = id % 256
       const row = Math.floor(id / 256)
       gl.bindTexture(gl.TEXTURE_2D, this.paletteTexture)
-      gl.texSubImage2D(gl.TEXTURE_2D, 0, col, row, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([r, g, b, 255]))
-      gl.bindTexture(gl.TEXTURE_2D, this.originalPaletteTexture)
       gl.texSubImage2D(gl.TEXTURE_2D, 0, col, row, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([r, g, b, 255]))
     }
   }
@@ -1273,7 +1367,7 @@ export class MapRenderer {
     if (this.validationWarningTexture) gl.deleteTexture(this.validationWarningTexture)
     if (this.validationErrorTexture) gl.deleteTexture(this.validationErrorTexture)
     if (this.hoverTexture)    gl.deleteTexture(this.hoverTexture)
-    if (this.originalPaletteTexture) gl.deleteTexture(this.originalPaletteTexture)
+    if (this.revealPaletteTexture) gl.deleteTexture(this.revealPaletteTexture)
     if (this.revealTexture)  gl.deleteTexture(this.revealTexture)
     for (const entry of this.overlayEntries) gl.deleteTexture(entry.texture)
     for (const entry of this.outlineOverlayEntries) gl.deleteTexture(entry.texture)
