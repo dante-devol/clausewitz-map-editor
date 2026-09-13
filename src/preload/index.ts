@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import 'electron-log/preload'
 import type { ApiContract } from '../shared/contract/api'
 import { channels } from '../shared/contract/events'
 

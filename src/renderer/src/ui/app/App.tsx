@@ -14,6 +14,9 @@ import { useProjectSelection } from '../hooks/useProjectSelection'
 import { useMapLoader } from '../hooks/useMapLoader'
 import { useProvinceValidation } from '../hooks/useProvinceValidation'
 import { useI18n } from '../i18n/I18nProvider'
+import { installRendererErrorLogging } from '../../infra/lib/logger'
+
+installRendererErrorLogging()
 
 const VIEWS = {
   map: <MapView />,

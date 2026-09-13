@@ -9,6 +9,7 @@ import { useI18n, type MessageParams } from '../i18n/I18nProvider'
 import type { MessageKey } from '../i18n/messages/en'
 import type { ProvinceValidationWorkerRequest, ProvinceValidationWorkerResponse } from '../../infra/workers/provinceValidation.worker'
 import { profilerStart, profilerEnd } from '../../infra/lib/profiler'
+import { log } from '../../infra/lib/logger'
 
 // Validators run off the main thread (provinceValidation.worker.ts) and are
 // debounced: a burst of rapid edits (typing, a paint drag, a batch move)
@@ -60,6 +61,11 @@ export function useProvinceValidation(): void {
       { type: 'module' }
     )
     workerRef.current = worker
+    worker.onerror = (e: ErrorEvent) => {
+      // Previously silent: a thrown error inside the worker had nowhere to
+      // go, so a validation pass could just vanish with no trace.
+      log.error('Province validation worker error', { message: e.message, filename: e.filename, lineno: e.lineno })
+    }
     worker.onmessage = (e: MessageEvent<ProvinceValidationWorkerResponse>) => {
       const msg = e.data
       profilerEnd('validation', `validation:${msg.requestId}`)

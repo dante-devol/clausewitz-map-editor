@@ -2,7 +2,9 @@ import { app, BrowserWindow, session } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import { createWindow } from './window'
 import { registerIpcHandlers } from './ipc/registerHandlers'
+import { initLogger, log } from './logger'
 
+initLogger()
 registerIpcHandlers()
 
 // Only in production: the app never loads remote content or navigates away
@@ -36,6 +38,8 @@ app.whenReady().then(() => {
     })
   }
 
+  log.info('App ready', { version: app.getVersion() })
+
   createWindow()
   // macOS: re-create the window when the dock icon is clicked with no windows
   // open. Clicking the dock icon while a window already exists (e.g. it was
@@ -46,5 +50,6 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  log.info('All windows closed')
   if (process.platform !== 'darwin') app.quit()
 })
