@@ -1,6 +1,6 @@
 import { memo, useState, useEffect } from 'react'
 import { makeStyles, tokens, Button, Tooltip } from '@fluentui/react-components'
-import { ChevronDownRegular, ChevronUpRegular } from '@fluentui/react-icons'
+import { ChevronDownRegular, ChevronUpRegular, ChevronLeftRegular, ChevronRightRegular } from '@fluentui/react-icons'
 import { MapModePanel } from '../components/MapModePanel'
 import { MapCanvas } from '../components/MapCanvas'
 import { ProvincePanel } from '../components/provincePanel/ProvincePanel'
@@ -61,14 +61,23 @@ const useStyles = makeStyles({
   },
   sidebar: {
     display: 'flex',
-    flexDirection: 'column',
-    width: '220px',
+    flexDirection: 'row',
     borderLeft: `1px solid ${tokens.colorNeutralStroke2}`,
     overflow: 'hidden'
   },
-  sidebarTop: {
+  sidebarContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    width: '220px',
     padding: tokens.spacingVerticalM,
-    flexShrink: 0
+    overflow: 'hidden'
+  },
+  sidebarToggle: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    flexShrink: 0,
+    paddingTop: tokens.spacingVerticalXS
   }
 })
 
@@ -90,6 +99,7 @@ export function MapView() {
         : selectedProvinceIds.length > 0 || selectedBmpGuids.length > 0
 
   const [detailCollapsed, setDetailCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
 
   useEffect(() => {
     if (!showDrawer) setDetailCollapsed(false)
@@ -132,7 +142,21 @@ export function MapView() {
         <StableMapCanvas />
       </div>
       <div className={styles.sidebar}>
-        <MapSidebarTop className={styles.sidebarTop} />
+        <div className={styles.sidebarToggle}>
+          <Tooltip
+            content={sidebarCollapsed ? t('mapView.expandOverlayPanel') : t('mapView.collapseOverlayPanel')}
+            relationship="label"
+            positioning="before"
+          >
+            <Button
+              size="small"
+              appearance="subtle"
+              icon={sidebarCollapsed ? <ChevronLeftRegular /> : <ChevronRightRegular />}
+              onClick={() => setSidebarCollapsed((c) => !c)}
+            />
+          </Tooltip>
+        </div>
+        {!sidebarCollapsed && <MapSidebarTop className={styles.sidebarContent} />}
       </div>
     </div>
   )

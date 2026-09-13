@@ -105,6 +105,8 @@ export const frMessages: Record<MessageKey, string> = {
   'mapValue.inland': 'interieur',
   'mapValue.none': 'aucun',
   'mapView.expandDetailPanel': 'Deplier le panneau de details',
+  'mapView.expandOverlayPanel': 'Deplier le panneau de superposition',
+  'mapView.collapseOverlayPanel': 'Replier le panneau de superposition',
   'map.hover.provinceId': 'ID de province',
   'map.hover.unregisteredProvince': 'Province non enregistree',
   'map.hover.type': 'Type',

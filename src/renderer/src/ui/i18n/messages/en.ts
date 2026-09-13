@@ -103,6 +103,8 @@ export const enMessages = {
   'mapValue.inland': 'inland',
   'mapValue.none': 'none',
   'mapView.expandDetailPanel': 'Expand detail panel',
+  'mapView.expandOverlayPanel': 'Expand overlay panel',
+  'mapView.collapseOverlayPanel': 'Collapse overlay panel',
   'map.hover.provinceId': 'Province ID',
   'map.hover.unregisteredProvince': 'Unregistered Province',
   'map.hover.type': 'Type',
