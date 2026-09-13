@@ -3,6 +3,7 @@ import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import type { AppConfig } from '../shared/contract/api'
 import { deepEqual } from '../shared/deepEqual'
+import { log } from './logger'
 
 // Add new config keys here. Defaults are the source of truth —
 // only deviations from these are written to disk.
@@ -35,7 +36,10 @@ function readOverrides(): Partial<Config> {
     const file = CONFIG_PATH()
     if (!existsSync(file)) return {}
     return JSON.parse(readFileSync(file, 'utf-8'))
-  } catch {
+  } catch (error) {
+    // Previously silent: a corrupt config.json would just revert to defaults
+    // with no trace of why.
+    log.warn('Failed to read config.json, falling back to defaults', { error: String(error) })
     return {}
   }
 }
