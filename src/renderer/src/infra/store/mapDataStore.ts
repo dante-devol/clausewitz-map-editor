@@ -44,6 +44,11 @@ import {
   BMP_EDIT_EMPTY,
   type BmpEditSlice
 } from './slices/bmpEditSlice'
+import {
+  createLocalisationSlice,
+  LOCALISATION_EMPTY,
+  type LocalisationSlice
+} from './slices/localisationSlice'
 
 export type MapDataState =
   ProvinceDataSlice &
@@ -54,7 +59,8 @@ export type MapDataState =
   EditorModeSlice &
   StateEditSlice &
   StrategicRegionEditSlice &
-  BmpEditSlice & {
+  BmpEditSlice &
+  LocalisationSlice & {
     clear: () => void
   }
 
@@ -82,6 +88,7 @@ export const useMapDataStore = create<MapDataState>()((...a) => {
     ...createStateEditSlice(...a),
     ...createStrategicRegionEditSlice(...a),
     ...createBmpEditSlice(...a),
+    ...createLocalisationSlice(...a),
     clear: () => set({
       ...PROVINCE_DATA_EMPTY,
       ...PROVINCE_EDIT_EMPTY,
@@ -92,6 +99,7 @@ export const useMapDataStore = create<MapDataState>()((...a) => {
       ...STATE_EDIT_EMPTY,
       ...STRATEGIC_REGION_EDIT_EMPTY,
       ...BMP_EDIT_EMPTY,
+      ...LOCALISATION_EMPTY,
     }),
   }
 })

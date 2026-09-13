@@ -72,6 +72,10 @@ describe('StatesTxt.parse', () => {
     })
   })
 
+  it('defaults displayName to the raw loc key — localisation resolves it later', () => {
+    expect(state.displayName).toBe('STATE_900')
+  })
+
   it('ignores commented-out entries', () => {
     expect(state.resources).toEqual([{ type: 'oil', amount: 4 }])
   })

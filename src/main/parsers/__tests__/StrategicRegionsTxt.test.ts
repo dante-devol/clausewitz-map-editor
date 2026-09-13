@@ -42,6 +42,11 @@ function parseOne(content: string): StrategicRegionDefinition {
 describe('StrategicRegionsTxt.parse', () => {
   const region = parseOne(REGION_FILE)
 
+  it('defaults displayName to the raw loc key — localisation resolves it later', () => {
+    expect(region.name).toBe('STRATEGICREGION_77')
+    expect(region.displayName).toBe('STRATEGICREGION_77')
+  })
+
   it('keeps negative temperatures', () => {
     expect(region.weatherPeriods[0].temperature).toEqual([-18, -2])
   })

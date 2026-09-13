@@ -26,7 +26,9 @@ export function StateList(): JSX.Element {
       emptyText={t('statePanel.list.empty')}
       renderRow={(state) => {
         const patch = pendingStateEdits.get(state.id)
-        const displayName = patch?.name ?? state.name
+        // A pending edit to the raw key takes precedence (it's what will be
+        // saved); otherwise show the resolved localised text.
+        const nameLabel = patch?.name ?? state.displayName
         const displayOwner = patch !== undefined && 'owner' in patch
           ? (patch.owner ?? undefined)
           : state.history.owner
@@ -35,7 +37,7 @@ export function StateList(): JSX.Element {
         return (
           <>
             <Text size={100} className={rowStyles.id}>{state.id}</Text>
-            <Text size={100} className={rowStyles.name}>{displayName}</Text>
+            <Text size={100} className={rowStyles.name}>{nameLabel}</Text>
             <Text size={100} className={rowStyles.category}>{displayCategory}</Text>
             <Text size={100} className={rowStyles.owner}>{displayOwner ?? '—'}</Text>
           </>

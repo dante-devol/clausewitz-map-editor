@@ -20,7 +20,7 @@ export function StateChangesList({ collapsed, onToggleCollapse }: Props): JSX.El
     const state = statesById.get(stateId)
     return {
       id: stateId,
-      name: patch.name ?? state?.name ?? String(stateId),
+      name: patch.name ?? state?.displayName ?? String(stateId),
       fieldCount: Object.keys(patch).length
     }
   })

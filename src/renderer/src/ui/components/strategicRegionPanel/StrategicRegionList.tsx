@@ -28,12 +28,14 @@ export function StrategicRegionList(): JSX.Element {
       emptyText={t('stratRegionPanel.list.empty')}
       renderRow={(region) => {
         const patch = pendingStrategicRegionEdits.get(region.id)
-        const displayName = patch?.name ?? region.name
+        // A pending edit to the raw key takes precedence (it's what will be
+        // saved); otherwise show the resolved localised text.
+        const nameLabel = patch?.name ?? region.displayName
 
         return (
           <>
             <Text size={100} className={rowStyles.id}>{region.id}</Text>
-            <Text size={100} className={rowStyles.name}>{displayName || `Region ${region.id}`}</Text>
+            <Text size={100} className={rowStyles.name}>{nameLabel || `Region ${region.id}`}</Text>
             <Text size={100} className={rowStyles.count}>{region.provinceIds.length}</Text>
           </>
         )

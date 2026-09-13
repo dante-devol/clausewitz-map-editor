@@ -5,6 +5,7 @@ import { StateCategoryTxt } from '../parsers/StateCategoryTxt'
 import { ResourcesTxt } from '../parsers/ResourcesTxt'
 import { BuildingsTxt } from '../parsers/BuildingsTxt'
 import { DefinitionsCsv } from '../parsers/DefinitionsCsv'
+import { LocalisationYml, type LocalisationEntry } from '../parsers/LocalisationYml'
 import type {
   Building,
   Continent,
@@ -24,6 +25,7 @@ export interface ParserInputMap {
   resources:        { content: string }
   buildings:        { content: string }
   definitions:      { content: string; continents: Continent[] }
+  localisation:     { content: string; neededKeys: string[] }
 }
 
 export interface ParserOutputMap {
@@ -34,6 +36,7 @@ export interface ParserOutputMap {
   resources:        Resource
   buildings:        Building
   definitions:      Province
+  localisation:     LocalisationEntry
 }
 
 export type ParserKey = keyof ParserInputMap
@@ -46,6 +49,7 @@ export const parserRegistry: { [K in ParserKey]: (input: ParserInputMap[K]) => P
   resources:        ({ content }) => ResourcesTxt.parse(content),
   buildings:        ({ content }) => BuildingsTxt.parse(content),
   definitions:      ({ content, continents }) => DefinitionsCsv.parse(content, continents),
+  localisation:     ({ content, neededKeys }) => LocalisationYml.parse(content, new Set(neededKeys)),
 }
 
 // A union-indexed lookup like `parserRegistry[task.key]` yields a union of

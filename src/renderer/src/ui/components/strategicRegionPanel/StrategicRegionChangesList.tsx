@@ -20,7 +20,7 @@ export function StrategicRegionChangesList({ collapsed, onToggleCollapse }: Prop
     const region = strategicRegionsById.get(regionId)
     return {
       id: regionId,
-      name: patch.name ?? region?.name ?? String(regionId),
+      name: patch.name ?? region?.displayName ?? String(regionId),
       fieldCount: Object.keys(patch).length
     }
   })

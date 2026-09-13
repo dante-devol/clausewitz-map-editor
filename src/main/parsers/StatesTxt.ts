@@ -54,9 +54,13 @@ export function readState(block: ScriptBlock, source: string): StateDefinition |
     ? readStateHistory(historyBlock, source)
     : { owner: undefined, coreOf: [], buildings: [], victoryPoints: [], effects: [], dateHistory: [] }
 
+  const name = scalarOf(firstAssignment(block, 'name')) ?? ''
   const state: StateDefinition = {
     id,
-    name: scalarOf(firstAssignment(block, 'name')) ?? '',
+    name,
+    // No localisation is resolved at parse time — this is upgraded once
+    // ProjectSession's background localisation pass resolves `name`.
+    displayName: name,
     provinceIds,
     manpower: numberOf(firstAssignment(block, 'manpower')) ?? 0,
     stateCategory: scalarOf(firstAssignment(block, 'state_category')) ?? '',

@@ -254,7 +254,7 @@ function StatesTab() {
             {rows.map((state, i) => (
               <tr key={state.id} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
                 <td className={styles.td}>{state.id}</td>
-                <td className={styles.td}>{state.name || '—'}</td>
+                <td className={styles.td}>{state.displayName || '—'}</td>
                 <td className={styles.td}>{state.stateCategory || '—'}</td>
                 <td className={styles.td}>{formatNumber(state.manpower)}</td>
                 <td className={styles.td}>{state.history.owner ?? '—'}</td>
@@ -381,7 +381,7 @@ function StrategicRegionsTab() {
             {rows.map((region, i) => (
               <tr key={region.id} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
                 <td className={styles.td}>{region.id}</td>
-                <td className={styles.td}>{region.name || '—'}</td>
+                <td className={styles.td}>{region.displayName || '—'}</td>
                 <td className={styles.td}>{formatNumber(region.weatherPeriods?.length ?? 0)}</td>
                 <td className={styles.td}>{formatNumber(region.provinceIds.length)}</td>
                 <td className={styles.td}>{formatProvincePreview(region.provinceIds)}</td>
@@ -444,7 +444,43 @@ function ValidationTab() {
   )
 }
 
-type TabId = 'provinces' | 'terrain' | 'continents' | 'states' | 'strategicRegions' | 'stateCategories' | 'buildings' | 'validation'
+function LocalisationTab() {
+  const styles = useStyles()
+  const { t, formatNumber } = useI18n()
+  const localisationEntries = useMapDataStore((s) => s.localisationEntries)
+  const rows = Object.entries(localisationEntries).slice(0, ROW_CAP)
+  const total = Object.keys(localisationEntries).length
+
+  return (
+    <>
+      <div className={styles.summary}>
+        <Badge appearance="filled" color="informative">{formatNumber(total)}</Badge>
+        <Text size={200}>{t('debug.localisationEntriesLoaded', { count: formatNumber(total) })}</Text>
+        {total > ROW_CAP && <Text className={styles.cap}>{t('debug.showingFirst', { count: formatNumber(ROW_CAP) })}</Text>}
+      </div>
+      <div className={styles.tableWrap}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th className={styles.th}>{t('debug.column.key')}</th>
+              <th className={styles.th}>{t('debug.column.value')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(([key, value], i) => (
+              <tr key={key} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
+                <td className={styles.td}>{key}</td>
+                <td className={`${styles.td} ${styles.message}`}>{value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+type TabId = 'provinces' | 'terrain' | 'continents' | 'states' | 'strategicRegions' | 'stateCategories' | 'buildings' | 'localisation' | 'validation'
 
 export function DataView() {
   const styles = useStyles()
@@ -458,6 +494,7 @@ export function DataView() {
   const strategicRegions = useMapDataStore((s) => s.strategicRegions)
   const stateCategories = useMapDataStore((s) => s.stateCategories)
   const buildings = useMapDataStore((s) => s.buildings)
+  const localisationEntries = useMapDataStore((s) => s.localisationEntries)
   const validationSummary = useProvinceValidationStore((s) => s.summary)
 
   return (
@@ -487,6 +524,9 @@ export function DataView() {
         <Tab value="buildings">
           {t('debug.tab.buildings')} <Badge appearance="tint">{formatNumber(buildings.size)}</Badge>
         </Tab>
+        <Tab value="localisation">
+          {t('debug.tab.localisation')} <Badge appearance="tint">{formatNumber(Object.keys(localisationEntries).length)}</Badge>
+        </Tab>
         <Tab value="validation">
           {t('debug.tab.validation')} <Badge appearance="tint">{formatNumber(validationSummary.errorCount + validationSummary.warningCount + validationSummary.infoCount)}</Badge>
         </Tab>
@@ -498,6 +538,7 @@ export function DataView() {
       {tab === 'strategicRegions' && <StrategicRegionsTab />}
       {tab === 'stateCategories' && <StateCategoriesTab />}
       {tab === 'buildings' && <BuildingsTab />}
+      {tab === 'localisation' && <LocalisationTab />}
       {tab === 'validation' && <ValidationTab />}
     </div>
   )

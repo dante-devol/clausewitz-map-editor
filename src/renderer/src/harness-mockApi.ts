@@ -54,7 +54,8 @@ const DEFAULT_CONFIG: AppConfig = {
     stateCategories: '/common/state_category',
     resources: '/common/resources',
     buildings: '/common/buildings',
-    weather: '/common/weather.txt'
+    weather: '/common/weather.txt',
+    localisation: '/localisation/english'
   },
   displayModeOverrides: {}
 }

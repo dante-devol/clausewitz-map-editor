@@ -96,7 +96,8 @@ export interface StateHistory extends HistoryDef {
 
 export interface StateDefinition {
   id: number
-  name: string
+  name: string           // Localisation key, e.g. "STATE_900" — never written to on resolve.
+  displayName: string     // Resolved localised text; falls back to `name` while unresolved.
   provinceIds: number[]
   manpower: number
   stateCategory: string   // StateCategory.codeName
@@ -117,7 +118,8 @@ export interface WeatherPeriod {
 
 export interface StrategicRegionDefinition {
   id: number
-  name: string
+  name: string           // Localisation key, e.g. "STRATEGICREGION_77" — never written to on resolve.
+  displayName: string     // Resolved localised text; falls back to `name` while unresolved.
   provinceIds: number[]
   weatherPeriods: WeatherPeriod[]
   sourcePath?: string

@@ -9,6 +9,7 @@ import {
 import type {
   DefinitionsChangedData,
   ImageChangedData,
+  LocalisationDatasetUpdate,
   StateDatasetUpdate,
   StrategicRegionDatasetUpdate
 } from '../../../../shared/contract/api'
@@ -65,6 +66,13 @@ export function useMapLoader(): void {
   const replaceStrategicRegions = useMapDataStore((s) => s.replaceStrategicRegions)
   const appendStrategicRegions = useMapDataStore((s) => s.appendStrategicRegions)
   const patchStrategicRegions = useMapDataStore((s) => s.patchStrategicRegions)
+  const mergeLocalisation = useMapDataStore((s) => s.mergeLocalisation)
+  const applyLocalisation = useMapDataStore((s) => s.applyLocalisation)
+  const states = useMapDataStore((s) => s.states)
+  const strategicRegions = useMapDataStore((s) => s.strategicRegions)
+  const localisationEntries = useMapDataStore((s) => s.localisationEntries)
+  const statesStatus = useMapDataStore((s) => s.statesStatus)
+  const strategicRegionsStatus = useMapDataStore((s) => s.strategicRegionsStatus)
   const loadProvincesImage = useMapDataStore((s) => s.loadProvincesImage)
   const setStatesStatus = useMapDataStore((s) => s.setStatesStatus)
   const setStrategicRegionsStatus = useMapDataStore((s) => s.setStrategicRegionsStatus)
@@ -79,6 +87,15 @@ export function useMapLoader(): void {
   useEffect(() => {
     tRef.current = t
   }, [t])
+
+  // Read inside the persistent onChanged handler below (set up once per
+  // project, not resubscribed on every localisation merge) so newly-arriving
+  // state/strategic-region items can be seeded with whatever's already
+  // resolved, without adding localisationEntries to that effect's deps.
+  const locEntriesRef = useRef(localisationEntries)
+  useEffect(() => {
+    locEntriesRef.current = localisationEntries
+  }, [localisationEntries])
 
   useEffect(() => {
     if (!projectId) return
@@ -259,7 +276,7 @@ export function useMapLoader(): void {
       else if (event.type === 'states') {
         const update = event.data as StateDatasetUpdate
         if (update.op === 'patch') {
-          patchStates(update.sourcePath!, update.items)
+          patchStates(update.sourcePath!, update.items, locEntriesRef.current)
           if (update.origin !== 'save') {
             showPatchReloadToast(update.sourcePath!, patchedFiles, patchReloadScope, tRef.current('notification.fileReload.title'))
           }
@@ -274,14 +291,14 @@ export function useMapLoader(): void {
             }),
             progress
           })
-          if (update.op === 'replace') replaceStates(update.items)
-          else appendStates(update.items)
+          if (update.op === 'replace') replaceStates(update.items, locEntriesRef.current)
+          else appendStates(update.items, locEntriesRef.current)
         }
       }
       else if (event.type === 'strategicRegions') {
         const update = event.data as StrategicRegionDatasetUpdate
         if (update.op === 'patch') {
-          patchStrategicRegions(update.sourcePath!, update.items)
+          patchStrategicRegions(update.sourcePath!, update.items, locEntriesRef.current)
           if (update.origin !== 'save') {
             showPatchReloadToast(update.sourcePath!, patchedFiles, patchReloadScope, tRef.current('notification.fileReload.title'))
           }
@@ -296,14 +313,19 @@ export function useMapLoader(): void {
             }),
             progress
           })
-          if (update.op === 'replace') replaceStrategicRegions(update.items)
-          else appendStrategicRegions(update.items)
+          if (update.op === 'replace') replaceStrategicRegions(update.items, locEntriesRef.current)
+          else appendStrategicRegions(update.items, locEntriesRef.current)
         }
       }
       else if (event.type === 'image') {
         const imageData = event.data as ImageChangedData
         loadProvincesImage(imageData.data, imageData.hash)
         setProvinceBitmapStatus('idle')
+      }
+      else if (event.type === 'localisation') {
+        const { entries } = event.data as LocalisationDatasetUpdate
+        mergeLocalisation(entries)
+        applyLocalisation(entries)
       }
     })
 
@@ -335,6 +357,8 @@ export function useMapLoader(): void {
     replaceStrategicRegions,
     appendStrategicRegions,
     patchStrategicRegions,
+    mergeLocalisation,
+    applyLocalisation,
     loadTerrains,
     loadStateCategories,
     loadBuildings,
@@ -343,6 +367,38 @@ export function useMapLoader(): void {
     setStatesStatus,
     setStrategicRegionsStatus
   ])
+
+  // Localisation resolves in the background at its own pace (see
+  // ProjectSession's debounced resolve pass) — this fires a one-off toast
+  // the moment every currently-known state/strategic-region name has a
+  // resolved entry, without needing any explicit "done" signal from main.
+  // wasLocCompleteRef tracks the previous complete/incomplete state so the
+  // toast fires again if new keys show up later (e.g. a new state is added)
+  // and then get resolved, but never repeats while already complete.
+  const wasLocCompleteRef = useRef(false)
+
+  useEffect(() => {
+    wasLocCompleteRef.current = false
+  }, [projectId])
+
+  useEffect(() => {
+    if (!projectId || statesStatus !== 'ready' || strategicRegionsStatus !== 'ready') return
+
+    const expectedKeys = new Set<string>()
+    for (const state of states) if (state.name) expectedKeys.add(state.name)
+    for (const region of strategicRegions) if (region.name) expectedKeys.add(region.name)
+    const complete = expectedKeys.size > 0 && [...expectedKeys].every((key) => key in localisationEntries)
+
+    if (complete && !wasLocCompleteRef.current) {
+      notificationService.pushAck({
+        id: `localisation-ready:${projectId}`,
+        scope: `localisation-ready:${projectId}`,
+        title: tRef.current('notification.localisationLoad.doneTitle'),
+        message: tRef.current('notification.localisationLoad.doneMessage')
+      })
+    }
+    wasLocCompleteRef.current = complete
+  }, [projectId, statesStatus, strategicRegionsStatus, states, strategicRegions, localisationEntries])
 
   useEffect(() => {
     if (!projectId || !provincesImage || !provincesImageHash) return
