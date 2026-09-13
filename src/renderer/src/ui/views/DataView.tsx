@@ -12,6 +12,7 @@ import type { MessageKey } from '../i18n/messages/en'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
 import { unpackColor } from '../../../../shared/mapDataTypes'
 import { useProvinceValidationStore } from '../../infra/store/provinceValidationStore'
+import { VirtualTable, type VirtualTableColumn } from '../components/dataTable/VirtualTable'
 
 const useStyles = makeStyles({
   root: {
@@ -20,39 +21,6 @@ const useStyles = makeStyles({
     gap: tokens.spacingVerticalM,
     height: '100%',
     padding: tokens.spacingVerticalM
-  },
-  tableWrap: {
-    overflowY: 'auto',
-    flex: 1,
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    borderRadius: tokens.borderRadiusMedium
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-    fontSize: '12px',
-    fontFamily: 'monospace'
-  },
-  th: {
-    position: 'sticky',
-    top: 0,
-    backgroundColor: tokens.colorNeutralBackground3,
-    padding: '4px 8px',
-    textAlign: 'left',
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-    fontWeight: 600,
-    whiteSpace: 'nowrap'
-  },
-  td: {
-    padding: '3px 8px',
-    borderBottom: `1px solid ${tokens.colorNeutralStroke3}`,
-    whiteSpace: 'nowrap'
-  },
-  trEven: {
-    backgroundColor: tokens.colorNeutralBackground1
-  },
-  trOdd: {
-    backgroundColor: tokens.colorNeutralBackground2
   },
   swatch: {
     display: 'inline-block',
@@ -68,19 +36,11 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: tokens.spacingHorizontalS
   },
-  cap: {
-    color: tokens.colorNeutralForeground3,
-    fontSize: '11px'
-  },
   statusText: {
     color: tokens.colorNeutralForeground2
-  },
-  message: {
-    whiteSpace: 'normal'
   }
 })
 
-const ROW_CAP = 500
 const PROVINCE_ID_PREVIEW_CAP = 24
 
 function Swatch({ color }: { color: number }) {
@@ -98,50 +58,38 @@ function Swatch({ color }: { color: number }) {
 function ProvincesTab() {
   const styles = useStyles()
   const { t, formatNumber } = useI18n()
-  const provinceCatalog = useMapDataStore((s) => s.provinceCatalog)
-  const rows = provinceCatalog.slice(0, ROW_CAP)
-  const total = provinceCatalog.length
+  const rows = useMapDataStore((s) => s.provinceCatalog)
+
+  const columns: VirtualTableColumn<(typeof rows)[number]>[] = [
+    { key: 'id', header: t('debug.column.id'), width: '80px', render: (p) => p.id ?? 'xxxxx' },
+    {
+      key: 'color',
+      header: t('debug.column.color'),
+      width: '160px',
+      render: (p) => {
+        if (p.color === null) return '—'
+        const { r, g, b } = unpackColor(p.color)
+        return (
+          <>
+            <Swatch color={p.color} />
+            {r}, {g}, {b}
+          </>
+        )
+      }
+    },
+    { key: 'type', header: t('debug.column.type'), width: '110px', render: (p) => p.type ?? '—' },
+    { key: 'coastal', header: t('debug.column.coastal'), width: '90px', render: (p) => (p.isCoastal ? '✓' : '—') },
+    { key: 'terrain', header: t('debug.column.terrain'), width: '140px', render: (p) => p.terrain || '—' },
+    { key: 'continent', header: t('debug.column.continent'), width: '140px', render: (p) => p.continent || '—' }
+  ]
 
   return (
     <>
       <div className={styles.summary}>
-        <Badge appearance="filled" color="informative">{formatNumber(total)}</Badge>
-        <Text size={200}>{t('debug.provincesLoaded', { count: formatNumber(total) })}</Text>
-        {total > ROW_CAP && <Text className={styles.cap}>{t('debug.showingFirst', { count: formatNumber(ROW_CAP) })}</Text>}
+        <Badge appearance="filled" color="informative">{formatNumber(rows.length)}</Badge>
+        <Text size={200}>{t('debug.provincesLoaded', { count: formatNumber(rows.length) })}</Text>
       </div>
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th className={styles.th}>{t('debug.column.id')}</th>
-              <th className={styles.th}>{t('debug.column.color')}</th>
-              <th className={styles.th}>{t('debug.column.type')}</th>
-              <th className={styles.th}>{t('debug.column.coastal')}</th>
-              <th className={styles.th}>{t('debug.column.terrain')}</th>
-              <th className={styles.th}>{t('debug.column.continent')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((p, i) => {
-              const color = p.color ?? 0
-              const { r, g, b } = unpackColor(color)
-              return (
-                <tr key={p.key} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
-                  <td className={styles.td}>{p.id ?? 'xxxxx'}</td>
-                  <td className={styles.td}>
-                    {p.color !== null && <Swatch color={p.color} />}
-                    {p.color !== null ? `${r}, ${g}, ${b}` : '—'}
-                  </td>
-                  <td className={styles.td}>{p.type ?? '—'}</td>
-                  <td className={styles.td}>{p.isCoastal ? '✓' : '—'}</td>
-                  <td className={styles.td}>{p.terrain || '—'}</td>
-                  <td className={styles.td}>{p.continent || '—'}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      <VirtualTable columns={columns} rows={rows} getRowKey={(p) => p.key} />
     </>
   )
 }
@@ -152,36 +100,31 @@ function TerrainsTab() {
   const terrains = useMapDataStore((s) => s.terrains)
   const rows = Array.from(terrains.values())
 
+  const columns: VirtualTableColumn<(typeof rows)[number]>[] = [
+    { key: 'codeName', header: t('debug.column.codeName'), width: '220px', render: (row) => row.codeName },
+    {
+      key: 'color',
+      header: t('debug.column.color'),
+      width: '160px',
+      render: (row) => {
+        const { r, g, b } = unpackColor(row.color)
+        return (
+          <>
+            <Swatch color={row.color} />
+            {r}, {g}, {b}
+          </>
+        )
+      }
+    }
+  ]
+
   return (
     <>
       <div className={styles.summary}>
         <Badge appearance="filled" color="informative">{formatNumber(rows.length)}</Badge>
         <Text size={200}>{t('debug.terrainCategoriesLoaded', { count: formatNumber(rows.length) })}</Text>
       </div>
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th className={styles.th}>{t('debug.column.codeName')}</th>
-              <th className={styles.th}>{t('debug.column.color')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((t, i) => {
-              const { r, g, b } = unpackColor(t.color)
-              return (
-                <tr key={t.codeName} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
-                  <td className={styles.td}>{t.codeName}</td>
-                  <td className={styles.td}>
-                    <Swatch color={t.color} />
-                    {r}, {g}, {b}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      <VirtualTable columns={columns} rows={rows} getRowKey={(row) => row.codeName} />
     </>
   )
 }
@@ -192,30 +135,18 @@ function ContinentsTab() {
   const continents = useMapDataStore((s) => s.continents)
   const rows = Array.from(continents.values()).sort((a, b) => a.position - b.position)
 
+  const columns: VirtualTableColumn<(typeof rows)[number]>[] = [
+    { key: 'position', header: t('debug.column.position'), width: '100px', render: (row) => row.position },
+    { key: 'codeName', header: t('debug.column.codeName'), width: 'minmax(200px, 1fr)', render: (row) => row.codeName }
+  ]
+
   return (
     <>
       <div className={styles.summary}>
         <Badge appearance="filled" color="informative">{formatNumber(rows.length)}</Badge>
         <Text size={200}>{t('debug.continentsLoaded', { count: formatNumber(rows.length) })}</Text>
       </div>
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th className={styles.th}>{t('debug.column.position')}</th>
-              <th className={styles.th}>{t('debug.column.codeName')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((c, i) => (
-              <tr key={c.codeName} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
-                <td className={styles.td}>{c.position}</td>
-                <td className={styles.td}>{c.codeName}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <VirtualTable columns={columns} rows={rows} getRowKey={(row) => row.codeName} />
     </>
   )
 }
@@ -223,48 +154,29 @@ function ContinentsTab() {
 function StatesTab() {
   const styles = useStyles()
   const { t, formatNumber } = useI18n()
-  const states = useMapDataStore((s) => s.states)
+  const rows = useMapDataStore((s) => s.states)
   const status = useMapDataStore((s) => s.statesStatus)
-  const rows = states.slice(0, ROW_CAP)
+
+  const columns: VirtualTableColumn<(typeof rows)[number]>[] = [
+    { key: 'id', header: t('debug.column.id'), width: '70px', render: (state) => state.id },
+    { key: 'name', header: t('debug.column.name'), width: '200px', render: (state) => state.displayName || '—' },
+    { key: 'stateCategory', header: t('debug.column.stateCategory'), width: '160px', render: (state) => state.stateCategory || '—' },
+    { key: 'manpower', header: t('debug.column.manpower'), width: '110px', render: (state) => formatNumber(state.manpower) },
+    { key: 'owner', header: t('debug.column.owner'), width: '90px', render: (state) => state.history.owner ?? '—' },
+    { key: 'provinceCount', header: t('debug.column.provinceCount'), width: '110px', render: (state) => formatNumber(state.provinceIds.length) },
+    { key: 'provinces', header: t('debug.column.provinces'), width: 'minmax(300px, 1fr)', render: (state) => formatProvincePreview(state.provinceIds) }
+  ]
 
   return (
     <>
       <div className={styles.summary}>
-        <Badge appearance="filled" color={statusToBadgeColor(status)}>{formatNumber(states.length)}</Badge>
-        <Text size={200}>{t('debug.statesLoaded', { count: formatNumber(states.length) })}</Text>
+        <Badge appearance="filled" color={statusToBadgeColor(status)}>{formatNumber(rows.length)}</Badge>
+        <Text size={200}>{t('debug.statesLoaded', { count: formatNumber(rows.length) })}</Text>
         <Text size={200} className={styles.statusText}>
           {t('debug.datasetStatus', { status: t(`debug.datasetState.${status}`) })}
         </Text>
-        {states.length > ROW_CAP && <Text className={styles.cap}>{t('debug.showingFirst', { count: formatNumber(ROW_CAP) })}</Text>}
       </div>
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th className={styles.th}>{t('debug.column.id')}</th>
-              <th className={styles.th}>{t('debug.column.name')}</th>
-              <th className={styles.th}>{t('debug.column.stateCategory')}</th>
-              <th className={styles.th}>{t('debug.column.manpower')}</th>
-              <th className={styles.th}>{t('debug.column.owner')}</th>
-              <th className={styles.th}>{t('debug.column.provinceCount')}</th>
-              <th className={styles.th}>{t('debug.column.provinces')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((state, i) => (
-              <tr key={state.id} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
-                <td className={styles.td}>{state.id}</td>
-                <td className={styles.td}>{state.displayName || '—'}</td>
-                <td className={styles.td}>{state.stateCategory || '—'}</td>
-                <td className={styles.td}>{formatNumber(state.manpower)}</td>
-                <td className={styles.td}>{state.history.owner ?? '—'}</td>
-                <td className={styles.td}>{formatNumber(state.provinceIds.length)}</td>
-                <td className={styles.td}>{formatProvincePreview(state.provinceIds)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <VirtualTable columns={columns} rows={rows} getRowKey={(state) => state.id} />
     </>
   )
 }
@@ -275,38 +187,32 @@ function StateCategoriesTab() {
   const stateCategories = useMapDataStore((s) => s.stateCategories)
   const rows = Array.from(stateCategories.values())
 
+  const columns: VirtualTableColumn<(typeof rows)[number]>[] = [
+    { key: 'codeName', header: t('debug.column.codeName'), width: '220px', render: (cat) => cat.codeName },
+    { key: 'localBuildingSlots', header: t('debug.column.localBuildingSlots'), width: '180px', render: (cat) => cat.localBuildingSlots },
+    {
+      key: 'color',
+      header: t('debug.column.color'),
+      width: '160px',
+      render: (cat) => {
+        const { r, g, b } = unpackColor(cat.color)
+        return (
+          <>
+            <Swatch color={cat.color} />
+            {r}, {g}, {b}
+          </>
+        )
+      }
+    }
+  ]
+
   return (
     <>
       <div className={styles.summary}>
         <Badge appearance="filled" color="informative">{formatNumber(rows.length)}</Badge>
         <Text size={200}>{t('debug.stateCategoriesLoaded', { count: formatNumber(rows.length) })}</Text>
       </div>
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th className={styles.th}>{t('debug.column.codeName')}</th>
-              <th className={styles.th}>{t('debug.column.localBuildingSlots')}</th>
-              <th className={styles.th}>{t('debug.column.color')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((cat, i) => {
-              const { r, g, b } = unpackColor(cat.color)
-              return (
-                <tr key={cat.codeName} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
-                  <td className={styles.td}>{cat.codeName}</td>
-                  <td className={styles.td}>{cat.localBuildingSlots}</td>
-                  <td className={styles.td}>
-                    <Swatch color={cat.color} />
-                    {r}, {g}, {b}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      <VirtualTable columns={columns} rows={rows} getRowKey={(cat) => cat.codeName} />
     </>
   )
 }
@@ -317,34 +223,20 @@ function BuildingsTab() {
   const buildings = useMapDataStore((s) => s.buildings)
   const rows = Array.from(buildings.values())
 
+  const columns: VirtualTableColumn<(typeof rows)[number]>[] = [
+    { key: 'codeName', header: t('debug.column.codeName'), width: '220px', render: (b) => b.codeName },
+    { key: 'sharesSlots', header: t('debug.column.sharesSlots'), width: '140px', render: (b) => (b.levelCap.sharesSlots ? '✓' : '—') },
+    { key: 'provinceMax', header: t('debug.column.provinceMax'), width: '140px', render: (b) => b.levelCap.provinceMax ?? '—' },
+    { key: 'stateMax', header: t('debug.column.stateMax'), width: '140px', render: (b) => b.levelCap.stateMax ?? '—' }
+  ]
+
   return (
     <>
       <div className={styles.summary}>
         <Badge appearance="filled" color="informative">{formatNumber(rows.length)}</Badge>
         <Text size={200}>{t('debug.buildingsLoaded', { count: formatNumber(rows.length) })}</Text>
       </div>
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th className={styles.th}>{t('debug.column.codeName')}</th>
-              <th className={styles.th}>{t('debug.column.sharesSlots')}</th>
-              <th className={styles.th}>{t('debug.column.provinceMax')}</th>
-              <th className={styles.th}>{t('debug.column.stateMax')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((b, i) => (
-              <tr key={b.codeName} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
-                <td className={styles.td}>{b.codeName}</td>
-                <td className={styles.td}>{b.levelCap.sharesSlots ? '✓' : '—'}</td>
-                <td className={styles.td}>{b.levelCap.provinceMax ?? '—'}</td>
-                <td className={styles.td}>{b.levelCap.stateMax ?? '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <VirtualTable columns={columns} rows={rows} getRowKey={(b) => b.codeName} />
     </>
   )
 }
@@ -352,44 +244,27 @@ function BuildingsTab() {
 function StrategicRegionsTab() {
   const styles = useStyles()
   const { t, formatNumber } = useI18n()
-  const strategicRegions = useMapDataStore((s) => s.strategicRegions)
+  const rows = useMapDataStore((s) => s.strategicRegions)
   const status = useMapDataStore((s) => s.strategicRegionsStatus)
-  const rows = strategicRegions.slice(0, ROW_CAP)
+
+  const columns: VirtualTableColumn<(typeof rows)[number]>[] = [
+    { key: 'id', header: t('debug.column.id'), width: '70px', render: (region) => region.id },
+    { key: 'name', header: t('debug.column.name'), width: '200px', render: (region) => region.displayName || '—' },
+    { key: 'weatherPeriods', header: t('debug.column.weatherPeriods'), width: '150px', render: (region) => formatNumber(region.weatherPeriods?.length ?? 0) },
+    { key: 'provinceCount', header: t('debug.column.provinceCount'), width: '140px', render: (region) => formatNumber(region.provinceIds.length) },
+    { key: 'provinces', header: t('debug.column.provinces'), width: 'minmax(300px, 1fr)', render: (region) => formatProvincePreview(region.provinceIds) }
+  ]
 
   return (
     <>
       <div className={styles.summary}>
-        <Badge appearance="filled" color={statusToBadgeColor(status)}>{formatNumber(strategicRegions.length)}</Badge>
-        <Text size={200}>{t('debug.strategicRegionsLoaded', { count: formatNumber(strategicRegions.length) })}</Text>
+        <Badge appearance="filled" color={statusToBadgeColor(status)}>{formatNumber(rows.length)}</Badge>
+        <Text size={200}>{t('debug.strategicRegionsLoaded', { count: formatNumber(rows.length) })}</Text>
         <Text size={200} className={styles.statusText}>
           {t('debug.datasetStatus', { status: t(`debug.datasetState.${status}`) })}
         </Text>
-        {strategicRegions.length > ROW_CAP && <Text className={styles.cap}>{t('debug.showingFirst', { count: formatNumber(ROW_CAP) })}</Text>}
       </div>
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th className={styles.th}>{t('debug.column.id')}</th>
-              <th className={styles.th}>{t('debug.column.name')}</th>
-              <th className={styles.th}>{t('debug.column.weatherPeriods')}</th>
-              <th className={styles.th}>{t('debug.column.provinceCount')}</th>
-              <th className={styles.th}>{t('debug.column.provinces')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((region, i) => (
-              <tr key={region.id} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
-                <td className={styles.td}>{region.id}</td>
-                <td className={styles.td}>{region.displayName || '—'}</td>
-                <td className={styles.td}>{formatNumber(region.weatherPeriods?.length ?? 0)}</td>
-                <td className={styles.td}>{formatNumber(region.provinceIds.length)}</td>
-                <td className={styles.td}>{formatProvincePreview(region.provinceIds)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <VirtualTable columns={columns} rows={rows} getRowKey={(region) => region.id} />
     </>
   )
 }
@@ -399,9 +274,20 @@ function ValidationTab() {
   const { t, formatNumber } = useI18n()
   const status = useProvinceValidationStore((s) => s.status)
   const phase = useProvinceValidationStore((s) => s.phase)
-  const issues = useProvinceValidationStore((s) => s.issues)
+  const rows = useProvinceValidationStore((s) => s.issues)
   const summary = useProvinceValidationStore((s) => s.summary)
-  const rows = issues.slice(0, ROW_CAP)
+
+  const columns: VirtualTableColumn<(typeof rows)[number]>[] = [
+    { key: 'severity', header: t('debug.column.severity'), width: '100px', render: (issue) => issue.severity },
+    { key: 'id', header: t('debug.column.id'), width: '80px', render: (issue) => issue.provinceId ?? 'xxxxx' },
+    { key: 'codeName', header: t('debug.column.codeName'), width: '220px', render: (issue) => issue.code },
+    {
+      key: 'message',
+      header: t('debug.column.message'),
+      width: 'minmax(300px, 1fr)',
+      render: (issue) => t(issue.code as MessageKey, issue.messageParams)
+    }
+  ]
 
   return (
     <>
@@ -409,37 +295,15 @@ function ValidationTab() {
         <Badge appearance="filled" color="danger">{formatNumber(summary.errorCount)}</Badge>
         <Badge appearance="filled" color="warning">{formatNumber(summary.warningCount)}</Badge>
         <Badge appearance="filled" color="informative">{formatNumber(summary.infoCount)}</Badge>
-        <Text size={200}>{t('debug.validationIssues', { count: formatNumber(issues.length) })}</Text>
+        <Text size={200}>{t('debug.validationIssues', { count: formatNumber(rows.length) })}</Text>
         <Text size={200} className={styles.statusText}>
           {t('debug.validationStatus', {
             status: t(`debug.validationState.${status}`),
             phase: phase ? t(`debug.validationPhase.${phase}`) : '—'
           })}
         </Text>
-        {issues.length > ROW_CAP && <Text className={styles.cap}>{t('debug.showingFirst', { count: formatNumber(ROW_CAP) })}</Text>}
       </div>
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th className={styles.th}>{t('debug.column.severity')}</th>
-              <th className={styles.th}>{t('debug.column.id')}</th>
-              <th className={styles.th}>{t('debug.column.codeName')}</th>
-              <th className={styles.th}>{t('debug.column.message')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((issue, i) => (
-              <tr key={`${issue.provinceKey}:${issue.code}:${i}`} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
-                <td className={styles.td}>{issue.severity}</td>
-                <td className={styles.td}>{issue.provinceId ?? 'xxxxx'}</td>
-                <td className={styles.td}>{issue.code}</td>
-                <td className={`${styles.td} ${styles.message}`}>{t(issue.code as MessageKey, issue.messageParams)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <VirtualTable columns={columns} rows={rows} getRowKey={(issue, i) => `${issue.provinceKey}:${issue.code}:${i}`} />
     </>
   )
 }
@@ -448,34 +312,20 @@ function LocalisationTab() {
   const styles = useStyles()
   const { t, formatNumber } = useI18n()
   const localisationEntries = useMapDataStore((s) => s.localisationEntries)
-  const rows = Object.entries(localisationEntries).slice(0, ROW_CAP)
-  const total = Object.keys(localisationEntries).length
+  const rows = Object.entries(localisationEntries)
+
+  const columns: VirtualTableColumn<(typeof rows)[number]>[] = [
+    { key: 'key', header: t('debug.column.key'), width: '280px', render: ([key]) => key },
+    { key: 'value', header: t('debug.column.value'), width: 'minmax(300px, 1fr)', render: ([, value]) => value }
+  ]
 
   return (
     <>
       <div className={styles.summary}>
-        <Badge appearance="filled" color="informative">{formatNumber(total)}</Badge>
-        <Text size={200}>{t('debug.localisationEntriesLoaded', { count: formatNumber(total) })}</Text>
-        {total > ROW_CAP && <Text className={styles.cap}>{t('debug.showingFirst', { count: formatNumber(ROW_CAP) })}</Text>}
+        <Badge appearance="filled" color="informative">{formatNumber(rows.length)}</Badge>
+        <Text size={200}>{t('debug.localisationEntriesLoaded', { count: formatNumber(rows.length) })}</Text>
       </div>
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th className={styles.th}>{t('debug.column.key')}</th>
-              <th className={styles.th}>{t('debug.column.value')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(([key, value], i) => (
-              <tr key={key} className={i % 2 === 0 ? styles.trEven : styles.trOdd}>
-                <td className={styles.td}>{key}</td>
-                <td className={`${styles.td} ${styles.message}`}>{value}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <VirtualTable columns={columns} rows={rows} getRowKey={([key]) => key} />
     </>
   )
 }
