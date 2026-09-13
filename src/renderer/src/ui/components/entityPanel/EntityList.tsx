@@ -1,7 +1,6 @@
-import { useRef, useMemo, useState, type ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
-  Input,
   List,
   ListItem,
   makeStyles,
@@ -20,14 +19,6 @@ const useStyles = makeStyles({
     minHeight: 0,
     overflow: 'hidden',
     borderBottom: `1px solid ${tokens.colorNeutralStroke2}`
-  },
-  searchBar: {
-    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-    flexShrink: 0
-  },
-  searchInput: {
-    width: '100%'
   },
   scroll: {
     flex: 1,
@@ -113,16 +104,15 @@ interface EntityListProps<T> {
   isSelected: (item: T) => boolean
   isEdited: (item: T) => boolean
   onSelect: (item: T) => void
-  searchPredicate: (item: T, query: string) => boolean
   renderRow: (item: T) => ReactNode
-  searchPlaceholder: string
   emptyText: string
 }
 
 /**
- * Shared virtualized, searchable list used by the state and strategic-region
- * panels: same row chrome (hover/selected/edited states) and search bar,
- * parametrized over the entity's row content.
+ * Shared virtualized list used by the province, state, and strategic-region
+ * panels: same row chrome (hover/selected/edited states), parametrized over
+ * the entity's row content. Search/filtering lives in `EntitySearchBar`,
+ * rendered by the caller above this list.
  */
 export function EntityList<T>({
   items,
@@ -130,23 +120,14 @@ export function EntityList<T>({
   isSelected,
   isEdited,
   onSelect,
-  searchPredicate,
   renderRow,
-  searchPlaceholder,
   emptyText
 }: EntityListProps<T>): JSX.Element {
   const styles = useStyles()
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [search, setSearch] = useState('')
-
-  const filteredItems = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return items
-    return items.filter((item) => searchPredicate(item, q))
-  }, [items, search, searchPredicate])
 
   const rowVirtualizer = useVirtualizer({
-    count: filteredItems.length,
+    count: items.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_H,
     overscan: 12
@@ -154,23 +135,14 @@ export function EntityList<T>({
 
   return (
     <div className={styles.section}>
-      <div className={styles.searchBar}>
-        <Input
-          size="small"
-          className={styles.searchInput}
-          placeholder={searchPlaceholder}
-          value={search}
-          onChange={(_, data) => setSearch(data.value)}
-        />
-      </div>
-      {filteredItems.length === 0 ? (
+      {items.length === 0 ? (
         <Text size={200} className={styles.empty}>{emptyText}</Text>
       ) : (
         <div ref={scrollRef} className={styles.scroll}>
           <List as="div" className={styles.list}>
             <div className={styles.spacer} style={{ height: rowVirtualizer.getTotalSize() }}>
               {rowVirtualizer.getVirtualItems().map((virtualItem) => {
-                const item = filteredItems[virtualItem.index]
+                const item = items[virtualItem.index]
                 const selected = isSelected(item)
                 const edited = isEdited(item)
 

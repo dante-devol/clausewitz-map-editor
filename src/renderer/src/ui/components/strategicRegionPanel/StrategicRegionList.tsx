@@ -1,7 +1,10 @@
+import { useMemo } from 'react'
 import { Text } from '@fluentui/react-components'
 import { useI18n } from '../../i18n/I18nProvider'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import { EntityList } from '../entityPanel/EntityList'
+import { EntitySearchBar } from '../entityPanel/EntitySearchBar'
+import { useEntitySearch, type EntitySearchConfig } from '../entityPanel/entitySearch'
 import { useEntityRowStyles } from '../entityPanel/entityRowStyles'
 import type { StrategicRegionDefinition } from '../../../../../shared/mapDataTypes'
 
@@ -14,30 +17,47 @@ export function StrategicRegionList(): JSX.Element {
   const setSelectedStrategicRegionId = useMapDataStore((s) => s.setSelectedStrategicRegionId)
   const pendingStrategicRegionEdits = useMapDataStore((s) => s.pendingStrategicRegionEdits)
 
-  return (
-    <EntityList<StrategicRegionDefinition>
-      items={strategicRegions}
-      getId={(region) => region.id}
-      isSelected={(region) => region.id === selectedStrategicRegionId}
-      isEdited={(region) => pendingStrategicRegionEdits.has(region.id)}
-      onSelect={(region) => setSelectedStrategicRegionId(
-        region.id === selectedStrategicRegionId ? null : region.id
-      )}
-      searchPredicate={(region, q) => region.id.toString().includes(q) || region.name.toLowerCase().includes(q)}
-      searchPlaceholder={t('stratRegionPanel.list.searchPlaceholder')}
-      emptyText={t('stratRegionPanel.list.empty')}
-      renderRow={(region) => {
-        const patch = pendingStrategicRegionEdits.get(region.id)
-        const displayName = patch?.name ?? region.name
+  const searchConfig = useMemo<EntitySearchConfig<StrategicRegionDefinition>>(() => ({
+    freeTextValues: (region) => [String(region.id), region.name.toLowerCase()],
+    fields: []
+  }), [])
 
-        return (
-          <>
-            <Text size={100} className={rowStyles.id}>{region.id}</Text>
-            <Text size={100} className={rowStyles.name}>{displayName || `Region ${region.id}`}</Text>
-            <Text size={100} className={rowStyles.count}>{region.provinceIds.length}</Text>
-          </>
-        )
-      }}
-    />
+  const search = useEntitySearch(strategicRegions, searchConfig)
+
+  return (
+    <>
+      <EntitySearchBar
+        query={search.query}
+        onQueryChange={search.setQuery}
+        chips={search.chips}
+        onRemoveChip={search.removeChip}
+        suggestions={search.suggestions}
+        onApplySuggestion={search.addChip}
+        placeholder={t('stratRegionPanel.list.searchPlaceholder')}
+        removeChipLabel={t('entitySearch.removeFilter')}
+      />
+      <EntityList<StrategicRegionDefinition>
+        items={search.filteredItems}
+        getId={(region) => region.id}
+        isSelected={(region) => region.id === selectedStrategicRegionId}
+        isEdited={(region) => pendingStrategicRegionEdits.has(region.id)}
+        onSelect={(region) => setSelectedStrategicRegionId(
+          region.id === selectedStrategicRegionId ? null : region.id
+        )}
+        emptyText={t('stratRegionPanel.list.empty')}
+        renderRow={(region) => {
+          const patch = pendingStrategicRegionEdits.get(region.id)
+          const displayName = patch?.name ?? region.name
+
+          return (
+            <>
+              <Text size={100} className={rowStyles.id}>{region.id}</Text>
+              <Text size={100} className={rowStyles.name}>{displayName || `Region ${region.id}`}</Text>
+              <Text size={100} className={rowStyles.count}>{region.provinceIds.length}</Text>
+            </>
+          )
+        }}
+      />
+    </>
   )
 }

@@ -1,14 +1,11 @@
-import { useRef, useEffect, useMemo, useState } from 'react'
+import { useRef, useEffect, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
-  Button,
-  Input,
   List,
   ListItem,
   Popover,
   PopoverSurface,
   PopoverTrigger,
-  Tag,
   makeStyles,
   mergeClasses,
   tokens,
@@ -18,55 +15,23 @@ import {
 import {
   ChevronDownRegular,
   ChevronUpRegular,
-  DismissRegular,
   ErrorCircleRegular,
   InfoRegular,
-  SearchRegular,
   WarningRegular
 } from '@fluentui/react-icons'
 import { unpackColor } from '../../../../../shared/mapDataTypes'
 import type { ProvinceCatalogEntry } from '../../../../../shared/provinceCatalog'
 import { TYPE_COLORS, continentColor } from '../../../infra/config/displayModes'
-import { useI18n, type MessageParams } from '../../i18n/I18nProvider'
+import { useI18n } from '../../i18n/I18nProvider'
 import type { MessageKey } from '../../i18n/messages/en'
 import { useMapDataStore } from '../../../infra/store/mapDataStore'
 import { useProvinceValidationStore } from '../../../infra/store/provinceValidationStore'
 import { useCrossSelection } from './useCrossSelection'
-import type { ProvinceValidationIssue, ProvinceValidationSeverity } from '../../../../../shared/provinceValidation'
+import { EntitySearchBar } from '../entityPanel/EntitySearchBar'
+import { useEntitySearch, type EntitySearchConfig } from '../entityPanel/entitySearch'
+import type { ProvinceValidationIssue } from '../../../../../shared/provinceValidation'
 
 const ROW_H = 36
-const SUGGESTION_LIMIT = 8
-
-type CoastalFilter = 'all' | 'coastal' | 'inland'
-type ValidationFilter = 'all' | 'clean' | 'any'
-
-interface ProvinceListFilters {
-  types: string[]
-  terrains: string[]
-  continents: string[]
-  coastal: CoastalFilter
-  validation: ValidationFilter
-  severities: ProvinceValidationSeverity[]
-}
-
-interface FilterSuggestion {
-  key: string
-  kind: 'type' | 'terrain' | 'continent' | 'coastal' | 'validation' | 'severity'
-  value: string
-  label: string
-  groupLabel: string
-}
-
-const EMPTY_FILTERS: ProvinceListFilters = {
-  types: [],
-  terrains: [],
-  continents: [],
-  coastal: 'all',
-  validation: 'all',
-  severities: []
-}
-
-const VALIDATION_SEVERITIES: ProvinceValidationSeverity[] = ['error', 'warning', 'info']
 
 const useStyles = makeStyles({
   section: {
@@ -113,64 +78,6 @@ const useStyles = makeStyles({
   chevron: {
     fontSize: '12px',
     color: tokens.colorNeutralForeground3
-  },
-  filterButtonActive: {
-    ...shorthands.borderColor(tokens.colorBrandStroke1),
-    backgroundColor: tokens.colorBrandBackground2,
-    color: tokens.colorBrandForeground1
-  },
-  filterSurface: {
-    width: '340px',
-    maxWidth: 'min(340px, calc(100vw - 24px))',
-    padding: tokens.spacingHorizontalS
-  },
-  filterPanel: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: tokens.spacingVerticalS
-  },
-  filterHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: tokens.spacingHorizontalS
-  },
-  filterSummary: {
-    color: tokens.colorNeutralForeground3
-  },
-  combobox: {
-    width: '100%'
-  },
-  helperText: {
-    color: tokens.colorNeutralForeground3
-  },
-  suggestionList: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: tokens.spacingHorizontalXXS
-  },
-  suggestionButton: {
-    minWidth: 0,
-    maxWidth: '100%'
-  },
-  activeFilters: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: tokens.spacingHorizontalXXS
-  },
-  activeTag: {
-    maxWidth: '100%'
-  },
-  suggestionHint: {
-    color: tokens.colorNeutralForeground3
-  },
-  filterFooter: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: tokens.spacingHorizontalS,
-    paddingTop: tokens.spacingVerticalXS,
-    borderTop: `1px solid ${tokens.colorNeutralStroke2}`
   },
   scroll: {
     flex: 1,
@@ -410,16 +317,6 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground1,
     maxWidth: 'none'
   },
-  searchBar: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-    flexShrink: 0
-  },
-  searchInput: {
-    flex: 1
-  },
   empty: {
     padding: tokens.spacingVerticalM,
     color: tokens.colorNeutralForeground3,
@@ -456,40 +353,51 @@ export function CanonicalProvinceList({ collapsed, onToggleCollapse }: Props): J
     [bmpOnlyEntries]
   )
   const issuesByProvinceKey = useProvinceValidationStore((s) => s.issuesByProvinceKey)
-  const [filters, setFilters] = useState<ProvinceListFilters>(EMPTY_FILTERS)
-  const [filterQuery, setFilterQuery] = useState('')
-  const [searchQuery, setSearchQuery] = useState('')
 
   const canonicalProvinces = useMemo(
     () => provinceCatalog.filter((e) => e.canonical),
     [provinceCatalog]
   )
 
-  const hasActiveFilters = useMemo(() => !areFiltersEmpty(filters), [filters])
+  const searchConfig = useMemo<EntitySearchConfig<ProvinceCatalogEntry>>(() => ({
+    freeTextValues: (p) => [
+      ...(p.id !== null ? [String(p.id)] : []),
+      ...(p.type ? [p.type.toLowerCase()] : []),
+      ...(p.terrain ? [p.terrain.toLowerCase()] : []),
+      ...(p.continent ? [p.continent.toLowerCase()] : []),
+      ...(p.isCoastal === true ? ['coastal'] : p.isCoastal === false ? ['inland'] : [])
+    ],
+    fields: [
+      { key: 'type', label: t('entitySearch.field.type'), getValues: (p) => (p.type ? [p.type.toLowerCase()] : []) },
+      { key: 'terrain', label: t('entitySearch.field.terrain'), getValues: (p) => (p.terrain ? [p.terrain.toLowerCase()] : []) },
+      { key: 'continent', label: t('entitySearch.field.continent'), getValues: (p) => (p.continent ? [p.continent.toLowerCase()] : []) },
+      {
+        key: 'coastal',
+        label: t('entitySearch.field.coastal'),
+        knownValues: ['coastal', 'inland'],
+        getValues: (p) => (p.isCoastal === true ? ['coastal'] : p.isCoastal === false ? ['inland'] : []),
+        formatLabel: (value) => (value === 'coastal' ? t('entitySearch.value.coastalOnly') : t('entitySearch.value.inlandOnly'))
+      },
+      {
+        key: 'severity',
+        label: t('entitySearch.field.severity'),
+        knownValues: ['error', 'warning', 'info'],
+        getValues: (p) => (issuesByProvinceKey.get(p.key) ?? []).map((issue) => issue.severity),
+        formatValue: (value) => value.charAt(0).toUpperCase() + value.slice(1)
+      },
+      {
+        key: 'hasIssues',
+        label: t('entitySearch.field.hasIssues'),
+        knownValues: ['issues'],
+        getValues: (p) => ((issuesByProvinceKey.get(p.key) ?? []).length > 0 ? ['issues'] : []),
+        formatLabel: () => t('entitySearch.value.hasIssues')
+      }
+    ]
+  }), [t, issuesByProvinceKey])
 
-  const filterSuggestions = useMemo(
-    () => buildFilterSuggestions(canonicalProvinces, filters, t),
-    [filters, canonicalProvinces, t]
-  )
-
-  const visibleSuggestions = useMemo(
-    () => filterSuggestionsForQuery(filterSuggestions, filterQuery),
-    [filterQuery, filterSuggestions]
-  )
-
-  const activeFilterTags = useMemo(
-    () => buildActiveFilterTags(filters, t),
-    [filters, t]
-  )
-
-  const filteredProvinces = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    return canonicalProvinces.filter((p) => {
-      if (!matchesProvinceFilters(p, filters, issuesByProvinceKey)) return false
-      if (q.length > 0 && !matchesProvinceSearch(p, q, continents)) return false
-      return true
-    })
-  }, [continents, filters, issuesByProvinceKey, searchQuery, canonicalProvinces])
+  const search = useEntitySearch(canonicalProvinces, searchConfig)
+  const filteredProvinces = search.filteredItems
+  const hasActiveFilters = search.chips.length > 0
 
   const rowVirtualizer = useVirtualizer({
     count: filteredProvinces.length,
@@ -548,14 +456,6 @@ export function CanonicalProvinceList({ collapsed, onToggleCollapse }: Props): J
     }
   }
 
-  const applySuggestion = (suggestionKey: string | null) => {
-    if (!suggestionKey) return
-    const suggestion = filterSuggestions.find((c) => c.key === suggestionKey)
-    if (!suggestion) return
-    setFilters((current) => applyFilterSuggestion(current, suggestion))
-    setFilterQuery('')
-  }
-
   return (
     <div className={mergeClasses(styles.section, collapsed && styles.sectionCollapsed)}>
       <div className={styles.header} onClick={onToggleCollapse}>
@@ -563,107 +463,12 @@ export function CanonicalProvinceList({ collapsed, onToggleCollapse }: Props): J
           {t('provincePanel.canonical.title')}
         </Text>
         <Text size={100} className={styles.count}>
-          {(hasActiveFilters || searchQuery.trim().length > 0)
+          {(hasActiveFilters || search.query.trim().length > 0)
             ? `${formatNumber(filteredProvinces.length)} / ${formatNumber(canonicalProvinces.length)}`
             : formatNumber(canonicalProvinces.length)}
         </Text>
         <div className={styles.headerSpacer} />
         <div className={styles.headerActions}>
-          {!collapsed && (
-            <Popover positioning="below-end" withArrow>
-              <PopoverTrigger disableButtonEnhancement>
-                <Button
-                  size="small"
-                  appearance="subtle"
-                  className={mergeClasses(hasActiveFilters && styles.filterButtonActive)}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {t('provinceList.filter.button')}
-                </Button>
-              </PopoverTrigger>
-              <PopoverSurface className={styles.filterSurface}>
-                <div className={styles.filterPanel}>
-                  <div className={styles.filterHeader}>
-                    <Text size={100} className={styles.filterSummary}>
-                      {t('provinceList.filter.summary', {
-                        count: formatNumber(filteredProvinces.length)
-                      })}
-                    </Text>
-                    <Button
-                      size="small"
-                      appearance="subtle"
-                      disabled={!hasActiveFilters}
-                      onClick={() => {
-                        setFilters(EMPTY_FILTERS)
-                        setFilterQuery('')
-                      }}
-                    >
-                      {t('provinceList.filter.clear')}
-                    </Button>
-                  </div>
-
-                  <Input
-                    size="small"
-                    className={styles.combobox}
-                    appearance="outline"
-                    placeholder={t('provinceList.filter.placeholder')}
-                    value={filterQuery}
-                    onChange={(_, data) => setFilterQuery(data.value)}
-                  />
-
-                  <Text size={100} className={styles.helperText}>
-                    {t('provinceList.filter.helper')}
-                  </Text>
-
-                  {visibleSuggestions.length > 0 && (
-                    <div className={styles.suggestionList}>
-                      {visibleSuggestions.map((suggestion) => (
-                        <Button
-                          key={suggestion.key}
-                          size="small"
-                          appearance="subtle"
-                          className={styles.suggestionButton}
-                          onClick={() => applySuggestion(suggestion.key)}
-                        >
-                          {`${suggestion.groupLabel}: ${suggestion.label}`}
-                        </Button>
-                      ))}
-                    </div>
-                  )}
-
-                  {activeFilterTags.length > 0 ? (
-                    <div className={styles.activeFilters}>
-                      {activeFilterTags.map((tag) => (
-                        <Tag
-                          key={tag.key}
-                          dismissible
-                          className={styles.activeTag}
-                          dismissIcon={{
-                            'aria-label': t('provinceList.filter.remove'),
-                            onClick: () => setFilters((current) => removeFilterTag(current, tag.key))
-                          }}
-                        >
-                          {tag.label}
-                        </Tag>
-                      ))}
-                    </div>
-                  ) : (
-                    <Text size={100} className={styles.suggestionHint}>
-                      {t('provinceList.filter.emptySelection')}
-                    </Text>
-                  )}
-
-                  <div className={styles.filterFooter}>
-                    <Text size={100} className={styles.filterSummary}>
-                      {filterQuery.trim().length > 0
-                        ? t('provinceList.filter.matches', { count: formatNumber(visibleSuggestions.length) })
-                        : t('provinceList.filter.suggested')}
-                    </Text>
-                  </div>
-                </div>
-              </PopoverSurface>
-            </Popover>
-          )}
           {collapsed
             ? <ChevronDownRegular className={styles.chevron} />
             : <ChevronUpRegular className={styles.chevron} />}
@@ -671,34 +476,23 @@ export function CanonicalProvinceList({ collapsed, onToggleCollapse }: Props): J
       </div>
 
       {!collapsed && (
-        <div className={styles.searchBar}>
-          <Input
-            size="small"
-            className={styles.searchInput}
-            appearance="filled-lighter"
-            placeholder={t('provinceList.search.placeholder')}
-            value={searchQuery}
-            onChange={(_, data) => setSearchQuery(data.value)}
-            contentBefore={<SearchRegular />}
-            contentAfter={searchQuery.length > 0
-              ? (
-                <Button
-                  size="small"
-                  appearance="transparent"
-                  icon={<DismissRegular />}
-                  onClick={() => setSearchQuery('')}
-                />
-              )
-              : undefined}
-          />
-        </div>
+        <EntitySearchBar
+          query={search.query}
+          onQueryChange={search.setQuery}
+          chips={search.chips}
+          onRemoveChip={search.removeChip}
+          suggestions={search.suggestions}
+          onApplySuggestion={search.addChip}
+          placeholder={t('provinceList.search.placeholder')}
+          removeChipLabel={t('entitySearch.removeFilter')}
+        />
       )}
 
       {!collapsed && (
         canonicalProvinces.length === 0 ? (
           <Text size={200} className={styles.empty}>{t('provinceList.empty')}</Text>
         ) : filteredProvinces.length === 0 ? (
-          <Text size={200} className={styles.empty}>{t('provinceList.filter.empty')}</Text>
+          <Text size={200} className={styles.empty}>{t('entitySearch.noResults')}</Text>
         ) : (
           <div ref={scrollRef} className={styles.scroll}>
             <List as="div" className={styles.list}>
@@ -842,144 +636,6 @@ export function CanonicalProvinceList({ collapsed, onToggleCollapse }: Props): J
       )}
     </div>
   )
-}
-
-function matchesProvinceSearch(
-  province: ProvinceCatalogEntry,
-  query: string,
-  _continents: ReadonlyMap<string, unknown>
-): boolean {
-  if (province.id !== null && String(province.id).includes(query)) return true
-  if (province.type?.toLowerCase().includes(query)) return true
-  if (province.terrain?.toLowerCase().includes(query)) return true
-  if (province.continent?.toLowerCase().includes(query)) return true
-  if (province.isCoastal === true && 'coastal'.includes(query)) return true
-  if (province.isCoastal === false && 'inland'.includes(query)) return true
-  return false
-}
-
-function uniqueSorted(values: Array<string | null>): string[] {
-  return [...new Set(values.filter((v): v is string => v !== null && v.length > 0))].sort()
-}
-
-function areFiltersEmpty(filters: ProvinceListFilters): boolean {
-  return filters.types.length === 0
-    && filters.terrains.length === 0
-    && filters.continents.length === 0
-    && filters.coastal === 'all'
-    && filters.validation === 'all'
-    && filters.severities.length === 0
-}
-
-function toggleFilterValue<T extends string>(values: readonly T[], value: T): T[] {
-  return values.includes(value)
-    ? values.filter((c) => c !== value)
-    : [...values, value]
-}
-
-function matchesProvinceFilters(
-  province: ProvinceCatalogEntry,
-  filters: ProvinceListFilters,
-  issuesByProvinceKey: Map<string, ProvinceValidationIssue[]>
-): boolean {
-  if (filters.types.length > 0 && (!province.type || !filters.types.includes(province.type))) return false
-  if (filters.terrains.length > 0 && (!province.terrain || !filters.terrains.includes(province.terrain))) return false
-  if (filters.continents.length > 0 && (!province.continent || !filters.continents.includes(province.continent))) return false
-  if (filters.coastal === 'coastal' && province.isCoastal !== true) return false
-  if (filters.coastal === 'inland' && province.isCoastal !== false) return false
-  const issues = issuesByProvinceKey.get(province.key) ?? []
-  if (filters.validation === 'clean' && issues.length > 0) return false
-  if (filters.validation === 'any' && issues.length === 0) return false
-  if (filters.severities.length > 0 && !issues.some((i) => filters.severities.includes(i.severity))) return false
-  return true
-}
-
-function buildFilterSuggestions(
-  provinceCatalog: readonly ProvinceCatalogEntry[],
-  filters: ProvinceListFilters,
-  t: (key: MessageKey, params?: MessageParams) => string
-): FilterSuggestion[] {
-  const types = uniqueSorted(provinceCatalog.map((p) => p.type))
-    .filter((v) => !filters.types.includes(v))
-    .map<FilterSuggestion>((v) => ({
-      key: `type:${v}`, kind: 'type', value: v, label: v,
-      groupLabel: t('provinceList.filter.type')
-    }))
-
-  const terrains = uniqueSorted(provinceCatalog.map((p) => p.terrain))
-    .filter((v) => !filters.terrains.includes(v))
-    .map<FilterSuggestion>((v) => ({
-      key: `terrain:${v}`, kind: 'terrain', value: v, label: v,
-      groupLabel: t('provinceList.filter.terrain')
-    }))
-
-  const continents = uniqueSorted(provinceCatalog.map((p) => p.continent))
-    .filter((v) => !filters.continents.includes(v))
-    .map<FilterSuggestion>((v) => ({
-      key: `continent:${v}`, kind: 'continent', value: v, label: v,
-      groupLabel: t('provinceList.filter.continent')
-    }))
-
-  const coastal: FilterSuggestion[] = []
-  if (filters.coastal !== 'coastal') coastal.push({ key: 'coastal:coastal', kind: 'coastal', value: 'coastal', label: t('provinceList.filter.coastal.coastal'), groupLabel: t('provinceList.filter.coastal') })
-  if (filters.coastal !== 'inland') coastal.push({ key: 'coastal:inland', kind: 'coastal', value: 'inland', label: t('provinceList.filter.coastal.inland'), groupLabel: t('provinceList.filter.coastal') })
-
-  const validation: FilterSuggestion[] = []
-  if (filters.validation !== 'any') validation.push({ key: 'validation:any', kind: 'validation', value: 'any', label: t('provinceList.filter.validation.any'), groupLabel: t('provinceList.filter.validation') })
-  if (filters.validation !== 'clean') validation.push({ key: 'validation:clean', kind: 'validation', value: 'clean', label: t('provinceList.filter.validation.clean'), groupLabel: t('provinceList.filter.validation') })
-
-  const severities = VALIDATION_SEVERITIES
-    .filter((v) => !filters.severities.includes(v))
-    .map<FilterSuggestion>((v) => ({
-      key: `severity:${v}`, kind: 'severity', value: v,
-      label: t(`provinceList.filter.severity.${v}`),
-      groupLabel: t('provinceList.filter.severity')
-    }))
-
-  return [...validation, ...coastal, ...severities, ...types, ...terrains, ...continents]
-}
-
-function filterSuggestionsForQuery(suggestions: readonly FilterSuggestion[], query: string): FilterSuggestion[] {
-  const q = query.trim().toLowerCase()
-  if (q.length === 0) return suggestions.slice(0, SUGGESTION_LIMIT)
-  return suggestions
-    .filter((s) => s.label.toLowerCase().includes(q) || s.groupLabel.toLowerCase().includes(q))
-    .slice(0, SUGGESTION_LIMIT)
-}
-
-function applyFilterSuggestion(filters: ProvinceListFilters, suggestion: FilterSuggestion): ProvinceListFilters {
-  if (suggestion.kind === 'type') return { ...filters, types: toggleFilterValue(filters.types, suggestion.value) }
-  if (suggestion.kind === 'terrain') return { ...filters, terrains: toggleFilterValue(filters.terrains, suggestion.value) }
-  if (suggestion.kind === 'continent') return { ...filters, continents: toggleFilterValue(filters.continents, suggestion.value) }
-  if (suggestion.kind === 'coastal') return { ...filters, coastal: suggestion.value as CoastalFilter }
-  if (suggestion.kind === 'validation') return { ...filters, validation: suggestion.value as ValidationFilter }
-  return { ...filters, severities: toggleFilterValue(filters.severities, suggestion.value as ProvinceValidationSeverity) }
-}
-
-function buildActiveFilterTags(
-  filters: ProvinceListFilters,
-  t: (key: MessageKey, params?: MessageParams) => string
-): Array<{ key: string; label: string }> {
-  return [
-    ...filters.types.map((v) => ({ key: `type:${v}`, label: `${t('provinceList.filter.type')}: ${v}` })),
-    ...filters.terrains.map((v) => ({ key: `terrain:${v}`, label: `${t('provinceList.filter.terrain')}: ${v}` })),
-    ...filters.continents.map((v) => ({ key: `continent:${v}`, label: `${t('provinceList.filter.continent')}: ${v}` })),
-    ...(filters.coastal === 'all' ? [] : [{ key: `coastal:${filters.coastal}`, label: `${t('provinceList.filter.coastal')}: ${t(`provinceList.filter.coastal.${filters.coastal}`)}` }]),
-    ...(filters.validation === 'all' ? [] : [{ key: `validation:${filters.validation}`, label: `${t('provinceList.filter.validation')}: ${t(`provinceList.filter.validation.${filters.validation}`)}` }]),
-    ...filters.severities.map((v) => ({ key: `severity:${v}`, label: `${t('provinceList.filter.severity')}: ${t(`provinceList.filter.severity.${v}`)}` }))
-  ]
-}
-
-function removeFilterTag(filters: ProvinceListFilters, key: string): ProvinceListFilters {
-  const [kind, ...rest] = key.split(':')
-  const value = rest.join(':')
-  if (kind === 'type') return { ...filters, types: filters.types.filter((e) => e !== value) }
-  if (kind === 'terrain') return { ...filters, terrains: filters.terrains.filter((e) => e !== value) }
-  if (kind === 'continent') return { ...filters, continents: filters.continents.filter((e) => e !== value) }
-  if (kind === 'coastal') return { ...filters, coastal: 'all' }
-  if (kind === 'validation') return { ...filters, validation: 'all' }
-  if (kind === 'severity') return { ...filters, severities: filters.severities.filter((e) => e !== value) }
-  return filters
 }
 
 function getIssueSeverityClassName(styles: ReturnType<typeof useStyles>, issues: ProvinceValidationIssue[]): string {
