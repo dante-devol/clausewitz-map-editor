@@ -5,7 +5,8 @@ import { channels } from '../shared/contract/events'
 
 const api: ApiContract = {
   app: {
-    getSystemLocale: () => ipcRenderer.invoke(channels.app.getSystemLocale)
+    getSystemLocale: () => ipcRenderer.invoke(channels.app.getSystemLocale),
+    openUserDataFolder: () => ipcRenderer.invoke(channels.app.openUserDataFolder)
   },
   dialogs: {
     openFolder: () => ipcRenderer.invoke(channels.dialogs.openFolder),

@@ -1,4 +1,5 @@
-import { makeStyles, tokens, Radio, RadioGroup, Text } from '@fluentui/react-components'
+import { makeStyles, tokens, Radio, RadioGroup, Text, Button } from '@fluentui/react-components'
+import { FolderRegular } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
 import { SUPPORTED_APP_LOCALES, type AppLocale } from '../../../../shared/i18n'
 
@@ -43,6 +44,17 @@ export function SettingsView() {
             <Radio key={locale} value={locale} label={t(`settings.language.${locale}`)} />
           ))}
         </RadioGroup>
+      </div>
+      <div className={styles.section}>
+        <Text size={300} weight="semibold">{t('settings.data.title')}</Text>
+        <Text size={200} className={styles.description}>{t('settings.data.description')}</Text>
+        <Button
+          appearance="secondary"
+          icon={<FolderRegular />}
+          onClick={() => { void window.api.app.openUserDataFolder() }}
+        >
+          {t('settings.data.openFolder')}
+        </Button>
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 export const channels = {
   app: {
-    getSystemLocale: 'app:getSystemLocale'
+    getSystemLocale: 'app:getSystemLocale',
+    openUserDataFolder: 'app:openUserDataFolder'
   },
   projects: {
     getRecent: 'projects:getRecent',

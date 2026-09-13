@@ -144,6 +144,7 @@ export interface ConfirmDialogOptions {
 export interface ApiContract {
   app: {
     getSystemLocale: () => Promise<AppLocale>
+    openUserDataFolder: () => Promise<void>
   }
   dialogs: {
     openFolder: () => Promise<string | null>
