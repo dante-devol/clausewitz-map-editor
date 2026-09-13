@@ -21,7 +21,8 @@
     },
     "icon": "resources/icon.png",
     "win": {
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "target": ["nsis", "portable"]
     },
     "files": [
       "out/**/*"
