@@ -39,6 +39,14 @@ export interface StateEditSlice {
   // the `original` so the main process can detect fields that changed on disk
   // in the meantime instead of silently overwriting them.
   stateEditBaselines: Map<number, StateDefinition>
+  // States created this session that don't exist on disk yet, keyed by their
+  // assigned ID. Edits to a new state still go through pendingStateEdits like
+  // any other state; there's just no baseline to capture since nothing on
+  // disk could conflict with it yet.
+  pendingNewStates: Map<number, StateDefinition>
+  // IDs of on-disk states marked for deletion. Kept separate from
+  // pendingStateEdits since a deletion isn't a field patch.
+  pendingStateDeletions: Set<number>
   editState: (id: number, patch: StateEditPatch) => void
   // Adds provinceIds to targetStateId and removes them from whichever other
   // state effectively holds them (its loaded provinceIds, or a pending edit's
@@ -46,6 +54,18 @@ export interface StateEditSlice {
   // targetStateId of null unassigns the provinces without assigning them
   // anywhere else. Unknown province IDs are ignored.
   moveProvincesToState: (provinceIds: number[], targetStateId: number | null) => void
+  // Creates an empty state with the next-available ID and returns it. Purely
+  // an in-memory pending change — nothing is written until save, at which
+  // point the file is named from the state's (possibly still-default) name.
+  createState: () => number
+  // Marks a state for deletion. A pending-new state (never saved) is dropped
+  // outright instead, since there's nothing on disk to delete. Provinces are
+  // left as-is; orphaned land provinces are caught by validation, not blocked
+  // here.
+  deleteState: (id: number) => void
+  // Undoes whatever pending change touches this id: a pending-new state is
+  // discarded entirely, a pending deletion is unmarked, and a field-edit patch
+  // (plus its baseline) is dropped.
   revertStateEdit: (id: number) => void
   clearStateSavedChanges: () => void
   clearStatePendingChanges: () => void
@@ -54,6 +74,27 @@ export interface StateEditSlice {
 export const STATE_EDIT_EMPTY = {
   pendingStateEdits: new Map<number, StateEditPatch>(),
   stateEditBaselines: new Map<number, StateDefinition>(),
+  pendingNewStates: new Map<number, StateDefinition>(),
+  pendingStateDeletions: new Set<number>(),
+}
+
+function nextStateId(state: Pick<StateEditStore, 'statesById' | 'pendingNewStates'>): number {
+  let max = 0
+  for (const id of state.statesById.keys()) if (id > max) max = id
+  for (const id of state.pendingNewStates.keys()) if (id > max) max = id
+  return max + 1
+}
+
+function emptyStateDefinition(id: number): StateDefinition {
+  return {
+    id,
+    name: 'New State',
+    displayName: 'New State',
+    provinceIds: [],
+    manpower: 0,
+    stateCategory: '',
+    history: { owner: undefined, coreOf: [], buildings: [], victoryPoints: [], effects: [], dateHistory: [] }
+  }
 }
 
 type StateEditStore = StateEditSlice
@@ -102,12 +143,13 @@ export const createStateEditSlice: StateCreator<StateEditStore, [], [], StateEdi
       const effectiveProvinceIds = (stateId: number): number[] =>
         pendingStateEdits.get(stateId)?.provinceIds ?? state.statesById.get(stateId)?.provinceIds ?? []
 
-      for (const other of state.statesById.values()) {
-        if (other.id === targetStateId) continue
-        const current = effectiveProvinceIds(other.id)
+      const otherStateIds = new Set([...state.statesById.keys(), ...state.pendingNewStates.keys()])
+      for (const otherId of otherStateIds) {
+        if (otherId === targetStateId) continue
+        const current = effectiveProvinceIds(otherId)
         const filtered = current.filter((id) => !idSet.has(id))
         if (filtered.length === current.length) continue
-        patchState(state, pendingStateEdits, stateEditBaselines, other.id, { provinceIds: filtered })
+        patchState(state, pendingStateEdits, stateEditBaselines, otherId, { provinceIds: filtered })
       }
 
       if (targetStateId !== null) {
@@ -124,22 +166,63 @@ export const createStateEditSlice: StateCreator<StateEditStore, [], [], StateEdi
       return { pendingStateEdits, stateEditBaselines }
     }),
 
+    createState: () => {
+      // set() is synchronous in zustand, so this closure variable is safely
+      // populated before createState returns.
+      let assignedId = 0
+      set((state) => {
+        assignedId = nextStateId(state)
+        const pendingNewStates = new Map(state.pendingNewStates)
+        pendingNewStates.set(assignedId, emptyStateDefinition(assignedId))
+        return { pendingNewStates }
+      })
+      return assignedId
+    },
+
+    deleteState: (id) => set((state) => {
+      if (state.pendingNewStates.has(id)) {
+        const pendingNewStates = new Map(state.pendingNewStates)
+        pendingNewStates.delete(id)
+        const pendingStateEdits = new Map(state.pendingStateEdits)
+        pendingStateEdits.delete(id)
+        return { pendingNewStates, pendingStateEdits }
+      }
+      const pendingStateDeletions = new Set(state.pendingStateDeletions)
+      pendingStateDeletions.add(id)
+      const pendingStateEdits = new Map(state.pendingStateEdits)
+      pendingStateEdits.delete(id)
+      return { pendingStateDeletions, pendingStateEdits }
+    }),
+
     revertStateEdit: (id) => set((state) => {
+      if (state.pendingNewStates.has(id)) {
+        const pendingNewStates = new Map(state.pendingNewStates)
+        pendingNewStates.delete(id)
+        const pendingStateEdits = new Map(state.pendingStateEdits)
+        pendingStateEdits.delete(id)
+        return { pendingNewStates, pendingStateEdits }
+      }
+      const pendingStateDeletions = new Set(state.pendingStateDeletions)
+      pendingStateDeletions.delete(id)
       const pendingStateEdits = new Map(state.pendingStateEdits)
       pendingStateEdits.delete(id)
       const stateEditBaselines = new Map(state.stateEditBaselines)
       stateEditBaselines.delete(id)
-      return { pendingStateEdits, stateEditBaselines }
+      return { pendingStateEdits, stateEditBaselines, pendingStateDeletions }
     }),
 
     clearStateSavedChanges: () => set({
       pendingStateEdits: new Map<number, StateEditPatch>(),
       stateEditBaselines: new Map<number, StateDefinition>(),
+      pendingNewStates: new Map<number, StateDefinition>(),
+      pendingStateDeletions: new Set<number>(),
     }),
 
     clearStatePendingChanges: () => set({
       pendingStateEdits: new Map<number, StateEditPatch>(),
       stateEditBaselines: new Map<number, StateDefinition>(),
+      pendingNewStates: new Map<number, StateDefinition>(),
+      pendingStateDeletions: new Set<number>(),
     }),
   }
 }
