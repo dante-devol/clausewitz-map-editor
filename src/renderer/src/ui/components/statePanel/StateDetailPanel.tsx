@@ -14,6 +14,7 @@ import {
   AddRegular,
   ChevronDownRegular,
   ChevronRightRegular,
+  DeleteRegular,
   DismissRegular
 } from '@fluentui/react-icons'
 import { useI18n, type MessageParams } from '../../i18n/I18nProvider'
@@ -69,6 +70,18 @@ const useStyles = makeStyles({
     fontSize: tokens.fontSizeBase100,
     direction: 'rtl',
     textAlign: 'left'
+  },
+  deletionBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalXS,
+    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
+    backgroundColor: 'rgba(196, 49, 75, 0.12)',
+    color: tokens.colorPaletteRedForeground2,
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`
+  },
+  deletionBannerText: {
+    flex: 1
   },
   // Required fields area
   requiredFields: {
@@ -585,19 +598,23 @@ export function StateDetailPanel({ onCollapse }: Props): JSX.Element {
 
   const selectedStateId = useMapDataStore((s) => s.selectedStateId)
   const statesById = useMapDataStore((s) => s.statesById)
+  const pendingNewStates = useMapDataStore((s) => s.pendingNewStates)
+  const pendingStateDeletions = useMapDataStore((s) => s.pendingStateDeletions)
   const stateCategories = useMapDataStore((s) => s.stateCategories)
   const buildingsCatalog = useMapDataStore((s) => s.buildings)
   const pendingStateEdits = useMapDataStore((s) => s.pendingStateEdits)
   const editState = useMapDataStore((s) => s.editState)
   const moveProvincesToState = useMapDataStore((s) => s.moveProvincesToState)
   const revertStateEdit = useMapDataStore((s) => s.revertStateEdit)
+  const deleteState = useMapDataStore((s) => s.deleteState)
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set(['resources', 'history', 'provinces']))
   const [addForm, setAddForm] = useState<AddFormKind>(null)
 
-  const original = selectedStateId !== null ? statesById.get(selectedStateId) : undefined
+  const original = selectedStateId !== null ? (statesById.get(selectedStateId) ?? pendingNewStates.get(selectedStateId)) : undefined
   const patch = selectedStateId !== null ? (pendingStateEdits.get(selectedStateId) ?? {}) : {}
   const hasPatch = selectedStateId !== null && pendingStateEdits.has(selectedStateId)
+  const isPendingDeletion = selectedStateId !== null && pendingStateDeletions.has(selectedStateId)
 
   const effective = useMemo(
     () => original ? applyStatePatch(original, patch) : null,
@@ -674,7 +691,25 @@ export function StateDetailPanel({ onCollapse }: Props): JSX.Element {
             onClick={() => { revertStateEdit(original.id); setAddForm(null) }}
           />
         )}
+        {!isPendingDeletion && (
+          <Button
+            size="small"
+            appearance="subtle"
+            icon={<DeleteRegular />}
+            title={t('statePanel.detail.delete')}
+            onClick={() => deleteState(original.id)}
+          />
+        )}
       </div>
+
+      {isPendingDeletion && (
+        <div className={styles.deletionBanner}>
+          <Text size={100} className={styles.deletionBannerText}>{t('statePanel.detail.pendingDeletion')}</Text>
+          <Button size="small" onClick={() => revertStateEdit(original.id)}>
+            {t('statePanel.detail.undoDelete')}
+          </Button>
+        </div>
+      )}
 
       {/* Required fields */}
       <div className={styles.requiredFields}>
