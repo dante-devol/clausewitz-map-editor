@@ -279,10 +279,22 @@ export function useMapViewportState() {
     ? Array.from(paintSelectionStore)
     : highlightColors
 
+  // Reveal pass: lightly tint the selected state/strategic-region's
+  // provinces with their true colors, so subdivisions show faintly through
+  // the map mode's block color. Gated on both the editor mode (selection
+  // context) and the display mode (the block-color paint actually being
+  // shown) — they're independent toggles, so either alone isn't enough.
+  const revealColors =
+    (editorMode === 'states' && displayMode === 'state') ||
+    (editorMode === 'strategicRegions' && displayMode === 'strategicRegion')
+      ? highlightColors
+      : []
+
   return {
     provincesImage,
     colorMap,
     highlightColors: highlightColorsForCanvas,
+    revealColors,
     validationWarningColors: validationHighlightColors.warningColors,
     validationErrorColors: validationHighlightColors.errorColors,
     activeTool,

@@ -131,6 +131,34 @@ void main() {
 }
 `
 
+// Reveal pass (state/strategic-region editing): fills every pixel whose
+// province is in the mask with that province's *original* color (sampled
+// from a palette that map-mode recoloring never touches), at a fixed low
+// opacity — lets the true province subdivisions show faintly through a
+// map-mode block color.
+const FRAG_REVEAL = `#version 300 es
+precision highp float;
+uniform sampler2D u_id_tex;
+uniform sampler2D u_palette_tex;
+uniform int u_palette_height;
+uniform sampler2D u_mask_tex;
+uniform int u_mask_height;
+uniform float u_opacity;
+in vec2 v_uv;
+out vec4 fragColor;
+void main() {
+  vec4 packed = texture(u_id_tex, v_uv);
+  float lo = packed.r;
+  float hi = packed.g;
+  float col = (lo * 255.0 + 0.5) / 256.0;
+  float maskRow = (hi * 255.0 + 0.5) / float(u_mask_height);
+  if (texture(u_mask_tex, vec2(col, maskRow)).r <= 0.5) discard;
+  float paletteRow = (hi * 255.0 + 0.5) / float(u_palette_height);
+  vec3 color = texture(u_palette_tex, vec2(col, paletteRow)).rgb;
+  fragColor = vec4(color, u_opacity);
+}
+`
+
 // Bounding-box outline: vertices arrive pre-computed in NDC.
 const VERT_NDC = `#version 300 es
 in vec2 a_pos;
@@ -154,6 +182,9 @@ interface ProvinceBboxGroup {
   maxX: number
   maxY: number
 }
+
+// Opacity of the reveal pass — see FRAG_REVEAL.
+const REVEAL_OPACITY = 0.10
 
 const QUAD = new Float32Array([
   0, 0,  1, 0,  0, 1,
@@ -213,6 +244,15 @@ export class MapRenderer {
   private validationOutlineSelHeightLoc!: WebGLUniformLocation
   private validationOutlinePoffLoc!: WebGLUniformLocation
   private validationOutlineColorLoc!: WebGLUniformLocation
+  private revealProgram!: WebGLProgram
+  private revealPosLoc!: number
+  private revealMatrixLoc!: WebGLUniformLocation
+  private revealIdTexLoc!: WebGLUniformLocation
+  private revealPaletteTexLoc!: WebGLUniformLocation
+  private revealPaletteHeightLoc!: WebGLUniformLocation
+  private revealMaskTexLoc!: WebGLUniformLocation
+  private revealMaskHeightLoc!: WebGLUniformLocation
+  private revealOpacityLoc!: WebGLUniformLocation
 
   // Selection texture: 256×paletteHeight R8 (stored as RGBA8, R channel = 1 if selected).
   // Same UV indexing as the palette texture — cell (id%256, id/256) = 1 when id is selected.
@@ -231,6 +271,17 @@ export class MapRenderer {
   private hoverTexture: WebGLTexture | null = null
   private hoverData: Uint8Array | null = null
   private hoverCount = 0
+
+  // Original (never-recolored) palette — snapshot taken at load time, before
+  // any map-mode recolorTexture() call, and never mutated afterwards. Lets
+  // the reveal pass show true province colors even while a map mode has
+  // overwritten the main palette texture for display.
+  private originalPaletteTexture: WebGLTexture | null = null
+  private originalPaletteData: Uint8Array | null = null
+  // Reveal mask: same 256×paletteHeight layout as selection/validation/hover.
+  private revealTexture: WebGLTexture | null = null
+  private revealData: Uint8Array | null = null
+  private revealCount = 0
 
   // Bounding-box outline: 4 thin screen-space quads per contiguous selection group.
   private bboxProgram!: WebGLProgram
@@ -409,6 +460,26 @@ export class MapRenderer {
     this.validationOutlinePoffLoc = gl.getUniformLocation(validationOutlineProg, 'u_poff')!
     this.validationOutlineColorLoc = gl.getUniformLocation(validationOutlineProg, 'u_color')!
 
+    const revealVert = compileShader(gl, gl.VERTEX_SHADER, VERT)
+    const revealFrag = compileShader(gl, gl.FRAGMENT_SHADER, FRAG_REVEAL)
+    const revealProg = gl.createProgram()!
+    gl.attachShader(revealProg, revealVert)
+    gl.attachShader(revealProg, revealFrag)
+    gl.linkProgram(revealProg)
+    if (!gl.getProgramParameter(revealProg, gl.LINK_STATUS))
+      throw new Error(`Reveal shader link error: ${gl.getProgramInfoLog(revealProg)}`)
+    gl.deleteShader(revealVert)
+    gl.deleteShader(revealFrag)
+    this.revealProgram = revealProg
+    this.revealPosLoc = gl.getAttribLocation(revealProg, 'a_pos')
+    this.revealMatrixLoc = gl.getUniformLocation(revealProg, 'u_matrix')!
+    this.revealIdTexLoc = gl.getUniformLocation(revealProg, 'u_id_tex')!
+    this.revealPaletteTexLoc = gl.getUniformLocation(revealProg, 'u_palette_tex')!
+    this.revealPaletteHeightLoc = gl.getUniformLocation(revealProg, 'u_palette_height')!
+    this.revealMaskTexLoc = gl.getUniformLocation(revealProg, 'u_mask_tex')!
+    this.revealMaskHeightLoc = gl.getUniformLocation(revealProg, 'u_mask_height')!
+    this.revealOpacityLoc = gl.getUniformLocation(revealProg, 'u_opacity')!
+
     // Bounding-box program: NDC positions + solid magenta.
     const bboxVert = compileShader(gl, gl.VERTEX_SHADER, VERT_NDC)
     const bboxFrag = compileShader(gl, gl.FRAGMENT_SHADER, FRAG_SOLID)
@@ -492,6 +563,19 @@ export class MapRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 
+    // Original-color palette — a snapshot of paletteData exactly as built
+    // above (true province colors), taken before any recolorTexture() call
+    // can overwrite paletteData for map-mode display. Never mutated again.
+    this.originalPaletteData = paletteData.slice()
+    if (this.originalPaletteTexture) gl.deleteTexture(this.originalPaletteTexture)
+    this.originalPaletteTexture = gl.createTexture()!
+    gl.bindTexture(gl.TEXTURE_2D, this.originalPaletteTexture)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, paletteHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.originalPaletteData)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+
     // Selection texture — same 256×paletteHeight layout as palette.
     // R channel = 1.0 (255) for selected province IDs, 0 otherwise.
     // Starts fully cleared; updated by setHighlightColors.
@@ -518,6 +602,12 @@ export class MapRenderer {
     this.hoverTexture = gl.createTexture()!
     initializeMaskTexture(gl, this.hoverTexture, this.hoverData, paletteHeight)
     this.hoverCount = 0
+
+    if (this.revealTexture) gl.deleteTexture(this.revealTexture)
+    this.revealData = new Uint8Array(256 * paletteHeight * 4)
+    this.revealTexture = gl.createTexture()!
+    initializeMaskTexture(gl, this.revealTexture, this.revealData, paletteHeight)
+    this.revealCount = 0
 
     this.selectionBboxGroups = []
     this.validationWarningBboxGroups = []
@@ -578,6 +668,19 @@ export class MapRenderer {
     if (this.hoverData) {
       this.hoverTexture = gl.createTexture()!
       initializeMaskTexture(gl, this.hoverTexture, this.hoverData, this.paletteHeight)
+    }
+    if (this.originalPaletteData) {
+      this.originalPaletteTexture = gl.createTexture()!
+      gl.bindTexture(gl.TEXTURE_2D, this.originalPaletteTexture)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, this.paletteHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.originalPaletteData)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+    }
+    if (this.revealData) {
+      this.revealTexture = gl.createTexture()!
+      initializeMaskTexture(gl, this.revealTexture, this.revealData, this.paletteHeight)
     }
   }
 
@@ -677,6 +780,12 @@ export class MapRenderer {
     )
   }
 
+  // Reveal pass (state/strategic-region editing): the set of provinces to
+  // lightly tint with their true color. Pass [] to disable.
+  setRevealColors(packedColors: number[]): void {
+    this.revealCount = this.updateHighlightTexture(this.revealTexture, this.revealData, packedColors)
+  }
+
   render(tx: number, ty: number, scale: number): void {
     profilerTime('frame', () => this.renderFrame(tx, ty, scale))
   }
@@ -706,6 +815,31 @@ export class MapRenderer {
     gl.uniform1i(this.paletteTexLoc, 1)
     gl.uniform1i(this.paletteHeightLoc, this.paletteHeight)
     gl.drawArrays(gl.TRIANGLES, 0, 6)
+
+    // --- Reveal (state/strategic-region editing) ---
+    if (this.revealCount > 0 && this.revealTexture && this.originalPaletteTexture) {
+      gl.enable(gl.BLEND)
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+      gl.useProgram(this.revealProgram)
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer)
+      gl.enableVertexAttribArray(this.revealPosLoc)
+      gl.vertexAttribPointer(this.revealPosLoc, 2, gl.FLOAT, false, 0, 0)
+      gl.uniformMatrix3fv(this.revealMatrixLoc, false, matrix)
+      gl.activeTexture(gl.TEXTURE0)
+      gl.bindTexture(gl.TEXTURE_2D, this.idTexture)
+      gl.uniform1i(this.revealIdTexLoc, 0)
+      gl.activeTexture(gl.TEXTURE1)
+      gl.bindTexture(gl.TEXTURE_2D, this.originalPaletteTexture)
+      gl.uniform1i(this.revealPaletteTexLoc, 1)
+      gl.uniform1i(this.revealPaletteHeightLoc, this.paletteHeight)
+      gl.activeTexture(gl.TEXTURE2)
+      gl.bindTexture(gl.TEXTURE_2D, this.revealTexture)
+      gl.uniform1i(this.revealMaskTexLoc, 2)
+      gl.uniform1i(this.revealMaskHeightLoc, this.paletteHeight)
+      gl.uniform1f(this.revealOpacityLoc, REVEAL_OPACITY)
+      gl.drawArrays(gl.TRIANGLES, 0, 6)
+      gl.disable(gl.BLEND)
+    }
 
     // --- Overlays ---
     if (this.overlayEntries.length > 0) {
@@ -817,6 +951,8 @@ export class MapRenderer {
     if (this.validationWarningTexture) { gl.deleteTexture(this.validationWarningTexture); this.validationWarningTexture = null }
     if (this.validationErrorTexture) { gl.deleteTexture(this.validationErrorTexture); this.validationErrorTexture = null }
     if (this.hoverTexture)    { gl.deleteTexture(this.hoverTexture);    this.hoverTexture = null }
+    if (this.originalPaletteTexture) { gl.deleteTexture(this.originalPaletteTexture); this.originalPaletteTexture = null }
+    if (this.revealTexture)  { gl.deleteTexture(this.revealTexture);  this.revealTexture = null }
     this._imageSize         = { width: 0, height: 0 }
     this.pixelData          = null
     this.pixelDataWidth     = 0
@@ -830,6 +966,9 @@ export class MapRenderer {
     this.validationErrorCount = 0
     this.hoverData           = null
     this.hoverCount          = 0
+    this.originalPaletteData = null
+    this.revealData          = null
+    this.revealCount         = 0
     this.selectionBboxGroups = []
     this.validationWarningBboxGroups = []
     this.validationErrorBboxGroups = []
@@ -928,6 +1067,8 @@ export class MapRenderer {
       this.validationWarningData = expand(this.validationWarningData!)
       this.validationErrorData   = expand(this.validationErrorData!)
       this.hoverData              = expand(this.hoverData!)
+      this.originalPaletteData    = expand(this.originalPaletteData!)
+      this.revealData              = expand(this.revealData!)
       this.paletteHeight = neededHeight
 
       const reupload = (existing: WebGLTexture | null, data: Uint8Array): WebGLTexture => {
@@ -936,24 +1077,35 @@ export class MapRenderer {
         initializeMaskTexture(gl, tex, data, neededHeight)
         return tex
       }
-      // Write color into palette before reuploading so it's included in the full upload.
+      // Write color into palette before reuploading so it's included in the
+      // full upload. A freshly-painted province's "original" color is just
+      // the color it was created with, so the original-palette snapshot
+      // gets the same write.
       const base = id * 4
       this.paletteData[base] = r; this.paletteData[base + 1] = g
       this.paletteData[base + 2] = b; this.paletteData[base + 3] = 255
+      this.originalPaletteData[base] = r; this.originalPaletteData[base + 1] = g
+      this.originalPaletteData[base + 2] = b; this.originalPaletteData[base + 3] = 255
 
       this.paletteTexture           = reupload(this.paletteTexture, this.paletteData)
       this.selectionTexture         = reupload(this.selectionTexture, this.selectionData)
       this.validationWarningTexture = reupload(this.validationWarningTexture, this.validationWarningData)
       this.validationErrorTexture   = reupload(this.validationErrorTexture, this.validationErrorData)
       this.hoverTexture              = reupload(this.hoverTexture, this.hoverData)
+      this.originalPaletteTexture    = reupload(this.originalPaletteTexture, this.originalPaletteData)
+      this.revealTexture              = reupload(this.revealTexture, this.revealData)
     } else {
       // Palette is already large enough — patch just the one texel.
       const base = id * 4
       this.paletteData![base] = r; this.paletteData![base + 1] = g
       this.paletteData![base + 2] = b; this.paletteData![base + 3] = 255
+      this.originalPaletteData![base] = r; this.originalPaletteData![base + 1] = g
+      this.originalPaletteData![base + 2] = b; this.originalPaletteData![base + 3] = 255
       const col = id % 256
       const row = Math.floor(id / 256)
       gl.bindTexture(gl.TEXTURE_2D, this.paletteTexture)
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, col, row, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([r, g, b, 255]))
+      gl.bindTexture(gl.TEXTURE_2D, this.originalPaletteTexture)
       gl.texSubImage2D(gl.TEXTURE_2D, 0, col, row, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([r, g, b, 255]))
     }
   }
@@ -1121,6 +1273,8 @@ export class MapRenderer {
     if (this.validationWarningTexture) gl.deleteTexture(this.validationWarningTexture)
     if (this.validationErrorTexture) gl.deleteTexture(this.validationErrorTexture)
     if (this.hoverTexture)    gl.deleteTexture(this.hoverTexture)
+    if (this.originalPaletteTexture) gl.deleteTexture(this.originalPaletteTexture)
+    if (this.revealTexture)  gl.deleteTexture(this.revealTexture)
     for (const entry of this.overlayEntries) gl.deleteTexture(entry.texture)
     for (const entry of this.outlineOverlayEntries) gl.deleteTexture(entry.texture)
     gl.deleteBuffer(this.quadBuffer)
@@ -1130,6 +1284,7 @@ export class MapRenderer {
     gl.deleteProgram(this.outlineOverlayProgram)
     gl.deleteProgram(this.outlineProgram)
     gl.deleteProgram(this.validationOutlineProgram)
+    gl.deleteProgram(this.revealProgram)
     gl.deleteProgram(this.bboxProgram)
   }
 

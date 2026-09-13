@@ -376,7 +376,7 @@ export function MapCanvas(): JSX.Element {
   const bmpSaveFailed = useMapDataStore((s) => s.bmpSaveFailed)
 
   const {
-    provincesImage, colorMap, highlightColors, validationWarningColors, validationErrorColors,
+    provincesImage, colorMap, highlightColors, revealColors, validationWarningColors, validationErrorColors,
     activeTool, eyedropEnabled, bucketEnabled, sampledValueColor, sampledValueLabel,
     displayMode, modeValuesByMode, brushPaintConfig, brushRadius,
     onActiveToolChange, onMapClick,
@@ -452,7 +452,7 @@ export function MapCanvas(): JSX.Element {
     cursorPosition, onMouseDown, onMouseMove, stopDrag, clearHoverGlow, zoomBy, fit, getPixelSnapshot,
     revertBrushStroke,
   } = useMapCanvas({
-    provincesImage, overlays: canvasOverlays, highlightColors, validationWarningColors, validationErrorColors,
+    provincesImage, overlays: canvasOverlays, highlightColors, revealColors, validationWarningColors, validationErrorColors,
     colorMap, activeTool, brushPaintConfig, onMapClick, onHoverColorChange, onBrushStrokeComplete,
   })
 

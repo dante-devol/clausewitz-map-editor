@@ -69,6 +69,7 @@ export interface UseMapCanvasProps {
   provincesImage: Uint8Array | null
   overlays: CanvasOverlay[]
   highlightColors: number[]
+  revealColors: number[]
   validationWarningColors: number[]
   validationErrorColors: number[]
   colorMap?: Map<number, number> | null
@@ -102,6 +103,7 @@ export function useMapCanvas({
   provincesImage,
   overlays,
   highlightColors,
+  revealColors,
   validationWarningColors,
   validationErrorColors,
   colorMap,
@@ -121,6 +123,7 @@ export function useMapCanvas({
   const overlayBitmapsRef = useRef(new Map<string, OverlayBitmapEntry>())
   const transformRef      = useRef<Transform>({ x: 0, y: 0, scale: 1 })
   const highlightColorsRef = useRef<number[]>([])
+  const revealColorsRef = useRef<number[]>([])
   const validationWarningColorsRef = useRef<number[]>([])
   const validationErrorColorsRef = useRef<number[]>([])
   const colorMapRef  = useRef<Map<number, number> | null | undefined>(null)
@@ -254,6 +257,7 @@ export function useMapCanvas({
       if (cm && cm.size > 0) rendererRef.current?.recolorTexture(cm)
       hoveredGlowColorRef.current = null
       rendererRef.current?.setHighlightColors(highlightColorsRef.current)
+      rendererRef.current?.setRevealColors(revealColorsRef.current)
       rendererRef.current?.setValidationHighlightColors({ warningColors: validationWarningColorsRef.current, errorColors: validationErrorColorsRef.current })
       syncSelectionStructure(rendererRef.current, provinceIndexRef.current, highlightColorsRef.current, transformRef.current.scale)
       syncValidationStructure(rendererRef.current, provinceIndexRef.current, validationWarningColorsRef.current, validationErrorColorsRef.current, transformRef.current.scale)
@@ -379,6 +383,15 @@ export function useMapCanvas({
     const { x: tx, y: ty, scale } = transformRef.current
     renderer?.render(tx, ty, scale)
   }, [highlightColors])
+
+  // Sync reveal colors (state/strategic-region editing)
+  useEffect(() => {
+    revealColorsRef.current = revealColors
+    const renderer = rendererRef.current
+    renderer?.setRevealColors(revealColors)
+    const { x: tx, y: ty, scale } = transformRef.current
+    renderer?.render(tx, ty, scale)
+  }, [revealColors])
 
   // Sync validation colors
   useEffect(() => {
