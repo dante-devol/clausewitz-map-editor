@@ -40,6 +40,8 @@ export const enMessages = {
   'settings.data.title': 'Application data',
   'settings.data.description': 'Config, logs, and other files this app stores on your machine.',
   'settings.data.openFolder': 'Open data folder',
+  'settings.neighborReveal.title': 'Neighboring province reveal',
+  'settings.neighborReveal.description': 'How many provinces deep, outside a selected state or strategic region, to also lightly reveal on the map. Set to 0 to disable.',
   'mapMode.title': 'Display Mode',
   'mapMode.provinces': 'Provinces',
   'mapMode.type': 'Type',

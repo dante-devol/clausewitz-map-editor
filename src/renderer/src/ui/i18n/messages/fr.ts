@@ -42,6 +42,8 @@ export const frMessages: Record<MessageKey, string> = {
   'settings.data.title': "Donnees de l'application",
   'settings.data.description': "Configuration, journaux et autres fichiers stockes par l'application sur cette machine.",
   'settings.data.openFolder': 'Ouvrir le dossier de donnees',
+  'settings.neighborReveal.title': 'Revelation des provinces voisines',
+  'settings.neighborReveal.description': "Nombre de provinces de profondeur, en dehors d'un etat ou d'une region strategique selectionne, a aussi legerement reveler sur la carte. Mettre a 0 pour desactiver.",
   'mapMode.title': "Mode d'affichage",
   'mapMode.provinces': 'Provinces',
   'mapMode.type': 'Type',

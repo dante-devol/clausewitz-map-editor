@@ -31,6 +31,9 @@ export interface AppConfig {
     localisation: string
   }
   displayModeOverrides: Partial<Record<string, Partial<Record<string, string>>>>
+  // How many adjacency hops out from a selected state/strategic-region to
+  // also lightly reveal — 0 disables the neighbor reveal entirely.
+  neighborRevealRingDepth: number
 }
 
 export interface FileLoadResult {

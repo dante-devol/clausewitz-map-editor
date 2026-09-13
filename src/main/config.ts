@@ -27,7 +27,8 @@ export const DEFAULT_CONFIG: Config = {
     weather: '/common/weather.txt',
     localisation: '/localisation/english'
   },
-  displayModeOverrides: {}
+  displayModeOverrides: {},
+  neighborRevealRingDepth: 1
 }
 
 const CONFIG_PATH = () => join(app.getPath('userData'), 'config.json')

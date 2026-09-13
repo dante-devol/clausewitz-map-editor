@@ -1,7 +1,8 @@
-import { makeStyles, tokens, Radio, RadioGroup, Text, Button } from '@fluentui/react-components'
+import { makeStyles, tokens, Radio, RadioGroup, Text, Button, Input } from '@fluentui/react-components'
 import { FolderRegular } from '@fluentui/react-icons'
 import { useI18n } from '../i18n/I18nProvider'
 import { SUPPORTED_APP_LOCALES, type AppLocale } from '../../../../shared/i18n'
+import { useNeighborRevealConfigStore } from '../../infra/store/neighborRevealConfigStore'
 
 const useStyles = makeStyles({
   root: {
@@ -24,6 +25,8 @@ const useStyles = makeStyles({
 export function SettingsView() {
   const styles = useStyles()
   const { localePreference, setLocalePreference, t } = useI18n()
+  const neighborRingDepth = useNeighborRevealConfigStore((s) => s.ringDepth)
+  const setNeighborRingDepth = useNeighborRevealConfigStore((s) => s.setRingDepth)
 
   return (
     <div className={styles.root}>
@@ -44,6 +47,22 @@ export function SettingsView() {
             <Radio key={locale} value={locale} label={t(`settings.language.${locale}`)} />
           ))}
         </RadioGroup>
+      </div>
+      <div className={styles.section}>
+        <Text size={300} weight="semibold">{t('settings.neighborReveal.title')}</Text>
+        <Text size={200} className={styles.description}>{t('settings.neighborReveal.description')}</Text>
+        <Input
+          type="number"
+          min={0}
+          max={5}
+          value={String(neighborRingDepth)}
+          onChange={(_, data) => {
+            const parsed = Number(data.value)
+            if (Number.isNaN(parsed)) return
+            void setNeighborRingDepth(parsed)
+          }}
+          style={{ maxWidth: '120px' }}
+        />
       </div>
       <div className={styles.section}>
         <Text size={300} weight="semibold">{t('settings.data.title')}</Text>

@@ -70,6 +70,7 @@ export interface UseMapCanvasProps {
   overlays: CanvasOverlay[]
   highlightColors: number[]
   revealColors: number[]
+  neighborRingDepth: number
   validationWarningColors: number[]
   validationErrorColors: number[]
   colorMap?: Map<number, number> | null
@@ -104,6 +105,7 @@ export function useMapCanvas({
   overlays,
   highlightColors,
   revealColors,
+  neighborRingDepth,
   validationWarningColors,
   validationErrorColors,
   colorMap,
@@ -392,6 +394,14 @@ export function useMapCanvas({
     const { x: tx, y: ty, scale } = transformRef.current
     renderer?.render(tx, ty, scale)
   }, [revealColors])
+
+  // Sync the user-configurable neighbor reveal ring depth (Settings tab)
+  useEffect(() => {
+    const renderer = rendererRef.current
+    renderer?.setNeighborRingDepth(neighborRingDepth)
+    const { x: tx, y: ty, scale } = transformRef.current
+    renderer?.render(tx, ty, scale)
+  }, [neighborRingDepth])
 
   // Sync validation colors
   useEffect(() => {

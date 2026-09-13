@@ -69,6 +69,81 @@ export function pickDistinctPalette(count: number): number[] {
   return palette
 }
 
+// BFS outward from `memberIds` through `adjacency`, returning every
+// province within `depth` hops that isn't itself a member — id → ring
+// number (1 = directly touches a member, 2 = touches a ring-1 province,
+// etc.). Cheap: bounded by however many provinces actually sit within
+// `depth` hops of a typically-small selection, not total map size.
+export function findNeighborRing(
+  memberIds: readonly number[],
+  adjacency: ReadonlyMap<number, ReadonlySet<number>>,
+  depth: number
+): Map<number, number> {
+  const members = new Set(memberIds)
+  const ringById = new Map<number, number>()
+  let frontier: number[] = [...memberIds]
+
+  for (let ring = 1; ring <= depth && frontier.length > 0; ring++) {
+    const next: number[] = []
+    for (const id of frontier) {
+      const neighbors = adjacency.get(id)
+      if (!neighbors) continue
+      for (const n of neighbors) {
+        if (n === 0 || members.has(n) || ringById.has(n)) continue
+        ringById.set(n, ring)
+        next.push(n)
+      }
+    }
+    frontier = next
+  }
+
+  return ringById
+}
+
+// Neighboring (non-selected) provinces are shaded from their own *current*
+// display color rather than given an independent hue — unlike the selected
+// group's rainbow coloring above, this deliberately keeps them "in family"
+// with whatever their real state/region color already is, so they read as
+// context around the selection rather than blurring into it.
+// A pure multiplier (`s * factor`) barely moves anything when a state's own
+// color is already fairly desaturated/muted — small numbers stay small
+// regardless of the factor. Each entry here also adds a fixed nudge, so
+// there's always a real, visible shift even off a near-gray base.
+const NEIGHBOR_SATURATION_ADJUSTMENTS = [
+  { multiplier: 2.2, add: 0.2 },
+  { multiplier: 0.3, add: -0.15 },
+  { multiplier: 1.6, add: 0.12 },
+  { multiplier: 0.5, add: -0.08 },
+]
+
+export function shadeNeighborColor(baseColor: number, colorClass: number): number {
+  const { h, s, l } = rgbToHsl(baseColor)
+  const { multiplier, add } = NEIGHBOR_SATURATION_ADJUSTMENTS[colorClass % NEIGHBOR_SATURATION_ADJUSTMENTS.length]
+  const shadedSaturation = Math.max(0, Math.min(1, s * multiplier + add))
+  return hslToPackedColor(h, shadedSaturation, l)
+}
+
+function rgbToHsl(packed: number): { h: number; s: number; l: number } {
+  const r = ((packed >> 16) & 0xff) / 255
+  const g = ((packed >> 8) & 0xff) / 255
+  const b = (packed & 0xff) / 255
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const l = (max + min) / 2
+  let h = 0
+  let s = 0
+  const d = max - min
+  if (d > 0.0001) {
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+    if (max === r) h = ((g - b) / d) % 6
+    else if (max === g) h = (b - r) / d + 2
+    else h = (r - g) / d + 4
+    h /= 6
+    if (h < 0) h += 1
+  }
+  return { h, s, l }
+}
+
 function hslToPackedColor(h: number, s: number, l: number): number {
   const hue2rgb = (p: number, q: number, t: number): number => {
     if (t < 0) t += 1

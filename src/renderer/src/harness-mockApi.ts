@@ -57,7 +57,8 @@ const DEFAULT_CONFIG: AppConfig = {
     weather: '/common/weather.txt',
     localisation: '/localisation/english'
   },
-  displayModeOverrides: {}
+  displayModeOverrides: {},
+  neighborRevealRingDepth: 1
 }
 
 let config: AppConfig = { ...DEFAULT_CONFIG }

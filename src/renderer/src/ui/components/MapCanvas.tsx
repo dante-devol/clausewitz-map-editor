@@ -16,6 +16,7 @@ import { useNotificationStore } from '../../infra/store/notificationStore'
 import { notificationService } from '../../infra/services/notificationService'
 import { useCoreStore } from '../../infra/store/coreStore'
 import { useMapDataStore } from '../../infra/store/mapDataStore'
+import { useNeighborRevealConfigStore } from '../../infra/store/neighborRevealConfigStore'
 import { selectNextAvailableProvinceId } from '../../infra/store/provinceEditSelectors'
 import { useMapQueryApi } from '../../bridge/MapQueryProvider'
 import { unpackColor } from '../../../../shared/mapDataTypes'
@@ -447,12 +448,14 @@ export function MapCanvas(): JSX.Element {
     })
   }, [addBmpStroke, paintProvinceColor])
 
+  const neighborRingDepth = useNeighborRevealConfigStore((s) => s.ringDepth)
+
   const {
     containerRef, canvasRef, brushCursorCanvasRef, dragging, displayScale, imageLoaded, isCanvasLoading,
     cursorPosition, onMouseDown, onMouseMove, stopDrag, clearHoverGlow, zoomBy, fit, getPixelSnapshot,
     revertBrushStroke,
   } = useMapCanvas({
-    provincesImage, overlays: canvasOverlays, highlightColors, revealColors, validationWarningColors, validationErrorColors,
+    provincesImage, overlays: canvasOverlays, highlightColors, revealColors, neighborRingDepth, validationWarningColors, validationErrorColors,
     colorMap, activeTool, brushPaintConfig, onMapClick, onHoverColorChange, onBrushStrokeComplete,
   })
 

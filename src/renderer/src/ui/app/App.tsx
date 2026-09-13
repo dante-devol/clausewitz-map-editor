@@ -11,6 +11,7 @@ import { useAppState } from '../hooks/useAppState'
 import { useCoreStore } from '../../infra/store/coreStore'
 import { useMapDataStore, selectHasUnsavedChanges } from '../../infra/store/mapDataStore'
 import { useDisplayModeConfig } from '../hooks/useDisplayModeConfig'
+import { useNeighborRevealConfig } from '../hooks/useNeighborRevealConfig'
 import { useProjectSelection } from '../hooks/useProjectSelection'
 import { useMapLoader } from '../hooks/useMapLoader'
 import { useProvinceValidation } from '../hooks/useProvinceValidation'
@@ -80,6 +81,7 @@ function App(): JSX.Element {
   } = useProjectSelection()
 
   useDisplayModeConfig()
+  useNeighborRevealConfig()
   useMapLoader()
   useProvinceValidation()
 

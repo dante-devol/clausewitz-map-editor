@@ -1,5 +1,5 @@
 import { buildProvinceIndex, updateProvinceBboxesForRegion } from './provinceAnalysis'
-import { colorProvinceSubgraph, pickDistinctPalette } from './provinceGraphColoring'
+import { colorProvinceSubgraph, pickDistinctPalette, findNeighborRing, shadeNeighborColor } from './provinceGraphColoring'
 import type { ProvinceMapSource } from './ProvinceMapSource'
 import type { ProvinceIndex } from './provinceAnalysis'
 import type { BmpPixelStrokeDelta } from '../../../../shared/provinceEditing'
@@ -207,13 +207,16 @@ void main() {
 
   float paletteRow = (hi * 255.0 + 0.5) / float(u_palette_height);
   vec3 baseColor = texture(u_base_tex, vec2(col, paletteRow)).rgb;
-  vec3 fillColor = texture(u_fill_tex, vec2(col, paletteRow)).rgb;
+  // Alpha channel here carries a per-province opacity multiplier (255 =
+  // full, less for provinces that should read as softer/secondary — see
+  // MapRenderer.setRevealColors), not just membership.
+  vec4 fillSample = texture(u_fill_tex, vec2(col, paletteRow));
 
   vec3 baseHsl = rgb2hsl(baseColor);
-  vec3 fillHsl = rgb2hsl(fillColor);
+  vec3 fillHsl = rgb2hsl(fillSample.rgb);
   vec3 colorized = hsl2rgb(vec3(fillHsl.x, fillHsl.y, baseHsl.z));
 
-  fragColor = vec4(colorized, u_opacity);
+  fragColor = vec4(colorized, u_opacity * fillSample.a);
 }
 `
 
@@ -243,6 +246,16 @@ interface ProvinceBboxGroup {
 
 // Opacity of the reveal pass — see FRAG_REVEAL.
 const REVEAL_OPACITY = 0.2
+
+// Default hop count for the neighbor reveal ring — user-configurable via
+// setNeighborRingDepth (see the "Neighboring province reveal" setting).
+const DEFAULT_NEIGHBOR_RING_DEPTH = 1
+
+// How much softer surrounding provinces render relative to the selection
+// itself (as a fraction of REVEAL_OPACITY) — keeps them reading as context
+// around the selection, not part of it.
+const NEIGHBOR_OPACITY_FACTOR = 0.85
+const NEIGHBOR_ALPHA_BYTE = Math.round(255 * NEIGHBOR_OPACITY_FACTOR)
 
 const QUAD = new Float32Array([
   0, 0,  1, 0,  0, 1,
@@ -343,6 +356,14 @@ export class MapRenderer {
   private revealTexture: WebGLTexture | null = null
   private revealData: Uint8Array | null = null
   private revealCount = 0
+  // User-configurable via setNeighborRingDepth (see the "Neighboring
+  // province reveal" setting) — how many adjacency hops out from the
+  // selected group setRevealColors also reveals. 0 disables it.
+  private neighborRingDepth = DEFAULT_NEIGHBOR_RING_DEPTH
+  // The last packed colors passed to setRevealColors, so changing the ring
+  // depth can immediately re-run the reveal without the caller having to
+  // resupply the selection.
+  private lastRevealColors: number[] = []
 
   // Bounding-box outline: 4 thin screen-space quads per contiguous selection group.
   private bboxProgram!: WebGLProgram
@@ -837,49 +858,92 @@ export class MapRenderer {
   }
 
   // Reveal pass (state/strategic-region editing): the set of provinces to
-  // lightly tint. Pass [] to disable. Colors aren't the provinces' own BMP
-  // colors (which can be visually similar and defeat the point of showing
-  // subdivisions) — instead this greedily graph-colors just this group's own
-  // induced subgraph (bounded by group size, not total province count) and
-  // maps class indices onto a palette picked for maximum distinctiveness at
-  // however many classes this selection needs, only ever touching the
-  // handful of texels the group actually needs.
+  // lightly tint. Pass [] to disable. Two groups get drawn, deliberately
+  // colored two different ways so they never read as the same thing:
+  //   - The selected group itself: greedily graph-colored over its own
+  //     induced subgraph (bounded by group size, not total province count)
+  //     and mapped onto a palette picked for maximum hue distinctiveness at
+  //     however many classes this selection needs (pickDistinctPalette).
+  //   - Provinces within neighborRingDepth hops outside the selection (see
+  //     setNeighborRingDepth): their own, separate graph coloring (never
+  //     coupled to the selection's class assignments), shaded from each
+  //     province's own current display color rather than an unrelated hue,
+  //     at a softer opacity — so they read as real context around the
+  //     selection, not part of it.
   setRevealColors(packedColors: number[]): void {
-    this.revealCount = this.updateHighlightTexture(this.revealTexture, this.revealData, packedColors)
+    this.lastRevealColors = packedColors
 
     const { gl } = this
     const index = this.provinceIndex
-    if (!index || !this.revealPaletteTexture || !this.revealPaletteData) return
+    if (!index || !this.revealTexture || !this.revealData || !this.revealPaletteTexture || !this.revealPaletteData || !this.paletteData) {
+      this.revealCount = 0
+      return
+    }
+    const revealData = this.revealData
+    const revealPaletteData = this.revealPaletteData
+    const paletteData = this.paletteData
+
+    revealData.fill(0)
 
     const memberIds: number[] = []
     for (const packed of packedColors) {
       const id = index.colorToId.get(packed)
       if (id !== undefined) memberIds.push(id)
     }
-    if (memberIds.length === 0) return
 
-    const colorClassById = colorProvinceSubgraph(memberIds, index.adjacency)
-    // Pick exactly as many colors as this selection actually needs, chosen
-    // for maximum pairwise distinctiveness at that count — most selections
-    // only need 2-4 classes, and those are picked to be as different from
-    // each other as the candidate set allows, not just a fixed prefix.
-    const classCount = new Set(colorClassById.values()).size
-    const palette = pickDistinctPalette(classCount)
+    if (memberIds.length === 0) {
+      this.revealCount = 0
+      gl.bindTexture(gl.TEXTURE_2D, this.revealTexture)
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, this.paletteHeight, gl.RGBA, gl.UNSIGNED_BYTE, revealData)
+      return
+    }
+
+    const memberClassById = colorProvinceSubgraph(memberIds, index.adjacency)
+    const memberClassCount = new Set(memberClassById.values()).size
+    const memberPalette = pickDistinctPalette(memberClassCount)
+
+    const neighborRing = findNeighborRing(memberIds, index.adjacency, this.neighborRingDepth)
+    const neighborIds = [...neighborRing.keys()]
+    const neighborClassById = colorProvinceSubgraph(neighborIds, index.adjacency)
+
+    this.revealCount = memberIds.length + neighborIds.length
+
+    const patchTexel = (id: number, color: number, alpha: number): void => {
+      const base = id * 4
+      const r = (color >> 16) & 0xff, g = (color >> 8) & 0xff, b = color & 0xff
+      revealPaletteData[base] = r
+      revealPaletteData[base + 1] = g
+      revealPaletteData[base + 2] = b
+      revealPaletteData[base + 3] = alpha
+      const col = id % 256
+      const row = Math.floor(id / 256)
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, col, row, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([r, g, b, alpha]))
+      revealData[base] = 255
+    }
 
     gl.bindTexture(gl.TEXTURE_2D, this.revealPaletteTexture)
     for (const id of memberIds) {
-      const cls = colorClassById.get(id) ?? 0
-      const color = palette[cls % palette.length]
-      const base = id * 4
-      const r = (color >> 16) & 0xff, g = (color >> 8) & 0xff, b = color & 0xff
-      this.revealPaletteData[base] = r
-      this.revealPaletteData[base + 1] = g
-      this.revealPaletteData[base + 2] = b
-      this.revealPaletteData[base + 3] = 255
-      const col = id % 256
-      const row = Math.floor(id / 256)
-      gl.texSubImage2D(gl.TEXTURE_2D, 0, col, row, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([r, g, b, 255]))
+      const cls = memberClassById.get(id) ?? 0
+      patchTexel(id, memberPalette[cls % memberPalette.length], 255)
     }
+    for (const id of neighborIds) {
+      const cls = neighborClassById.get(id) ?? 0
+      const base = id * 4
+      const baseColor = (paletteData[base] << 16) | (paletteData[base + 1] << 8) | paletteData[base + 2]
+      patchTexel(id, shadeNeighborColor(baseColor, cls), NEIGHBOR_ALPHA_BYTE)
+    }
+
+    gl.bindTexture(gl.TEXTURE_2D, this.revealTexture)
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, this.paletteHeight, gl.RGBA, gl.UNSIGNED_BYTE, revealData)
+  }
+
+  // How many adjacency hops out from the reveal selection to also reveal —
+  // see the "Neighboring province reveal" setting. 0 disables it. Re-runs
+  // the reveal immediately against whatever selection was last passed to
+  // setRevealColors, so this takes effect without the caller re-supplying it.
+  setNeighborRingDepth(depth: number): void {
+    this.neighborRingDepth = depth
+    this.setRevealColors(this.lastRevealColors)
   }
 
   render(tx: number, ty: number, scale: number): void {
@@ -1072,6 +1136,7 @@ export class MapRenderer {
     this.revealPaletteData   = null
     this.revealData          = null
     this.revealCount         = 0
+    this.lastRevealColors    = []
     this.selectionBboxGroups = []
     this.validationWarningBboxGroups = []
     this.validationErrorBboxGroups = []
