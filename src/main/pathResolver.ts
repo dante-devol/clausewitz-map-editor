@@ -1,8 +1,9 @@
-import { existsSync, readdirSync } from 'fs'
+import { existsSync, readdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { getConfig } from './config'
 import type { ResolvedPaths } from '../shared/pathTypes'
 import { normalizeRelativePath } from './parsers/DescriptorMod'
+import { DefaultMap, type DefaultMapFilePaths } from './parsers/DefaultMap'
 import { timeSync } from './perf'
 
 // Returns the mod path if it exists, otherwise the game path.
@@ -42,22 +43,44 @@ function isPathReplaced(rel: string, replacePaths: readonly string[]): boolean {
   return replacePaths.some((entry) => normalized === entry || normalized.startsWith(`${entry}/`))
 }
 
+// default.map can rename any of a handful of files it declares (e.g.
+// `definitions = "my_definitions.csv"`) without moving them out of the /map
+// folder — so an override only ever replaces the filename, not the folder,
+// of the corresponding config path.
+function withDefaultMapOverride(configRel: string, override: string | undefined): string {
+  if (!override) return configRel
+  const folder = configRel.slice(0, configRel.lastIndexOf('/') + 1)
+  return `${folder}${normalizeRelativePath(override)}`
+}
+
+function readDefaultMap(defaultMapPath: string): DefaultMapFilePaths {
+  try {
+    if (!existsSync(defaultMapPath)) return {}
+    return DefaultMap.parse(readFileSync(defaultMapPath, 'utf-8')).filePaths
+  } catch {
+    return {}
+  }
+}
+
 export function resolvePaths(gamePath: string, modPath: string, replacePaths: readonly string[] = []): ResolvedPaths {
   return timeSync('resolvePaths', () => resolvePathsInner(gamePath, modPath, replacePaths))
 }
 
 function resolvePathsInner(gamePath: string, modPath: string, replacePaths: readonly string[]): ResolvedPaths {
   const p = getConfig().paths
+  const defaultMapPath = resolveFile(gamePath, modPath, p.defaultMap, replacePaths)
+  const overrides = readDefaultMap(defaultMapPath)
+
   return {
     descriptor:      join(modPath, p.descriptor),
-    defaultMap:      resolveFile(gamePath, modPath, p.defaultMap, replacePaths),
-    definitions:     resolveFile(gamePath, modPath, p.definitions, replacePaths),
-    provinces:       resolveFile(gamePath, modPath, p.provinces, replacePaths),
-    continent:       resolveFile(gamePath, modPath, p.continent, replacePaths),
+    defaultMap:      defaultMapPath,
+    definitions:     resolveFile(gamePath, modPath, withDefaultMapOverride(p.definitions, overrides.definitions), replacePaths),
+    provinces:       resolveFile(gamePath, modPath, withDefaultMapOverride(p.provinces, overrides.provinces), replacePaths),
+    continent:       resolveFile(gamePath, modPath, withDefaultMapOverride(p.continent, overrides.continent), replacePaths),
     provinceTerrain: resolveFolder(gamePath, modPath, p.provinceTerrain, replacePaths),
     states:          resolveFolder(gamePath, modPath, p.states, replacePaths),
     strategicRegions: resolveFolder(gamePath, modPath, p.strategicRegions, replacePaths),
-    rivers:          resolveFile(gamePath, modPath, p.rivers, replacePaths),
+    rivers:          resolveFile(gamePath, modPath, withDefaultMapOverride(p.rivers, overrides.rivers), replacePaths),
     stateCategories: resolveFolder(gamePath, modPath, p.stateCategories, replacePaths),
     resources:       resolveFolder(gamePath, modPath, p.resources, replacePaths),
     buildings:       resolveFolder(gamePath, modPath, p.buildings, replacePaths),
@@ -65,6 +88,10 @@ function resolvePathsInner(gamePath: string, modPath: string, replacePaths: read
     // Filtered to .yml: mods sometimes drop stray non-loc files (README, .txt
     // notes) into their localisation folder.
     localisation:    resolveFolder(gamePath, modPath, p.localisation, replacePaths)
-                       .filter((f) => f.toLowerCase().endsWith('.yml'))
+                       .filter((f) => f.toLowerCase().endsWith('.yml')),
+    adjacencies:     resolveFile(gamePath, modPath, withDefaultMapOverride(p.adjacencies, overrides.adjacencies), replacePaths),
+    // Not declared in default.map — always the fixed conventional filename.
+    supplyNodes:     resolveFile(gamePath, modPath, p.supplyNodes, replacePaths),
+    railways:        resolveFile(gamePath, modPath, p.railways, replacePaths)
   }
 }

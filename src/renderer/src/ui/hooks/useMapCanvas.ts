@@ -8,6 +8,7 @@ import type { CanvasOverlay, BitmapCanvasOverlay } from '../contracts/CanvasOver
 import type { OverlayFilterRule } from '../../core/contracts/MapOverlay'
 import type { ProvinceIndex } from '../../infra/lib/provinceAnalysis'
 import type { BmpPixelStrokeDelta } from '../../../../shared/provinceEditing'
+import type { MapAdjacency, Railway, SupplyNode } from '../../../../shared/mapDataTypes'
 import { log } from '../../infra/lib/logger'
 import { profilerTime, profilerStart, profilerEnd } from '../../infra/lib/profiler'
 import { packColor } from '../../../../shared/mapDataTypes'
@@ -65,6 +66,12 @@ export interface BrushPaintConfig {
   selectionColors?: Set<number> | null
 }
 
+export interface MapFeaturesData {
+  adjacencies: MapAdjacency[]
+  railways: Railway[]
+  supplyNodes: SupplyNode[]
+}
+
 export interface UseMapCanvasProps {
   provincesImage: Uint8Array | null
   overlays: CanvasOverlay[]
@@ -79,12 +86,18 @@ export interface UseMapCanvasProps {
   onMapClick?: (r: number, g: number, b: number, modifiers: { shift: boolean; ctrl: boolean }) => void
   onHoverColorChange?: (color: HoveredColor | null) => void
   onBrushStrokeComplete?: (pixels: BmpPixelStrokeDelta[], affectedIds: Set<number>) => void
+  // Basic display-only overlay for adjacencies/railways/supply nodes — no
+  // editing, no viewport culling, just enough to look at while we figure out
+  // what this should actually become.
+  mapFeatures?: MapFeaturesData | null
+  getProvinceColor?: (provinceId: number) => number | undefined
 }
 
 export interface UseMapCanvasResult {
   containerRef: React.RefObject<HTMLDivElement>
   canvasRef: React.RefObject<HTMLCanvasElement>
   brushCursorCanvasRef: React.RefObject<HTMLCanvasElement>
+  mapFeaturesCanvasRef: React.RefObject<HTMLCanvasElement>
   dragging: boolean
   displayScale: number
   imageLoaded: boolean
@@ -114,11 +127,16 @@ export function useMapCanvas({
   onMapClick,
   onHoverColorChange,
   onBrushStrokeComplete,
+  mapFeatures,
+  getProvinceColor,
 }: UseMapCanvasProps): UseMapCanvasResult {
   const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const brushCursorCanvasRef = useRef<HTMLCanvasElement>(null)
+  const mapFeaturesCanvasRef = useRef<HTMLCanvasElement>(null)
+  const mapFeaturesRef = useRef<MapFeaturesData | null | undefined>(mapFeatures)
+  const getProvinceColorRef = useRef(getProvinceColor)
   const rendererRef  = useRef<MapRenderer | null>(null)
   const provinceIndexRef = useRef<ProvinceIndex | null>(null)
   const canvasOverlaysRef = useRef<CanvasOverlay[]>([])
@@ -171,6 +189,11 @@ export function useMapCanvas({
     renderer.setOverlayTextures({ bitmapEntries, outlineEntries })
   }, [])
 
+  // Kept as a ref, drawn imperatively wherever the base render happens (see
+  // applyTransform and friends) rather than via its own effect, since it
+  // needs the same transform the WebGL renderer just used.
+  const drawMapFeaturesRef = useRef<(() => void) | null>(null)
+
   const applyTransform = useCallback((next: Transform) => {
     transformRef.current = next
     // next.scale is device-pixel (image px -> backing-store px); the zoom %
@@ -178,6 +201,7 @@ export function useMapCanvas({
     // so a fit-to-screen reads the same "100%"-ish value on any display.
     setDisplayScale(next.scale / (window.devicePixelRatio || 1))
     rendererRef.current?.render(next.x, next.y, next.scale)
+    drawMapFeaturesRef.current?.()
     const pos = cursorCanvasPositionRef.current
     if (pos && brushPaintConfigRef.current) drawBrushCursorRef.current?.(pos.x, pos.y)
   }, [])
@@ -200,6 +224,8 @@ export function useMapCanvas({
     resizeCanvasForDpr(canvas, container.clientWidth, container.clientHeight)
     const cursorCanvas = brushCursorCanvasRef.current
     if (cursorCanvas) resizeCanvasForDpr(cursorCanvas, container.clientWidth, container.clientHeight)
+    const featuresCanvas = mapFeaturesCanvasRef.current
+    if (featuresCanvas) resizeCanvasForDpr(featuresCanvas, container.clientWidth, container.clientHeight)
     const renderer = new MapRenderer(canvas)
     rendererRef.current = renderer
     renderer.onContextLost = () => {
@@ -283,6 +309,8 @@ export function useMapCanvas({
   // Sync brush config and stroke callback refs
   brushPaintConfigRef.current = brushPaintConfig
   onBrushStrokeCompleteRef.current = onBrushStrokeComplete
+  mapFeaturesRef.current = mapFeatures
+  getProvinceColorRef.current = getProvinceColor
 
   // Sync color map
   useEffect(() => {
@@ -414,6 +442,12 @@ export function useMapCanvas({
     renderer?.render(tx, ty, scale)
   }, [validationErrorColors, validationWarningColors])
 
+  // Redraw the feature overlay when its data arrives or changes — it may
+  // load asynchronously well after the initial fit-to-screen render.
+  useEffect(() => {
+    drawMapFeaturesRef.current?.()
+  }, [mapFeatures, imageLoaded])
+
   // Resize observer
   useEffect(() => {
     const container = containerRef.current
@@ -423,10 +457,13 @@ export function useMapCanvas({
       resizeCanvasForDpr(canvas, container.clientWidth, container.clientHeight)
       const cursorCanvas = brushCursorCanvasRef.current
       if (cursorCanvas) resizeCanvasForDpr(cursorCanvas, container.clientWidth, container.clientHeight)
+      const featuresCanvas = mapFeaturesCanvasRef.current
+      if (featuresCanvas) resizeCanvasForDpr(featuresCanvas, container.clientWidth, container.clientHeight)
       const t = transformRef.current
       syncSelectionStructure(rendererRef.current, provinceIndexRef.current, highlightColorsRef.current, t.scale)
       syncValidationStructure(rendererRef.current, provinceIndexRef.current, validationWarningColorsRef.current, validationErrorColorsRef.current, t.scale)
       rendererRef.current?.render(t.x, t.y, t.scale)
+      drawMapFeaturesRef.current?.()
     })
     observer.observe(container)
     return () => observer.disconnect()
@@ -501,6 +538,91 @@ export function useMapCanvas({
   }, [])
 
   drawBrushCursorRef.current = drawBrushCursor
+
+  // Image-space center of a province's tight bounding box, or null if it
+  // can't currently be resolved (province not on this map / bitmap not loaded).
+  const provinceCenterImg = useCallback((provinceId: number): { x: number; y: number } | null => {
+    const color = getProvinceColorRef.current?.(provinceId)
+    const index = provinceIndexRef.current
+    if (color === undefined || !index) return null
+    const seqId = index.colorToId.get(color)
+    if (seqId === undefined) return null
+    const bbox = index.bboxes.get(seqId)
+    if (!bbox) return null
+    return { x: (bbox.minX + bbox.maxX + 1) / 2, y: (bbox.minY + bbox.maxY + 1) / 2 }
+  }, [])
+
+  const drawMapFeatures = useCallback(() => {
+    const canvas = mapFeaturesCanvasRef.current
+    const ctx = canvas?.getContext('2d')
+    if (!canvas || !ctx) return
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    const data = mapFeaturesRef.current
+    if (!data || !provinceIndexRef.current) return
+    const { x: tx, y: ty, scale } = transformRef.current
+
+    const toScreen = (img: { x: number; y: number }) => ({ x: tx + img.x * scale, y: ty + img.y * scale })
+
+    // Railways: thick black dotted polylines through province centers.
+    ctx.strokeStyle = '#000000'
+    ctx.lineWidth = Math.max(2, scale * 1.2)
+    ctx.setLineDash([Math.max(4, scale * 4), Math.max(3, scale * 3)])
+    for (const railway of data.railways) {
+      const points = railway.provinceIds.map(provinceCenterImg).filter((p): p is { x: number; y: number } => p !== null)
+      if (points.length < 2) continue
+      ctx.beginPath()
+      points.forEach((p, i) => {
+        const s = toScreen(p)
+        if (i === 0) ctx.moveTo(s.x, s.y)
+        else ctx.lineTo(s.x, s.y)
+      })
+      ctx.stroke()
+    }
+
+    // Adjacencies: small dotted red lines bridging the gap between the two
+    // provinces, rather than running center-to-center like railways do.
+    ctx.strokeStyle = '#e02020'
+    ctx.lineWidth = Math.max(1, scale * 0.5)
+    ctx.setLineDash([Math.max(2, scale * 2), Math.max(2, scale * 2)])
+    for (const adjacency of data.adjacencies) {
+      const from = provinceCenterImg(adjacency.from)
+      const to = provinceCenterImg(adjacency.to)
+      if (!from || !to) continue
+      const a = toScreen(from)
+      const b = toScreen(to)
+      const x0 = a.x + (b.x - a.x) * 0.3, y0 = a.y + (b.y - a.y) * 0.3
+      const x1 = a.x + (b.x - a.x) * 0.7, y1 = a.y + (b.y - a.y) * 0.7
+      ctx.beginPath()
+      ctx.moveTo(x0, y0)
+      ctx.lineTo(x1, y1)
+      ctx.stroke()
+    }
+
+    ctx.setLineDash([])
+
+    // Supply nodes: a black/white bullseye centered on the province.
+    for (const node of data.supplyNodes) {
+      const center = provinceCenterImg(node.provinceId)
+      if (!center) continue
+      const s = toScreen(center)
+      const r = Math.max(3, scale * 2.5)
+      ctx.beginPath()
+      ctx.arc(s.x, s.y, r, 0, Math.PI * 2)
+      ctx.fillStyle = '#000000'
+      ctx.fill()
+      ctx.beginPath()
+      ctx.arc(s.x, s.y, r * 0.66, 0, Math.PI * 2)
+      ctx.fillStyle = '#ffffff'
+      ctx.fill()
+      ctx.beginPath()
+      ctx.arc(s.x, s.y, r * 0.33, 0, Math.PI * 2)
+      ctx.fillStyle = '#000000'
+      ctx.fill()
+    }
+  }, [provinceCenterImg])
+
+  drawMapFeaturesRef.current = drawMapFeatures
 
   const doBrushPaint = useCallback((canvasX: number, canvasY: number) => {
     profilerTime('doBrushPaint', () => doBrushPaintSync(canvasX, canvasY))
@@ -677,7 +799,7 @@ export function useMapCanvas({
   }, [])
 
   return {
-    containerRef, canvasRef, brushCursorCanvasRef, dragging, displayScale, imageLoaded, isCanvasLoading,
+    containerRef, canvasRef, brushCursorCanvasRef, mapFeaturesCanvasRef, dragging, displayScale, imageLoaded, isCanvasLoading,
     cursorPosition, onMouseDown, onMouseMove, stopDrag, clearHoverGlow, zoomBy, fit,
     revertBrushStroke, getPixelSnapshot,
   }

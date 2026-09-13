@@ -83,6 +83,18 @@ const server = createServer((req, res) => {
         respond(res, items)
         return
       }
+      if (url.pathname === '/api/map/adjacencies') {
+        respond(res, loader.loadAdjacencies(project))
+        return
+      }
+      if (url.pathname === '/api/map/supplyNodes') {
+        respond(res, loader.loadSupplyNodes(project))
+        return
+      }
+      if (url.pathname === '/api/map/railways') {
+        respond(res, loader.loadRailways(project))
+        return
+      }
       res.statusCode = 404
       res.end('not found')
     } catch (err) {

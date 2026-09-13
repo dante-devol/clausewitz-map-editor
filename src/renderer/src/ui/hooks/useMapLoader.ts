@@ -18,6 +18,7 @@ import { useProjectStore } from '../../infra/store/projectStore'
 import { notificationService } from '../../infra/services/notificationService'
 import { useNotificationStore } from '../../infra/store/notificationStore'
 import { useI18n } from '../i18n/I18nProvider'
+import { log } from '../../infra/lib/logger'
 
 const provinceBitmapFactsCache = new Map<string, ProvinceBitmapFacts>()
 const MAP_LOAD_TOTAL_STEPS = 4
@@ -68,6 +69,7 @@ export function useMapLoader(): void {
   const patchStrategicRegions = useMapDataStore((s) => s.patchStrategicRegions)
   const mergeLocalisation = useMapDataStore((s) => s.mergeLocalisation)
   const applyLocalisation = useMapDataStore((s) => s.applyLocalisation)
+  const loadMapFeatures = useMapDataStore((s) => s.loadMapFeatures)
   const states = useMapDataStore((s) => s.states)
   const strategicRegions = useMapDataStore((s) => s.strategicRegions)
   const localisationEntries = useMapDataStore((s) => s.localisationEntries)
@@ -232,6 +234,23 @@ export function useMapLoader(): void {
           message: tRef.current('notification.mapLoad.doneMessage')
         })
         settled = true
+
+        // Not part of the initial snapshot or its progress bar — small,
+        // read-only, and not needed until a feature-overlay actually wants
+        // them. Fire-and-forget; a failure here shouldn't fail the map load.
+        void (async () => {
+          try {
+            const [adjacencies, railways, supplyNodes] = await Promise.all([
+              window.api.map.loadAdjacencies(currentProjectId),
+              window.api.map.loadRailways(currentProjectId),
+              window.api.map.loadSupplyNodes(currentProjectId)
+            ])
+            if (cancelled) return
+            loadMapFeatures({ adjacencies, railways, supplyNodes })
+          } catch (error) {
+            log.warn('Failed to load map features (adjacencies/railways/supply nodes)', { error: String(error) })
+          }
+        })()
       } catch (error) {
         if (cancelled) return
         sessionFailed(error instanceof Error ? error.message : 'Failed to load map')
@@ -365,7 +384,8 @@ export function useMapLoader(): void {
     resolvedPaths,
     setProvinceBitmapStatus,
     setStatesStatus,
-    setStrategicRegionsStatus
+    setStrategicRegionsStatus,
+    loadMapFeatures
   ])
 
   // Localisation resolves in the background at its own pace (see

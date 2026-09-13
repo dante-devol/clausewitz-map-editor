@@ -120,8 +120,10 @@ export function useMapViewportState() {
   const editBmpOnlyProvince = useMapDataStore((s) => s.editBmpOnlyProvince)
   const setSelectedStateId = useMapDataStore((s) => s.setSelectedStateId)
   const stateProvinceToStateId = useMapDataStore((s) => s.stateProvinceToStateId)
+  const moveProvincesToState = useMapDataStore((s) => s.moveProvincesToState)
   const setSelectedStrategicRegionId = useMapDataStore((s) => s.setSelectedStrategicRegionId)
   const strategicRegionProvinceToRegionId = useMapDataStore((s) => s.strategicRegionProvinceToRegionId)
+  const moveProvincesToRegion = useMapDataStore((s) => s.moveProvincesToRegion)
 
   // — Paint tool state —
   const paintProvinceColor = useMapDataStore((s) => s.paintProvinceColor)
@@ -147,7 +149,9 @@ export function useMapViewportState() {
       ? sampledValue.value === undefined
         ? t('mapValue.none')
         : t(sampledValue.value ? 'mapValue.coastal' : 'mapValue.inland')
-      : sampledValue.value || t('mapValue.none')
+      : sampledValue.mode === 'state' || sampledValue.mode === 'strategicRegion'
+        ? sampledValue.value?.toString() ?? t('mapValue.none')
+        : sampledValue.value || t('mapValue.none')
     return {
       label,
       color: `#${getDisplayModeSampleColor(sampledValue, displayModeOverrides, displayModeContext).toString(16).padStart(6, '0')}`
@@ -200,7 +204,11 @@ export function useMapViewportState() {
       return
     }
 
-    if (editorMode === 'states') {
+    // Clicking selects the state/region under the cursor only while the
+    // select tool is active — eyedrop/bucket fall through to the handling
+    // below instead, so they can sample/paint membership without also
+    // changing which state/region the detail panel shows.
+    if (editorMode === 'states' && nonPaintTool === 'select') {
       if (draft.provinceId !== null) {
         const stateId = stateProvinceToStateId.get(draft.provinceId) ?? null
         setSelectedStateId(stateId)
@@ -208,7 +216,7 @@ export function useMapViewportState() {
       return
     }
 
-    if (editorMode === 'strategicRegions') {
+    if (editorMode === 'strategicRegions' && nonPaintTool === 'select') {
       if (draft.provinceId !== null) {
         const regionId = strategicRegionProvinceToRegionId.get(draft.provinceId) ?? null
         setSelectedStrategicRegionId(regionId)
@@ -218,11 +226,15 @@ export function useMapViewportState() {
 
     if (nonPaintTool === 'eyedrop') {
       if (!isEditableDisplayMode(displayMode)) return
-      const sample = sampleDisplayModeValue(displayMode, draft)
+      const sample = sampleDisplayModeValue(displayMode, draft, {
+        stateProvinceToStateId,
+        strategicRegionProvinceToRegionId
+      })
       if (!sample) return
       if (sample.mode === 'continent') {
+        // "No continent" isn't a meaningful thing to paint elsewhere.
         if (!sample.value) return
-      } else if (sample.value === undefined) {
+      } else if (sample.mode !== 'state' && sample.mode !== 'strategicRegion' && sample.value === undefined) {
         return
       }
       setSampledValue(sample)
@@ -232,6 +244,14 @@ export function useMapViewportState() {
 
     if (nonPaintTool === 'bucket') {
       if (!sampledValue || sampledValue.mode !== displayMode || !isEditableDisplayMode(displayMode)) return
+      if (sampledValue.mode === 'state') {
+        if (draft.provinceId !== null) moveProvincesToState([draft.provinceId], sampledValue.value ?? null)
+        return
+      }
+      if (sampledValue.mode === 'strategicRegion') {
+        if (draft.provinceId !== null) moveProvincesToRegion([draft.provinceId], sampledValue.value ?? null)
+        return
+      }
       if (draft.provinceId !== null) {
         if (sampledValue.mode === 'type') editProvince(draft.provinceId, { type: sampledValue.value })
         if (sampledValue.mode === 'terrain') editProvince(draft.provinceId, { terrain: sampledValue.value })
@@ -264,6 +284,8 @@ export function useMapViewportState() {
     editProvince,
     editorMode,
     extendSelection,
+    moveProvincesToState,
+    moveProvincesToRegion,
     nonPaintTool,
     paintActiveTool,
     query,

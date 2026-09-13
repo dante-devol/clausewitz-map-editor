@@ -104,6 +104,16 @@ const useStyles = makeStyles({
     backgroundColor: 'rgba(227, 164, 0, 0.12)',
     color: tokens.colorPaletteGoldForeground2
   },
+  kindBadgeNew: {
+    ...shorthands.borderColor('rgba(52, 156, 76, 0.32)'),
+    backgroundColor: 'rgba(52, 156, 76, 0.12)',
+    color: tokens.colorPaletteGreenForeground2
+  },
+  kindBadgeDelete: {
+    ...shorthands.borderColor('rgba(196, 49, 75, 0.32)'),
+    backgroundColor: 'rgba(196, 49, 75, 0.12)',
+    color: tokens.colorPaletteRedForeground2
+  },
   label: {
     fontFamily: 'monospace',
     fontVariantNumeric: 'tabular-nums',
@@ -128,10 +138,13 @@ const useStyles = makeStyles({
   }
 })
 
+export type EntityChangeKind = 'edit' | 'new' | 'delete'
+
 export interface EntityChangeEntry {
   id: number
   name: string
   fieldCount: number
+  kind: EntityChangeKind
 }
 
 interface EntityChangesListProps {
@@ -139,6 +152,7 @@ interface EntityChangesListProps {
   entries: EntityChangeEntry[]
   emptyText: string
   fieldCountLabel: (count: number) => string
+  kindLabel: (kind: EntityChangeKind) => string
   revertLabel: string
   selectedId: number | null
   onSelect: (id: number) => void
@@ -158,6 +172,7 @@ export function EntityChangesList({
   entries,
   emptyText,
   fieldCountLabel,
+  kindLabel,
   revertLabel,
   selectedId,
   onSelect,
@@ -198,10 +213,21 @@ export function EntityChangesList({
                     onClick={() => onSelect(entry.id)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(entry.id) }}
                   >
-                    <Text size={100} className={styles.kindBadge}>edit</Text>
+                    <Text
+                      size={100}
+                      className={mergeClasses(
+                        styles.kindBadge,
+                        entry.kind === 'new' && styles.kindBadgeNew,
+                        entry.kind === 'delete' && styles.kindBadgeDelete
+                      )}
+                    >
+                      {kindLabel(entry.kind)}
+                    </Text>
                     <Text size={100} className={styles.label}>{entry.id}</Text>
                     <Text size={100} className={styles.rowSpacer}>{entry.name}</Text>
-                    <Text size={100} className={styles.fieldCount}>{fieldCountLabel(entry.fieldCount)}</Text>
+                    {entry.kind === 'edit' && (
+                      <Text size={100} className={styles.fieldCount}>{fieldCountLabel(entry.fieldCount)}</Text>
+                    )}
                     <Button
                       size="small"
                       appearance="subtle"

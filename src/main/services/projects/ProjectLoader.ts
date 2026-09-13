@@ -12,8 +12,11 @@ import { TerrainTxt } from '../../parsers/TerrainTxt'
 import { StateCategoryTxt } from '../../parsers/StateCategoryTxt'
 import { BuildingsTxt } from '../../parsers/BuildingsTxt'
 import { ResourcesTxt } from '../../parsers/ResourcesTxt'
+import { AdjacenciesCsv } from '../../parsers/AdjacenciesCsv'
+import { SupplyNodesTxt } from '../../parsers/SupplyNodesTxt'
+import { RailwaysTxt } from '../../parsers/RailwaysTxt'
 import type { DefinitionsChangedData, MapDataSnapshot, ProjectOpenRequest, ProjectOpenResult } from '../../../shared/contract/api'
-import type { Building, Continent, Resource, StateCategory } from '../../../shared/mapDataTypes'
+import type { Building, Continent, MapAdjacency, Railway, Resource, StateCategory, SupplyNode } from '../../../shared/mapDataTypes'
 import { buildProvinceCatalog } from '../../../shared/provinceCatalog'
 import type { WorkerParsePool } from '../../workers/WorkerParsePool'
 import type { ParserOutputMap } from '../../workers/parserRegistry'
@@ -164,6 +167,18 @@ export class ProjectLoader {
 
   loadWeatherEntries(project: LoadedProject): string[] {
     return WeatherTxt.load(project.resolvedPaths.weather)
+  }
+
+  loadAdjacencies(project: LoadedProject): MapAdjacency[] {
+    return AdjacenciesCsv.parse(readFileSync(project.resolvedPaths.adjacencies, 'utf-8'))
+  }
+
+  loadSupplyNodes(project: LoadedProject): SupplyNode[] {
+    return SupplyNodesTxt.parse(readFileSync(project.resolvedPaths.supplyNodes, 'utf-8'))
+  }
+
+  loadRailways(project: LoadedProject): Railway[] {
+    return RailwaysTxt.parse(readFileSync(project.resolvedPaths.railways, 'utf-8'))
   }
 
   loadImageBuffer(project: LoadedProject): { data: Buffer; hash: string } {

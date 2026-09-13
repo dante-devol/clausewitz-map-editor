@@ -12,6 +12,7 @@ import {
 import {
   ChevronDownRegular,
   ChevronUpRegular,
+  DeleteRegular,
   DismissRegular,
   AddRegular,
   ArrowResetRegular
@@ -47,6 +48,18 @@ const useStyles = makeStyles({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     maxWidth: '200px'
+  },
+  deletionBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: tokens.spacingHorizontalXS,
+    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
+    backgroundColor: 'rgba(196, 49, 75, 0.12)',
+    color: tokens.colorPaletteRedForeground2,
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`
+  },
+  deletionBannerText: {
+    flex: 1
   },
   body: {
     display: 'flex',
@@ -202,10 +215,13 @@ export function StrategicRegionDetailPanel({ onCollapse }: Props): JSX.Element {
 
   const selectedStrategicRegionId = useMapDataStore((s) => s.selectedStrategicRegionId)
   const strategicRegionsById = useMapDataStore((s) => s.strategicRegionsById)
+  const pendingNewStrategicRegions = useMapDataStore((s) => s.pendingNewStrategicRegions)
+  const pendingStrategicRegionDeletions = useMapDataStore((s) => s.pendingStrategicRegionDeletions)
   const pendingStrategicRegionEdits = useMapDataStore((s) => s.pendingStrategicRegionEdits)
   const editStrategicRegion = useMapDataStore((s) => s.editStrategicRegion)
   const moveProvincesToRegion = useMapDataStore((s) => s.moveProvincesToRegion)
   const revertStrategicRegionEdit = useMapDataStore((s) => s.revertStrategicRegionEdit)
+  const deleteStrategicRegion = useMapDataStore((s) => s.deleteStrategicRegion)
 
   const [provincesOpen, setProvincesOpen] = useState(true)
   const [weatherOpen, setWeatherOpen] = useState(false)
@@ -219,8 +235,11 @@ export function StrategicRegionDetailPanel({ onCollapse }: Props): JSX.Element {
   const [addWeightKey, setAddWeightKey] = useState('')
   const [addWeightValue, setAddWeightValue] = useState('')
 
-  const region = selectedStrategicRegionId !== null ? strategicRegionsById.get(selectedStrategicRegionId) : null
+  const region = selectedStrategicRegionId !== null
+    ? (strategicRegionsById.get(selectedStrategicRegionId) ?? pendingNewStrategicRegions.get(selectedStrategicRegionId))
+    : null
   const patch = selectedStrategicRegionId !== null ? pendingStrategicRegionEdits.get(selectedStrategicRegionId) : undefined
+  const isPendingDeletion = selectedStrategicRegionId !== null && pendingStrategicRegionDeletions.has(selectedStrategicRegionId)
 
   const effectiveName = patch?.name ?? region?.name ?? ''
   const effectiveProvinceIds = patch?.provinceIds ?? region?.provinceIds ?? []
@@ -353,8 +372,27 @@ export function StrategicRegionDetailPanel({ onCollapse }: Props): JSX.Element {
             />
           </Tooltip>
         )}
+        {!isPendingDeletion && (
+          <Tooltip content={t('stratRegionPanel.detail.delete')} relationship="label">
+            <Button
+              size="small"
+              appearance="subtle"
+              icon={<DeleteRegular />}
+              onClick={() => deleteStrategicRegion(region.id)}
+            />
+          </Tooltip>
+        )}
         <Button size="small" appearance="subtle" icon={<ChevronDownRegular />} className={styles.collapseBtn} onClick={onCollapse} />
       </div>
+
+      {isPendingDeletion && (
+        <div className={styles.deletionBanner}>
+          <Text size={100} className={styles.deletionBannerText}>{t('stratRegionPanel.detail.pendingDeletion')}</Text>
+          <Button size="small" onClick={() => revertStrategicRegionEdit(region.id)}>
+            {t('stratRegionPanel.detail.undoDelete')}
+          </Button>
+        </div>
+      )}
 
       <div className={styles.body}>
         {/* Name */}

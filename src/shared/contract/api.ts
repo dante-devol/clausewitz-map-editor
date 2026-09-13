@@ -1,11 +1,14 @@
 import type {
   Building,
   Continent,
+  MapAdjacency,
   Province,
+  Railway,
   Resource,
   StateCategory,
   StateDefinition,
   StrategicRegionDefinition,
+  SupplyNode,
   TerrainCategory
 } from '../mapDataTypes'
 import type { ProvinceCatalogEntry } from '../provinceCatalog'
@@ -29,6 +32,9 @@ export interface AppConfig {
     buildings: string
     weather: string
     localisation: string
+    adjacencies: string
+    supplyNodes: string
+    railways: string
   }
   displayModeOverrides: Partial<Record<string, Partial<Record<string, string>>>>
   // How many adjacency hops out from a selected state/strategic-region to
@@ -136,6 +142,19 @@ export interface StrategicRegionSaveRequest {
   updated: StrategicRegionDefinition
 }
 
+// A create has no `original` — nothing on disk could conflict with it yet. A
+// delete carries `original` (not just an id) for the same reason edits do:
+// so the main process can tell the state wasn't already changed on disk.
+export type StateSaveOperation =
+  | ({ kind: 'edit' } & StateSaveRequest)
+  | { kind: 'create'; state: StateDefinition }
+  | { kind: 'delete'; original: StateDefinition }
+
+export type StrategicRegionSaveOperation =
+  | ({ kind: 'edit' } & StrategicRegionSaveRequest)
+  | { kind: 'create'; region: StrategicRegionDefinition }
+  | { kind: 'delete'; original: StrategicRegionDefinition }
+
 export interface DefinitionsSaveResult {
   hash: string
 }
@@ -189,12 +208,15 @@ export interface ApiContract {
   map: {
     load: (projectId: string) => Promise<MapDataSnapshot>
     save: (projectId: string, provinces: Province[], continents: Continent[], expectedHash: string) => Promise<DefinitionsSaveResult>
-    saveStates: (projectId: string, requests: StateSaveRequest[]) => Promise<void>
-    saveStrategicRegions: (projectId: string, requests: StrategicRegionSaveRequest[]) => Promise<void>
+    saveStates: (projectId: string, operations: StateSaveOperation[]) => Promise<void>
+    saveStrategicRegions: (projectId: string, operations: StrategicRegionSaveOperation[]) => Promise<void>
     loadStates: (projectId: string) => Promise<void>
     loadStrategicRegions: (projectId: string) => Promise<void>
     loadWeatherEntries: (projectId: string) => Promise<string[]>
     loadResources: (projectId: string) => Promise<Resource[]>
+    loadAdjacencies: (projectId: string) => Promise<MapAdjacency[]>
+    loadSupplyNodes: (projectId: string) => Promise<SupplyNode[]>
+    loadRailways: (projectId: string) => Promise<Railway[]>
     onChanged: (callback: (event: MapChangedEvent) => void) => () => void
     saveBmp: (projectId: string, rgbaData: Uint8Array, width: number, height: number) => Promise<void>
   }

@@ -42,6 +42,9 @@ const api: ApiContract = {
     loadStrategicRegions: (projectId) => ipcRenderer.invoke(channels.map.loadStrategicRegions, projectId),
     loadWeatherEntries: (projectId) => ipcRenderer.invoke(channels.map.loadWeatherEntries, projectId),
     loadResources: (projectId) => ipcRenderer.invoke(channels.map.loadResources, projectId),
+    loadAdjacencies: (projectId) => ipcRenderer.invoke(channels.map.loadAdjacencies, projectId),
+    loadSupplyNodes: (projectId) => ipcRenderer.invoke(channels.map.loadSupplyNodes, projectId),
+    loadRailways: (projectId) => ipcRenderer.invoke(channels.map.loadRailways, projectId),
     onChanged: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       ipcRenderer.on(channels.map.changed, listener)
