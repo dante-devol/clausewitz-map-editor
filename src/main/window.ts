@@ -18,7 +18,7 @@ export function createWindow(): void {
     resizable: false,
     show: false,
     autoHideMenuBar: true,
-    icon: join(__dirname, '../../resources/icon.png'),
+    icon: join(__dirname, '../../resources/icon_small.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       // The preload only uses contextBridge/ipcRenderer, both fully
