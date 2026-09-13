@@ -20,7 +20,7 @@ function province(id: number): Province {
 }
 
 function region(id: number, provinceIds: number[]): StrategicRegionDefinition {
-  return { id, name: `STRATEGICREGION_${id}`, provinceIds, weatherPeriods: [] }
+  return { id, name: `STRATEGICREGION_${id}`, displayName: `STRATEGICREGION_${id}`, provinceIds, weatherPeriods: [] }
 }
 
 function setup() {

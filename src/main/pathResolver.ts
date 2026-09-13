@@ -56,6 +56,10 @@ export function resolvePaths(gamePath: string, modPath: string, replacePaths: re
     stateCategories: resolveFolder(gamePath, modPath, p.stateCategories, replacePaths),
     resources:       resolveFolder(gamePath, modPath, p.resources, replacePaths),
     buildings:       resolveFolder(gamePath, modPath, p.buildings, replacePaths),
-    weather:         resolveFile(gamePath, modPath, p.weather, replacePaths)
+    weather:         resolveFile(gamePath, modPath, p.weather, replacePaths),
+    // Filtered to .yml: mods sometimes drop stray non-loc files (README, .txt
+    // notes) into their localisation folder.
+    localisation:    resolveFolder(gamePath, modPath, p.localisation, replacePaths)
+                       .filter((f) => f.toLowerCase().endsWith('.yml'))
   }
 }

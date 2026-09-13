@@ -23,6 +23,7 @@ function state(id: number, provinceIds: number[]): StateDefinition {
   return {
     id,
     name: `STATE_${id}`,
+    displayName: `STATE_${id}`,
     provinceIds,
     manpower: 0,
     stateCategory: 'rural',

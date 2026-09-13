@@ -11,6 +11,7 @@ function state(id: number, sourcePath: string, provinceIds: number[] = []): Stat
   return {
     id,
     name: `STATE_${id}`,
+    displayName: `STATE_${id}`,
     provinceIds,
     manpower: 0,
     stateCategory: 'rural',
@@ -20,7 +21,7 @@ function state(id: number, sourcePath: string, provinceIds: number[] = []): Stat
 }
 
 function region(id: number, sourcePath: string, provinceIds: number[] = []): StrategicRegionDefinition {
-  return { id, name: `STRATEGICREGION_${id}`, provinceIds, weatherPeriods: [], sourcePath }
+  return { id, name: `STRATEGICREGION_${id}`, displayName: `STRATEGICREGION_${id}`, provinceIds, weatherPeriods: [], sourcePath }
 }
 
 describe('appendStates', () => {
@@ -72,5 +73,55 @@ describe('appendStrategicRegions', () => {
     expect(store.getState().strategicRegions).toHaveLength(1)
     expect(store.getState().strategicRegionsById.size).toBe(1)
     expect(store.getState().strategicRegions[0].sourcePath).toBe('mod/1-override.txt')
+  })
+})
+
+describe('displayName resolution', () => {
+  it('falls back to the raw loc key when nothing is resolved yet', () => {
+    const store = makeStore()
+    store.getState().appendStates([state(1, 'a.txt')])
+    expect(store.getState().states[0].displayName).toBe('STATE_1')
+  })
+
+  it('seeds displayName from already-known localisation entries on append', () => {
+    const store = makeStore()
+    store.getState().appendStates([state(1, 'a.txt')], { STATE_1: 'Corsica' })
+    expect(store.getState().states[0].displayName).toBe('Corsica')
+    // The raw loc key must never be overwritten.
+    expect(store.getState().states[0].name).toBe('STATE_1')
+  })
+
+  it('applyLocalisation upgrades already-loaded states and regions in place', () => {
+    const store = makeStore()
+    store.getState().appendStates([state(1, 'a.txt'), state(2, 'b.txt')])
+    store.getState().appendStrategicRegions([region(1, 'c.txt')])
+
+    store.getState().applyLocalisation({ STATE_1: 'Corsica', STRATEGICREGION_1: 'Home Waters' })
+
+    expect(store.getState().statesById.get(1)?.displayName).toBe('Corsica')
+    expect(store.getState().statesById.get(2)?.displayName).toBe('STATE_2') // unresolved, untouched
+    expect(store.getState().strategicRegionsById.get(1)?.displayName).toBe('Home Waters')
+  })
+
+  it('applyLocalisation does not bump statesRevision/strategicRegionsRevision', () => {
+    const store = makeStore()
+    store.getState().appendStates([state(1, 'a.txt')])
+    store.getState().appendStrategicRegions([region(1, 'b.txt')])
+    const { statesRevision, strategicRegionsRevision } = store.getState()
+
+    store.getState().applyLocalisation({ STATE_1: 'Corsica' })
+
+    expect(store.getState().statesRevision).toBe(statesRevision)
+    expect(store.getState().strategicRegionsRevision).toBe(strategicRegionsRevision)
+  })
+
+  it('applyLocalisation is a no-op when nothing matches', () => {
+    const store = makeStore()
+    store.getState().appendStates([state(1, 'a.txt')])
+    const before = store.getState().states
+
+    store.getState().applyLocalisation({ SOME_OTHER_KEY: 'Unrelated' })
+
+    expect(store.getState().states).toBe(before) // same array reference — no patch applied
   })
 })

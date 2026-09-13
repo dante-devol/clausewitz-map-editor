@@ -28,6 +28,7 @@ export interface AppConfig {
     resources: string
     buildings: string
     weather: string
+    localisation: string
   }
   displayModeOverrides: Partial<Record<string, Partial<Record<string, string>>>>
 }
@@ -71,7 +72,7 @@ export interface ProjectOpenResult {
 
 export interface MapChangedEvent {
   projectId: string
-  type: 'continents' | 'definitions' | 'terrain' | 'image' | 'states' | 'strategicRegions' | 'stateCategories' | 'buildings'
+  type: 'continents' | 'definitions' | 'terrain' | 'image' | 'states' | 'strategicRegions' | 'stateCategories' | 'buildings' | 'localisation'
   data:
     | Continent[]
     | DefinitionsChangedData
@@ -81,6 +82,7 @@ export interface MapChangedEvent {
     | StateDatasetUpdate
     | StrategicRegionDatasetUpdate
     | ImageChangedData
+    | LocalisationDatasetUpdate
 }
 
 export interface DefinitionsChangedData {
@@ -108,6 +110,14 @@ export interface StrategicRegionDatasetUpdate {
   totalFiles: number
   sourcePath?: string
   origin?: DatasetPatchOrigin
+}
+
+// Localisation resolves opportunistically and incrementally in the
+// background as state/strategic-region loc keys become known — each event
+// carries only the newly-resolved key/value pairs, merged into whatever the
+// renderer already has.
+export interface LocalisationDatasetUpdate {
+  entries: Record<string, string>
 }
 
 // `original` is the object as it was when editing began; `updated` is the

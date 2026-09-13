@@ -37,9 +37,13 @@ export function readRegion(block: ScriptBlock): StrategicRegionDefinition | null
   const id = readRegionId(block)
   if (id === null) return null
   const provincesBlock = blockOf(firstAssignment(block, 'provinces'))
+  const name = scalarOf(firstAssignment(block, 'name')) ?? ''
   return {
     id,
-    name: scalarOf(firstAssignment(block, 'name')) ?? '',
+    name,
+    // No localisation is resolved at parse time — this is upgraded once
+    // ProjectSession's background localisation pass resolves `name`.
+    displayName: name,
     provinceIds: provincesBlock ? bareNumbers(provincesBlock) : [],
     weatherPeriods: periodAssignments(blockOf(firstAssignment(block, 'weather'))).map((entry) => readPeriod(entry.value as ScriptBlock))
   }

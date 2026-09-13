@@ -23,7 +23,8 @@ export const DEFAULT_CONFIG: Config = {
     stateCategories: '/common/state_category',
     resources: '/common/resources',
     buildings: '/common/buildings',
-    weather: '/common/weather.txt'
+    weather: '/common/weather.txt',
+    localisation: '/localisation/english'
   },
   displayModeOverrides: {}
 }

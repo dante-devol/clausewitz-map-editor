@@ -19,6 +19,7 @@ import { StrategicRegionsTxt } from '../../parsers/StrategicRegionsTxt'
 import { applyStrategicRegionSaves } from '../../parsers/StrategicRegionsTxtWriter'
 import { computeHash } from '../../fileManager'
 import { resolveWriteTarget, writeFileAtomic } from './writeTargets'
+import { resolveLocalisationKeys } from '../localisation/LocalisationResolver'
 
 interface WatchEntry {
   watcher: FSWatcher
@@ -47,6 +48,14 @@ export class ProjectSession {
   private statesLoadPromise: Promise<void> | null = null
   private strategicRegionsLoadPromise: Promise<void> | null = null
   private resourcesLoadPromise: Promise<Resource[]> | null = null
+  // Loc keys (state/strategic-region `name` values) seen since the last
+  // localisation resolve pass, and the debounce/in-flight state for that
+  // pass. Localisation is the lowest-priority data this session loads: it is
+  // never awaited by anything, only opportunistically resolved in the
+  // background and pushed to the renderer once ready. See resolveLocalisationKeys.
+  private readonly pendingLocKeys = new Set<string>()
+  private locResolveTimer: ReturnType<typeof setTimeout> | null = null
+  private locResolveRunning = false
 
   constructor(
     private readonly window: BrowserWindow,
@@ -65,6 +74,10 @@ export class ProjectSession {
     this.statesLoadPromise = null
     this.strategicRegionsLoadPromise = null
     this.resourcesLoadPromise = null
+    this.pendingLocKeys.clear()
+    if (this.locResolveTimer) clearTimeout(this.locResolveTimer)
+    this.locResolveTimer = null
+    this.locResolveRunning = false
     return project
   }
 
@@ -124,6 +137,7 @@ export class ProjectSession {
         // This can keep arriving well after open()/dispose() moved this
         // session on to a different (or no) project — ignore it then.
         if (this.project !== project) return
+        this.noteLocKeys(items, project)
         this.emit(project, 'states', { op: 'append', items, loadedFiles, totalFiles })
       }
     ).then(() => {
@@ -177,6 +191,7 @@ export class ProjectSession {
       pool,
       (items, loadedFiles, totalFiles) => {
         if (this.project !== project) return
+        this.noteLocKeys(items, project)
         this.emit(project, 'strategicRegions', { op: 'append', items, loadedFiles, totalFiles })
       }
     ).then(() => {
@@ -251,6 +266,7 @@ export class ProjectSession {
       this.writeProjectFile(write.target, write.content)
       this.relocate(write.source, write.target)
       const items: StateDefinition[] = StatesTxt.parse(write.content).map((state) => ({ ...state, sourcePath: write.target }))
+      this.noteLocKeys(items, project)
       this.emit(project, 'states', { op: 'patch', sourcePath: write.source, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
     }
     this.refreshWatchers()
@@ -280,6 +296,7 @@ export class ProjectSession {
       this.relocate(write.source, write.target)
       const items: StrategicRegionDefinition[] = StrategicRegionsTxt.parse(write.content)
         .map((region) => ({ ...region, sourcePath: write.target }))
+      this.noteLocKeys(items, project)
       this.emit(project, 'strategicRegions', { op: 'patch', sourcePath: write.source, items, loadedFiles: 1, totalFiles: 1, origin: 'save' })
     }
     this.refreshWatchers()
@@ -394,6 +411,7 @@ export class ProjectSession {
     const rawItems = await this.pool.dispatch(filePath, 'states')
     if (this.project !== project) return
     const items = (rawItems as StateDefinition[]).map((item) => ({ ...item, sourcePath: filePath }))
+    this.noteLocKeys(items, project)
     this.emit(project, 'states', { op: 'patch', sourcePath: filePath, items, loadedFiles: 1, totalFiles: 1, origin: 'external' })
   }
 
@@ -417,7 +435,69 @@ export class ProjectSession {
     const rawItems = await this.pool.dispatch(filePath, 'strategicRegions')
     if (this.project !== project) return
     const items = (rawItems as StrategicRegionDefinition[]).map((item) => ({ ...item, sourcePath: filePath }))
+    this.noteLocKeys(items, project)
     this.emit(project, 'strategicRegions', { op: 'patch', sourcePath: filePath, items, loadedFiles: 1, totalFiles: 1, origin: 'external' })
+  }
+
+  // ─── Localisation ─────────────────────────────────────────────────────────
+  //
+  // Lowest-priority data this session loads. State/strategic-region loc keys
+  // accumulate here as they stream in from any of the sites above, and a
+  // debounced pass resolves them in the background — never awaited, never on
+  // the critical path of any load. Debouncing lets an early, partial key set
+  // kick off discovery (and warm the file cache) well before the rest of the
+  // project finishes loading, while a later call with more keys reuses that
+  // same cache and mostly just re-checks the files it already knows about.
+  // See resolveLocalisationKeys for the actual scan/cache strategy.
+
+  private noteLocKeys(items: readonly { name: string }[], project: LoadedProject): void {
+    for (const item of items) {
+      if (item.name) this.pendingLocKeys.add(item.name)
+    }
+    if (this.pendingLocKeys.size > 0) this.scheduleLocalisationResolve(project)
+  }
+
+  private scheduleLocalisationResolve(project: LoadedProject): void {
+    if (this.locResolveTimer) return
+    this.locResolveTimer = setTimeout(() => {
+      this.locResolveTimer = null
+      void this.flushLocalisationResolve(project)
+    }, 250)
+  }
+
+  private async flushLocalisationResolve(project: LoadedProject): Promise<void> {
+    if (this.locResolveRunning) {
+      // A pass is already scanning; let its own completion pick up whatever
+      // has accumulated in pendingLocKeys since it started.
+      this.scheduleLocalisationResolve(project)
+      return
+    }
+    if (this.project !== project || !this.pool || this.pendingLocKeys.size === 0) return
+
+    this.locResolveRunning = true
+    const pool = this.pool
+    const keys = new Set(this.pendingLocKeys)
+    this.pendingLocKeys.clear()
+    try {
+      const resolved = await resolveLocalisationKeys(
+        project.gamePath,
+        project.modPath,
+        project.resolvedPaths.localisation,
+        keys,
+        pool
+      )
+      if (this.project === project && resolved.size > 0) {
+        this.emit(project, 'localisation', { entries: Object.fromEntries(resolved) })
+      }
+    } catch {
+      // Best-effort background pass — a failure here (e.g. the pool was
+      // disposed mid-scan by a project switch) must not affect anything else.
+    } finally {
+      this.locResolveRunning = false
+      if (this.project === project && this.pendingLocKeys.size > 0) {
+        this.scheduleLocalisationResolve(project)
+      }
+    }
   }
 
   private watch(path: string, onChanged: () => void): void {
@@ -471,7 +551,7 @@ export class ProjectSession {
   // an async operation gets around to emitting. See loadStates() and friends.
   private emit(
     project: LoadedProject,
-    type: 'continents' | 'definitions' | 'terrain' | 'image' | 'states' | 'strategicRegions' | 'stateCategories' | 'buildings',
+    type: 'continents' | 'definitions' | 'terrain' | 'image' | 'states' | 'strategicRegions' | 'stateCategories' | 'buildings' | 'localisation',
     data: unknown
   ): void {
     this.window.webContents.send(channels.map.changed, {
@@ -492,6 +572,10 @@ export class ProjectSession {
     this.statesLoadPromise = null
     this.strategicRegionsLoadPromise = null
     this.resourcesLoadPromise = null
+    this.pendingLocKeys.clear()
+    if (this.locResolveTimer) clearTimeout(this.locResolveTimer)
+    this.locResolveTimer = null
+    this.locResolveRunning = false
   }
 
   private disposePool(): void {
