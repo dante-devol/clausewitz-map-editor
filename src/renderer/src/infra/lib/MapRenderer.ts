@@ -2,6 +2,7 @@ import { buildProvinceIndex, updateProvinceBboxesForRegion } from './provinceAna
 import type { ProvinceMapSource } from './ProvinceMapSource'
 import type { ProvinceIndex } from './provinceAnalysis'
 import type { BmpPixelStrokeDelta } from '../../../../shared/provinceEditing'
+import { profilerTime } from './profiler'
 
 // Vertex shader: maps [0,1]×[0,1] unit quad to clip space via a mat3.
 // UV passes straight through — texImage2D row 0 (top) is at V=0, matching quad Y.
@@ -629,6 +630,10 @@ export class MapRenderer {
   }
 
   render(tx: number, ty: number, scale: number): void {
+    profilerTime('frame', () => this.renderFrame(tx, ty, scale))
+  }
+
+  private renderFrame(tx: number, ty: number, scale: number): void {
     const { gl } = this
     if (this.contextLost || !this.idTexture || !this.paletteTexture || this._imageSize.width === 0) return
 
